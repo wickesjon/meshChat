@@ -1,5 +1,7 @@
 # Meshfest v1 — Implementation Plan
 
+> **Superseded on 2026-09-11.** This original plan is retained as historical context. Use [the active ticketboard plan](ticketboard/implementation-plan.md), its individual tickets, and design §0 for the approved sequence and corrected gates. Its original text below is not an active implementation contract. The initial version is preserved in Git commit `dfc1a3f`.
+
 Companion to the design doc (`mesh-chat-design.md`). Section references like §3.4 point there. This document is the *build sequence*: what to build, in what order, how to know each piece works, and where the risk lives.
 
 ---

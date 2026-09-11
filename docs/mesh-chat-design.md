@@ -1,6 +1,44 @@
 # Detailed Design Document — Offline BLE Mesh Chat
 **Working name: "Meshfest" (placeholder)**
-Version 0.3 — Design phase
+Version 0.4 — Approved implementation review; decisions pending evidence
+
+---
+
+## 0. Approved implementation review — 2026-09-11
+
+This revision incorporates the approved review of the design and original implementation plan. The active build sequence is [docs/ticketboard/implementation-plan.md](ticketboard/implementation-plan.md); [AGENTS.md](../AGENTS.md) governs branches, squash merges and scope.
+
+**Precedence:** this section and the corrected normative sections below supersede contradictory historical review summaries. A requirement marked unresolved is not an implementation choice delegated silently to a coder: its owning decision ticket must close before dependent implementation/freeze gates. Existing numerical estimates not backed by the new validation protocol are hypotheses, not passed acceptance gates.
+
+### 0.1 Approved corrections
+
+1. **One outer frame per GATT value.** A write or notification contains exactly one §2.1 frame, with no additional two-byte batching prefix. Scheduling may flush multiple separate values. Capacity is runtime and direction-specific, including notify capacity. Unsupported capacity has an explicit refusal/recovery path; MC-004/MC-006 settle the measured supported floor.
+2. **Feasible budgets and metrics.** MC-007 must reconcile all frame, byte, crypto, queue, relay and SYNC budgets. The prior 95-of-100-in-30-seconds gate is withdrawn: the stated ingress bucket permits at most 45 frames over 30 seconds, and maximum-size signed items can exceed the 32 KB session budget. Define a byte-bounded eligible set, framing overhead, concurrent traffic and a measured completion target. Subscription relevance cannot be assumed when no selection information is exchanged.
+3. **TTL-reachable testing.** With sender TTL 7 and decrement-before-forwarding, an endpoint nine edges away in a ten-node chain is out of range for a single live flood. Test reachable paths and explicit out-of-range behavior. Count actual per-egress GATT sends, fragments and origin sends separately; replace the unsupported absolute 0.3 relays/node/message target with a measured reduction against an unsuppressed GATT-overlay baseline.
+4. **Early rejection and accepted-message dedup.** Over-budget frames are dropped before reassembly/display/crypto. Unknown reserved bits do not bypass known-type checks. Maintain bounded rejected-attempt tracking separately from accepted/authenticated message identity so an invalid first copy cannot suppress a valid later copy with the same msg_id. Budget actual verification work, including embedded SYNC packets, and separate pending/unverified state from trusted acceptance.
+5. **Connection bootstrap.** Advertisements contain only the service UUID. Identity-dependent duplicate-link arbitration therefore occurs after an established-link exchange, not before discovery. An asymmetric iOS-compatible connection can remain even when a nominal identity ordering would prefer an unavailable discovery direction.
+6. **Secure lifecycle first.** MC-005/MC-017 define platform-operated versus wrapped software keys explicitly; do not assume Rust can extract non-exportable platform keys. MC-018 owns migrations, DM conversation identity, event trust, verification provenance, reactions and retention. Encrypted persistence and key loss/reset behavior are required before real sensitive data is stored.
+7. **Honest authentication claims.** MC-008 evaluates a vetted RFC 9180 authenticated-mode implementation before retaining the bespoke two-DH analogue. Exact immutable-header bindings, encoding, replay and freshness rules must be reviewed; TTL is mutable transport metadata. Signed ANNOUNCE alone proves a historical signature, not that the friend is currently on the direct link. Do not infer identity continuity from nickname similarity.
+8. **Evidence and sequencing.** Physical BLE and key-storage spikes run on both platforms during foundations. Android beta depends explicitly on the full crypto gate. Phone Beacon Mode is v1; ESP32/backhaul are follow-on work. A design-stage fix is only specified until implemented, tested, and independently reviewed where required.
+
+### 0.2 Decisions blocking implementation or freeze
+
+| Owner | Required decision |
+|---|---|
+| MC-006 | Exact frame/type/flag matrix, concrete UUIDs, control-packet hop scope, supported capacity, duplicate-link handshake, fragment conflict rules, empty/session-complete SYNC encoding, event QR format, organizer pin fields and cosmetic layout |
+| MC-007 | Consistent budgets and memory ceilings; SYNC eligible-set selection and time target; cursor/session expiry; cache-age/TTL policy; topology/loss/traffic seeds and delivery/latency/battery acceptance |
+| MC-008 | Selected DM construction and library, exact encrypted plaintext/padding and authenticated header encoding, signature domain encodings, replay policy, friend presence freshness and key-change states |
+| MC-018 | Persistent versus transient data model, trust provenance, encrypted DB/key lifecycle, migration/reset and pruning |
+
+MC-006 defines base framing and identifies crypto extension points; MC-008 resolves the crypto construction. Both must be resolved before MC-020, and the final combined layouts must pass MC-022 before full-wire freeze. Missing organizer pin or cosmetic bytes must not be invented in UI implementation.
+
+### 0.3 Validation evidence and external prerequisites
+
+Use four separate evidence states: **specified**, **implemented**, **tested**, and **independently reviewed**. Historical statements such as “all resolved” mean specified at design stage only. They do not close implementation tickets.
+
+MC-004 records physical Android/iOS behavior and permission decisions; MC-005 records protected-key and encrypted-store feasibility; MC-016 gates the base transport; MC-022 gates crypto/full-wire review; MC-036–MC-040 gate integrated security, field evidence and release. Missing devices, macOS tooling, independent review, store/domain access or publication authorization remain explicit blockers. Do not fabricate evidence or weaken security as a fallback.
+
+Reference for the crypto decision: [RFC 9180](https://www.rfc-editor.org/rfc/rfc9180.html). Platform background assumptions must be checked against [Apple's Core Bluetooth background documentation](https://developer.apple.com/library/archive/documentation/NetworkingInternetWeb/Conceptual/CoreBluetooth_concepts/CoreBluetoothBackgroundProcessingForIOSApps/PerformingTasksWhileYourAppIsInTheBackground.html) and the actual supported device matrix.
 
 ---
 
@@ -137,7 +175,7 @@ Sent every 30s to each connected peer over the GATT link (never in BLE advertise
 | `digest` | `digest_len` B | Recent-message Bloom (below); 0-length permitted when the node has nothing recent |
 | *(optional)* friend signature block | 0 or var | Present iff `flags.signed` with `sig_type=0` (§7.4); located after `digest` via `digest_len` |
 
-**Recent-digest Bloom (exact):** covers msg_ids held from the **last 60 seconds** only (not the 15-min cache). `m = 2048` bits (256 bytes), `k = 6`, same double-hash construction and byte/bit order as §2.6 but with `bloom_salt = "meshfest-digest-v1"`. At ≤200 recent items this yields ~2% FPR. Advisory only: a false positive skips one relay to one peer (§3.4a), recovered by flooding or SYNC.
+**Recent-digest Bloom (proposed parameters, MC-007):** covers msg_ids held from the **last 60 seconds** only (not the 15-min cache). `m = 2048` bits (256 bytes), `k = 6`, same double-hash construction and byte/bit order as §2.6 but with `bloom_salt = "meshfest-digest-v1"`. At ≤200 recent items this yields ~2% FPR. Advisory only: a false positive skips one relay to one peer (§3.4a), recovered by flooding or SYNC.
 
 **Signed ANNOUNCE:** authenticated friend presence (§7.4 "Friends nearby") requires ANNOUNCE to be signed; the transcript is the §7.4 canonical friend transcript, which binds `type`, `msg_id`, `sender_id`, `timestamp` (the field above), and `payload-before-signature-block`. ANNOUNCE is **never relayed** (it describes the immediate sender), so its `ttl` is set to 1 and receivers do not forward it.
 
@@ -186,12 +224,12 @@ When two nodes connect, each offers the other recent history it may be missing.
 - **Dedup identity:** the **embedded `msg_id`** controls dedup — the requester feeds the extracted logical packet into its normal §3.1 pipeline as if received live. `session_id`/`seq` are transport-only and never touch the seen-cache.
 - **TTL:** the embedded packet's TTL is used **as-stored**, then decremented once if the requester relays it onward. SYNC never refreshes TTL (no laundering of expired traffic); stored TTL 0 ⇒ display/store locally, do not relay.
 
-**Budgets and achievability (finding R5.2).** The old "25 items per session" could not deliver the "95% of a 500-message cache" gate (25/500 = 5%; repeating hourly-capped sessions outlived the 15-minute cache). Corrected:
+**Provisional budgets — require MC-007 reconciliation (§0).** The old "25 items per session" could not deliver the "95% of a 500-message cache" gate (25/500 = 5%; repeating hourly-capped sessions outlived the 15-minute cache). Corrected:
 
 - **Within one session:** up to **100 items or 32 KB, whichever first**, delivered as a paginated walk; `more_available` + `next_cursor` let the requester continue **immediately within the same session** (no 60s wait) up to the session budget.
 - **Session admission:** 1 new session per peer per 60s per link (unchanged, prevents amplification); continuations inside an admitted session are free.
 - **Global:** 400 SYNC-served items/min per node, 128 KB/min, shared with the §11 relay budget.
-- **Honest target:** SYNC's job is *recent context*, not full-cache replication. The acceptance criterion is therefore ≥95% of the **newest 100 messages** relevant to the requester's subscriptions within one session (≤30s) — achievable by construction. Older cache entries beyond that are best-effort and typically irrelevant to a person who just arrived.
+- **Acceptance decision pending MC-007:** SYNC provides bounded recent context. The previous ≥95%-of-newest-100-in-30s gate is withdrawn (§0.1): neither the frame budget nor signed-packet byte budget supports it. MC-007 must define the eligible set, subscription-selection mechanism (if any), overhead, concurrent traffic, and completion target before implementation. Older cache entries beyond that are best-effort and typically irrelevant to a person who just arrived.
 - **Bloom false positives** are deterministic for a fixed set + fixed salt, so "retry later" does **not** repair them. Recovery comes from live flooding (the message is still circulating within its 15-min window) or a different responder whose cache differs. SYNC is an accelerator layered on flooding, never the sole delivery path.
 
 ### 2.7 REACTION packet
@@ -215,10 +253,10 @@ Lets users react to a message with an emoji from a fixed palette. Total packet: 
 
 "Drop unknown versions" would partition a crowd running mixed app versions during a rollout — the common case at a festival where people update at different times. `version` is a **single integer** (§2.1) — "unknown version" means a different integer entirely; forward-compatible evolution within version 1 is carried by unknown *type* values and reserved *flag* bits, not a version sub-field.
 
-- **Same version, unknown type/flags — relay with envelope-only validation.** A node relays such a packet after validating **only the fixed 26-byte header envelope** (`version` matches; `ttl` within 1–7; `payload_len` ≤ `MAX_LOGICAL_PACKET_BYTES` − 26; frame/fragment structure well-formed). It does **not** run type-specific structural validation, signature checks, or decryption on a type it doesn't know — it forwards the opaque payload. Unknown packets go to TTL/dedup/relay but **never to the UI**.
+- **Same version, unknown type — relay with envelope-only validation.** A node relays such a packet after validating **only the fixed 26-byte header envelope** (`version` matches; `ttl` within 1–7; `payload_len` ≤ `MAX_LOGICAL_PACKET_BYTES` − 26; frame/fragment structure well-formed). It does **not** run type-specific structural validation, signature checks, or decryption on a type it doesn't know — it forwards the opaque payload. Unknown packets go to TTL/dedup/relay but **never to the UI**.
 - **Rate classification for unknown types:** an unknown `type` is charged to a dedicated **conservative unknown-type bucket per link** (capacity 5, refill 1/5s), *separate from* and stricter than known-type buckets, so a future or malicious type cannot bypass rate control by being unrecognized. It also draws from the per-link aggregate ingress bucket (§6.5) like everything else.
 - **Opaque payload size cap:** an unknown-type payload above `MAX_LOGICAL_PACKET_BYTES` is rejected, not relayed — bounds the amplification an unknown type can cause.
-- **Reserved flag bits** are ignored on receipt, never rejected; senders MUST set them 0.
+- **Reserved flag bits** do not bypass known-type validation, authentication or rate classification. Senders MUST set them 0; receivers apply the MC-006 type/flag matrix. Unsupported combinations of known semantic flags are rejected. Opaque forwarding applies only to unknown types, within the conservative unknown-type budget.
 - **Different `version` integer ⇒ do not relay, do not interpret.** A version bump is reserved for changes that cannot be additive; such packets circulate only among same-version peers. All planned v1 evolution (reaction codes, avatars, glyphs, word-list appends, new *types*) is additive and stays version `0x01`.
 - **Fragments** inherit the version of their enclosed logical packet.
 
@@ -246,18 +284,21 @@ F3. dispatch by frame_kind:
                   incomplete → wait. Reassembly buffers are bounded (§2.4) and
                   allocation happens only within the already-charged budget
       0x00      → whole logical packet
-F4. cap crypto work per link: verification operations (Ed25519 / AEAD) are limited to
-    20/sec per link. Excess signed/encrypted packets are dropped unverified
-    (displayed as unverified if subscribed, never relayed). This bounds CPU cost
-    even for traffic inside the byte budget.
+F4. reserve no trust at the frame boundary. Each actual Ed25519 / AEAD operation
+    in the logical pipeline, including a packet extracted from SYNC_ITEM,
+    must acquire per-link and global work allowance before execution.
+    MC-007 fixes the coherent ceilings. No allowance -> bounded deferral or drop;
+    encrypted bytes are never displayed as plaintext/unverified message text.
 
 LOGICAL LAYER (on a complete logical packet P)
 L1. if P.version unknown → §2.8 version policy (not a blind drop)
 L2. envelope validation: header field ranges, payload_len consistency,
-    ttl in 1..7 (clamp >7), declared lengths (text_len, cred_len) internally
+    ttl in the context-specific range (MC-006; stored TTL 0 is local-only),
+    clamp >7, declared lengths (text_len, cred_len) internally
     consistent → else drop, penalize link
-L3. if P.msg_id in seen_cache → drop (duplicate)   // before crypto: dedup is cheap
-L4. add P.msg_id to seen_cache (§3.2, per-source-partitioned)
+L3. reject exact accepted duplicates cheaply; consult bounded rejected-attempt
+    tracking separately. An invalid variant must not suppress a valid variant.
+L4. reserve bounded pending state, not an accepted/authenticated msg_id entry
 L5. per-sender rate limit (§6.4). Violation → drop: neither displayed nor relayed
 L6. type-specific structural validation (UTF-8, text ≤ 280B, palette codes, …)
 L7. CRYPTO (only now, and only within the F4 allowance):
@@ -265,13 +306,14 @@ L7. CRYPTO (only now, and only within the F4 allowance):
                unverified, do not badge; still relay per §17.3 content-neutrality
       encrypted → attempt AEAD only if the recipient tag matches one of our
                friends (§7.5); failure → drop silently, penalize link
-L8. if P.channel_id in my subscriptions → deliver to UI + store
-L9. store P in forward_cache (15 min) regardless of subscription
+L8. commit the appropriate accepted/trust state only after required validation;
+    subscribed plaintext or successfully authenticated addressed DM -> UI + store
+L9. cache only explicitly eligible packet types under bounded retention (§3.5)
 L10. if P.ttl > 1 and relay_decision(egress_peer) (§3.4):
        P.ttl -= 1; enqueue per eligible egress peer (re-framed for that link)
 ```
 
-Two invariants worth stating explicitly: **dedup precedes crypto** (so a replayed signed packet costs one cache lookup, not a signature verify), and **budget precedes everything** (so garbage costs the attacker their own link allowance).
+Two invariants: exact accepted duplicates are rejected cheaply before repeated crypto, while invalid variants cannot poison accepted identity; resource admission precedes allocation and every expensive operation. Rejected/pending and trusted states remain separate (MC-013).
 
 ### 3.2 Seen-message cache
 
@@ -281,13 +323,13 @@ Ring buffer of (msg_id → first_seen_time). 4096 entries × 16B ≈ 64KB. The 1
 
 ### 3.3 Transmission scheduling
 
-Relayed packets go into a per-peer outbound queue with a **random hold-off of 80–400ms** before send. The hold-off serves two purposes: it desynchronizes rebroadcasts from neighbors who received the same packet simultaneously (collision avoidance), and it opens the **suppression window** used to cancel redundant relays entirely (§3.4a). Own messages skip the hold-off. Queue is priority-ordered: own messages > relayed CHAT > relayed REACTION > SYNC_ITEM > ANNOUNCE. Queue depth cap 100 packets; overflow drops oldest relayed traffic first, never the user's own messages.
+Relayed packets go into a per-peer outbound queue with a **random hold-off of 80–400ms** before send. The hold-off serves two purposes: it desynchronizes rebroadcasts from neighbors who received the same packet simultaneously (collision avoidance), and it opens the **suppression window** used to cancel redundant relays entirely (§3.4a). Own messages skip the hold-off. Queue is priority-ordered: own messages > relayed CHAT > relayed REACTION > SYNC_ITEM > ANNOUNCE. Queue packet and byte caps are fixed by MC-007. Overflow evicts eligible relayed traffic first. Own messages are preserved once admitted; when no bounded capacity remains, reject a new own-message enqueue with an explicit not-sent/retry result.
 
-**TX batching:** the queue flushes to each peer at most once per 200ms, coalescing all pending packets into as few ATT writes as fit the negotiated MTU (a 2-byte length prefix frames packets within a write). Radio wake-ups cost far more energy than payload bytes, so five messages in one flush is dramatically cheaper than five separate transmissions. ANNOUNCE piggybacks on any pending flush instead of waking the radio on its own timer when traffic exists.
+**TX scheduling:** a scheduled flush may send multiple separate GATT values while platform readiness permits. Each value contains exactly one §2.1 outer frame; there is no two-byte batching prefix. Use the runtime write or notify capacity for that direction. The proposed 200ms flush interval and ANNOUNCE piggybacking are tuning inputs for MC-007; measure their effects rather than asserting a battery improvement.
 
 ### 3.4 Relay minimization (storm control + battery)
 
-Naive flooding makes every node retransmit every message — in a dense crowd that is hundreds of redundant transmissions per message, and redundant TX is the single largest battery cost in the system. The mechanisms below cut per-node relay volume by an expected 70–90% in dense conditions while preserving delivery in sparse ones and, critically, **on bridge nodes** (finding 2). They apply per candidate egress peer, in this order, to each packet reaching step 8 of §3.1.
+Naive flooding makes every node retransmit every message — in a dense crowd that is hundreds of redundant transmissions per message, and redundant TX is the single largest battery cost in the system. The mechanisms below aim to reduce per-node relay volume in dense conditions; the reduction must be measured against the MC-007 baseline while preserving delivery in sparse ones and, critically, **on bridge nodes** (finding 2). They apply per candidate egress peer, in this order, to each packet eligible for forwarding at L10 of §3.1.
 
 **Key correction (finding 2):** Meshfest is a point-to-point GATT overlay, not a shared broadcast medium. Hearing two neighbors relay a `msg_id` does **not** prove the peers on the *other side of a bridge* received it. So suppression is **per-egress-peer and driven by explicit per-link knowledge**, never a single global cancel:
 
@@ -414,6 +456,8 @@ On open, the app validates all three words against the known lists (case-insensi
 
 ## 6. Rate Limiting
 
+The numbers below are provisional tuning inputs until MC-007 reconciles frame, byte, message, crypto and SYNC budgets. The early-rejection and identity-independent admission rules are normative now; implementers must not select conflicting numeric limits independently.
+
 ### 6.1 Threat model
 
 Spam on public channels from (a) enthusiastic humans, (b) modified clients. No server exists, so enforcement is (1) local UX friction and (2) the mesh collectively refusing to carry violations.
@@ -428,7 +472,7 @@ Spam on public channels from (a) enthusiastic humans, (b) modified clients. No s
 | Reactions (all channels) | 30 / 60s per sender | Separate bucket; a reaction never consumes a message token |
 | Any sender, all channels combined | 20 msgs / 60s | Global bucket, catches channel-hopping spam |
 | Relay bandwidth (self-protection) | 60 relayed packets / 10s per link | Drops excess from a firehosing peer, penalizes link |
-| **Per-link ingress (Sybil control, finding 5)** | **new-identity relay-eligibility: a msg from a `sender_id` not seen on this link before enters a per-link probation** | See §6.5 |
+| **Per-link ingress (Sybil control)** | Frame and byte admission independent of claimed sender identity; no display after early rejection | MC-007 and §6.5 |
 
 ### 6.3 Sender-side (UX)
 
@@ -442,12 +486,13 @@ Buckets for idle senders are garbage-collected after 5 minutes; memory is bounde
 
 ### 6.5 Known bypass and accepted residual risk
 
-A modified client can rotate `sender_id` per message to reset the per-sender buckets (a Sybil attack). The per-sender table alone does not contain this — hence a **per-link aggregate ingress control (finding 5)**, which is independent of claimed identity:
+A modified client can rotate sender IDs. Admission therefore uses per-link frame and byte budgets independently of claimed identity, charged before reassembly or crypto. **An over-budget frame is dropped; it cannot subsequently be displayed.** The previous display-without-relay rule for such frames is withdrawn.
 
-- Each physical link has a single aggregate **ingress bucket** charged **at the frame layer, before reassembly or any cryptography** (§3.1 F2, finding R5.3), in *both* frames and bytes: **frames** capacity 15, refill 1/sec; **bytes** capacity 24 KB, refill 2 KB/sec. Invalid packets — bad signatures, failed AEAD, malformed payloads — have already consumed this budget, so garbage is not free. A separate **crypto-work cap of 20 verify operations/sec per link** (§3.1 F4) bounds CPU even within the byte budget. The two buckets compose without contradiction: a packet is **relay-eligible only if it passes *both* its per-sender bucket (§6.4) and the link ingress bucket**, and is **displayed only if it passes the per-sender bucket** (the §3.1-step-5 rule is absolute — a per-sender violation is never displayed). Over-ingress-budget-but-within-per-sender traffic is therefore displayed-if-subscribed but not relayed; per-sender violations are neither. Repeated ingress overflow penalizes then drops the link (§8.1).
-- A `sender_id` never seen on this link before starts in **probation**: its first message is accepted and displayed but is relay-eligible only if the link's aggregate ingress bucket has spare budget. So a sender rotating identity every packet cannot mint fresh full per-sender allowances — every one of its packets draws from the *same* capped aggregate link bucket. Effective outcome: a single physical attacker, however many identities it forges, can inject at most ~15 relay-eligible packets then 1/sec, mesh-wide contribution bounded by that one link's budget.
+MC-007 owns the coherent numeric budget decision. Previous proposed values (15-frame burst, 1 frame/sec refill, 24 KB byte burst, 2 KB/sec byte refill and 20 verifies/sec/link) are measurement inputs, not final acceptance constants: they cannot support the old SYNC target. The decision must define byte units, overhead, control traffic, session/reconnect handling and node-wide work ceilings.
 
-This bounds the Sybil-rotation attack to a small measurable volume rather than eliminating it; full identity-cost defense (proof-of-work stamps, or global signing so `sender_id` = key fingerprint is unforgeable) is v2 (§19). The **corrected flooder acceptance gate** (finding 5) is stated in §13/M1 as an enforceable bound: *a single physical flooder rotating `sender_id` every packet contributes no more than the per-link ingress budget to the mesh, and its traffic is not observed beyond the volume that budget permits* — not the old, unenforceable "zero relay beyond one hop."
+Per-sender admission remains an additional check; passing it cannot override frame rejection. New identities do not obtain a new physical-link allowance. Crypto budgets count actual verification/decryption operations, including multiple operations for credential chains and packets extracted from SYNC.
+
+The enforceable attack bound is the **sum of the budgets of the attacker's actual admitted links**, including the declared reconnect policy. One physical attacker may open several links; there is no defensible single-link bound on that attacker's total mesh contribution. MC-013/MC-036 test both single-link rotation and multi-link abuse. Signatures prevent forgery under another valid key but do not by themselves prevent an attacker generating many keys.
 
 ---
 
@@ -459,7 +504,7 @@ This bounds the Sybil-rotation attack to a small measurable volume rather than e
 - **`sender_id`** = **first 8 bytes of SHA-256(public key)**. Making the ID the key's fingerprint means it is *self-certifying*: a valid signature from a device proves it holds the key whose hash is that `sender_id`, so a signed message cannot be forged under someone else's ID. Unsigned traffic still carries `sender_id` and remains spoofable (accepted, §18.5) — the fingerprint only becomes a *guarantee* once a message is signed and checked against a known key.
 - **Stability:** `sender_id` is **stable for the device's lifetime** (regeneratable only via "Reset identity," which rotates the keypair and clears history + friend pins). Not derived from hardware IDs.
 - **Why stable, not rotating (B1 decision):** the app's core value is friends staying reachable in a crowd with no cell service; a rotating ID makes "is my friend nearby / who am I talking to" unreliable, which guts that use case. The tracking risk is **managed by disclosure** (§18-B1), not eliminated: the app never claims to be private-on-air.
-- **BLE MAC**: platform address randomization stays enabled (Android 8+/iOS default). No static MAC, no identifying data in advertisements beyond the service UUID and truncated ANNOUNCE fields. (The stable `sender_id` inside packets is itself a tracking vector regardless of MAC randomization — disclosed, not eliminated; §18-B1.)
+- **BLE MAC**: platform address randomization stays enabled (Android 8+/iOS default). No static MAC, no identifying data in advertisements beyond the service UUID. ANNOUNCE metadata travels only over established GATT links. (The stable `sender_id` inside packets is itself a tracking vector regardless of MAC randomization — disclosed, not eliminated; §18-B1.)
 
 ### 7.2 Nicknames
 
@@ -504,7 +549,7 @@ Pins are stored locally in the `friends` table: `friends(pubkey PK, petname, add
 | `sender_id`/nickname resembles a pinned friend but is **unsigned or fails verification** | **Warning chip: "claims to be Sarah · not verified"** — this is the impersonation catch |
 | Ordinary unsigned traffic | Plain nickname + color/suffix (§7.2), no trust marker |
 
-**Presence ("Sarah is nearby"):** because ANNOUNCE is signed, a pinned friend within direct BLE range (1 hop) shows as authenticated-present in a "Friends nearby" view. RSSI gives an approximate warmer/colder hint for finding them — framed as rough (crowd bodies make RSSI noisy), never a precise locator.
+**Presence freshness (MC-008/MC-019):** a signed ANNOUNCE authenticates its contents but may be replayed by another device. Current direct-peer presence requires the approved fresh link/session proof; otherwise show only the last authenticated observation and its age. RSSI proximity, if approved by MC-004, is advisory and cannot establish identity or precise location.
 
 **Key-change handling (must be explicit, not silent):** if a friend reinstalls or changes devices, their pubkey changes and the pin stops verifying. The app shows **"Sarah's device changed — re-scan to verify"** and treats her as unverified until re-paired. It never auto-trusts a new key for an existing petname (that would reintroduce the impersonation hole) and never silently downgrades her without telling you (Signal's "safety number changed" model). Replay of a friend's genuinely-signed message is bounded by the dedup cache + 48h timestamp window (§17.3) and merely re-shows a real message — not a forgery.
 
@@ -516,7 +561,9 @@ The friend pairing in §7.4 already performs an in-person public-key exchange �
 
 **Why encryption is non-negotiable here.** The mesh relays everything (§3) and is plaintext on the air (§18-B1). A "DM" built as a plain two-person channel would be readable by every relay and every sniffer at the venue — while the word "direct" makes users assume privacy. That mismatch is a privacy trap, so DM and E2E encryption are the same feature, never separable.
 
-**Crypto — canonical transcript (finding R4).** Alongside the Ed25519 signing key (§7.1), each device publishes an **X25519** key (in the friend-code QR). The DM packet layout, all fields outside the ciphertext being authenticated as AEAD associated data:
+**Crypto decision pending MC-008.** The two-DH analogue below records the previous proposal, not a frozen implementation contract. Evaluate a vetted RFC 9180 authenticated-mode implementation and explicitly bind immutable header fields (including sender identity and semantic flags). Exact plaintext/padding encoding, replay rules and final transcripts must be resolved before MC-020 and independently reviewed before MC-022. No confidentiality or authentication fallback to plaintext is permitted.
+
+**Previous proposed transcript (finding R4).** Alongside the Ed25519 signing key (§7.1), each device publishes an **X25519** key (in the friend-code QR). The DM packet layout, all fields outside the ciphertext being authenticated as AEAD associated data:
 
 DM logical packet = standard 26-byte header (with `flags.encrypted` set, `channel_id` = recipient tag below) followed by the encrypted body:
 
@@ -588,9 +635,9 @@ Every device runs **both** GATT roles simultaneously:
 - **Peripheral**: advertises the Meshfest service UUID; hosts a GATT server
 - **Central**: scans for that UUID; initiates connections to discovered peers
 
-Target: maintain **3–6 concurrent connections** per device (fewer burns coverage; more burns battery and hits platform connection caps). Peer selection is driven by **locally observable signals only** (finding R2.1): (a) prefer peers newly discovered or with weak recent traffic overlap — i.e. peers whose recent-digest (§2.5) shares few msg_ids with ours, a real signal that they bring *new* reachability rather than redundancy; (b) then strongest RSSI; (c) reserve slots for unseen peers (§18-M3). `peer_count` is a coarse density hint used only to pick the §3.4c probability row — it is **not** treated as evidence of which peers are mutual, because the protocol exchanges no adjacency data. Re-evaluate every 60s; drop the weakest link when a peer bringing more novel reachability appears.
+Target: maintain **3–6 concurrent connections** per device (fewer burns coverage; more burns battery and hits platform connection caps). Peer selection is driven by **locally observable signals only** (finding R2.1): (a) prefer peers newly discovered or with weak recent traffic overlap — i.e. peers whose recent-digest (§2.5) shares few msg_ids with ours, a real signal that they bring *new* reachability rather than redundancy; (b) then strongest RSSI; (c) reserve slots for unseen peers (§18-M3). `peer_count` is a coarse advisory density hint; the §3.4c row uses locally known connected-peer count — it is **not** treated as evidence of which peers are mutual, because the protocol exchanges no adjacency data. Re-evaluate every 60s; drop the weakest link when a peer bringing more novel reachability appears.
 
-Connection-role tiebreak (both sides trying to connect to each other): the device with the lexicographically larger `sender_id` acts as central. Deterministic, no negotiation traffic.
+Connection bootstrap cannot use `sender_id` before a link exists: discovery advertisements expose only the service UUID. MC-006 specifies a post-exchange duplicate-link arbitration state machine. Retain an available asymmetric link instead of forcing an identity ordering that requires unsupported discovery.
 
 **Slot-exhaustion defense (see §18-M3):** an attacker opening links from many spoofed identities could fill every slot and isolate a phone. Therefore: (a) **at least 2 of 6 slots are reserved** for peers not yet seen in this session, rotated every 60s; (b) a peer that sends no valid CHAT/ANNOUNCE traffic within 20s of connecting is dropped and back-listed for 5 min; (c) peer scoring favors **RSSI diversity** — a cluster of links at near-identical RSSI (one physical attacker) cannot occupy more than 3 slots; (d) inbound connection rate per remote address is capped at 3/min.
 
@@ -655,16 +702,15 @@ Split into **discovery cases** (which pairings can find each other from cold) an
 
 ## 9. Local Storage
 
-SQLite (via the Rust core — `rusqlite`, SQLCipher-encrypted §9/§18-B3) with four tables:
+SQLCipher-encrypted SQLite is owned through the shared core with platform-protected key access. MC-005 must validate the protection model and platform behavior before MC-018 persists sensitive data.
 
-- `messages(msg_id PK, channel_id, sender_id, nickname, text, sent_ts, received_ts, is_mine)` — retention: 48h or 5,000 rows per channel, whichever first; pruned on launch
-- `subscriptions(channel_id PK, display_name, kind[public|private], words_json, muted, joined_ts)`
-- `friends(ed_pubkey PK, x_pubkey, petname, added_ts, last_seen_ts)` — verified-friend pins incl. X25519 key for DMs (§7.4/§7.5)
-- `settings(key PK, value)` — nickname, avatar index, sender_id, battery mode, onboarding flags. The identity private key lives in the OS keystore, **not** here.
+MC-018 defines versioned migrations and persistence for message history, subscriptions/settings, both-key friend pins and petnames, stable DM conversation identity independent of rotating tags, verification provenance, adopted event roots and staff credentials, and reaction state where required. Explicitly classify ephemeral forward-cache, reassembly, orphan and credential-recovery state; not every cache needs disk persistence. The previous four-table sketch is insufficient as a complete implementation schema.
 
-Everything stays on-device; there is nowhere to send it. "Delete all data" in settings drops the DB and regenerates sender_id.
+Message history retains the intended maximum of 48h or 5,000 rows per channel, whichever first, with bounded pruning during operation as well as on launch. Apply independent byte/count limits to caches and DM history. Parameterize SQL; never interpolate untrusted text.
 
-**Encryption at rest and backup exclusion (see §18-B3):** the DB is encrypted — SQLCipher with a key held in the Android Keystore / iOS Keychain (`kSecAttrAccessibleAfterFirstUnlock`), and the file additionally marked `NSFileProtectionCompleteUntilFirstUserAuthentication` on iOS. Backups are disabled: `android:allowBackup="false"` + `android:fullBackupContent` exclusion, and `isExcludedFromBackup` on iOS, so "private" channel history never lands in cloud backups. All DB access uses parameterized statements only — message text is never string-concatenated into SQL. Event signing keys (§17.4) live in the OS keystore, never in the DB.
+Encrypt the DB and auxiliary persistent files; verify wrong-key failure and absence from platform cloud/device-transfer backups. MC-005/MC-018 record the exact supported Android and iOS exclusion/protection configuration. Distinguish platform-held wrapping keys from encrypted software curve keys; do not claim all curve operations are hardware-backed.
+
+Identity reset/delete must coordinate both keypairs, pins, trust/history and encrypted storage with explicit failure/recovery behavior. Key loss is a visible recovery state, never an excuse to silently recreate identity or write plaintext. No ephemeral message key or staff provisioning secret is stored in logs or ordinary settings.
 
 ---
 
@@ -806,7 +852,7 @@ A phone with 0 peers runs low-latency burst scanning to find someone (§8.3) —
 
 Rationale: uniform Saver would slow peer discovery ~6× (deadly in high-churn crowds — topology tears faster than it repairs), flatten the battery-tier heterogeneity that §3.4d's load-shifting depends on, and effectively raise §14's venue-wide adoption threshold — all to save battery mostly where Normal already costs only 2–3%/hr. Auto keeps sparse-area bridges at full duty while letting redundant phones in dense clusters coast. Mode transitions are hysteresis-damped (no flapping at a threshold: switch only after the condition holds 60s). Manual override to forced-Normal or forced-Saver remains in settings.
 
-- **Relay budget (hard ceiling):** independent of §3.4's adaptive behavior, each node caps relay transmissions at **120 packets/min** (Normal) or **40 packets/min** (Saver / tier ≤ 1). At the ceiling, the node keeps receiving and displaying everything but sheds relay duty; ANNOUNCE's battery tier lets neighbors compensate. This bounds worst-case drain regardless of crowd behavior.
+- **Relay budget (provisional ceiling, MC-007 must reconcile with SYNC and ingress):** independent of §3.4's adaptive behavior, each node caps relay transmissions at **120 packets/min** (Normal) or **40 packets/min** (Saver / tier ≤ 1). At the ceiling, the node keeps receiving and displaying everything but sheds relay duty; ANNOUNCE's battery tier lets neighbors compensate. This bounds worst-case drain regardless of crowd behavior.
 - **TX batching** (§3.3): ≤ 1 radio flush per peer per 200ms — radio wake-ups cost far more than payload bytes.
 - **Normal**: continuous balanced scan, 3–6 connections, ANNOUNCE every 30s
 - **Saver**: scan duty-cycled 10s on / 50s off, max 3 connections, ANNOUNCE every 60s, battery tier broadcast forces relay de-prioritization per §3.4d
@@ -816,30 +862,32 @@ Rationale: uniform Saver would slow peer discovery ~6× (deadly in high-churn cr
 
 ## 12. Codebase Structure
 
-```
-meshfest/
-├── core/                    # Rust — the shared brain
-│   ├── src/
-│   │   ├── packet.rs        # codec, validation, fragmentation
-│   │   ├── mesh.rs          # relay policy, seen-cache, jitter queue
-│   │   ├── sync.rs          # bloom filters, store-and-forward
-│   │   ├── ratelimit.rs     # token buckets, per-link caps
-│   │   ├── channel.rs       # normalization, hashing, word lists
-│   │   ├── store.rs         # rusqlite persistence
-│   │   └── api.rs           # UniFFI interface: events in, packets out
-│   └── uniffi/              # generated Swift + Kotlin bindings
-├── android/                 # Kotlin: BLE driver + Compose UI
-│   ├── ble/                 # scanner, advertiser, GATT server/client, conn mgr
-│   └── ui/
-├── ios/                     # Swift: CoreBluetooth driver + SwiftUI
-│   ├── BLE/
-│   └── UI/
-└── tools/
-    ├── simulator/           # Rust: N virtual nodes, lossy links — mesh logic tests without radios
-    └── flooder/             # test-only spam client for validating rate limiting
+The repository layout is governed by [AGENTS.md](../AGENTS.md):
+
+```text
+src/
+  core/               shared Rust protocol/application core
+  android/            native BLE/security and Compose UI
+  ios/                native BLE/security and SwiftUI
+  organizer-tools/    offline root/credential issuance (MC-041)
+  share-site/         minimal HTTPS installation fallback (MC-031)
+tests/
+  simulator/          deterministic point-to-point GATT model
+  adversarial/        controlled abuse/flood harnesses
+  vectors/            golden wire and crypto fixtures
+  integration/        feature/native acceptance
+  fuzz/               hostile-input targets and corpora
+  bench/              physical radio/device checks
+  field/              mixed-platform scale checks
+docs/
+  ticketboard/        active implementation plan and tickets
+  decisions/          approved explicit protocol/platform choices
+  testing/            measurement evidence
 ```
 
-The core exposes a sans-IO interface: the native driver feeds it `peer_connected / peer_disconnected / bytes_received(peer, data)` events plus a clock; the core returns `send(peer, data)` commands and UI events. This makes the entire mesh logic unit-testable and simulator-testable with zero Bluetooth involved.
+Native projects retain conventional internal source layouts. Root manifests, lockfiles and CI paths remain conventional. Generated bindings/build outputs and temporary work stay ignored inside the repository.
+
+The core exposes a sans-IO interface: drivers provide link lifecycle, inbound bytes, directional capacities, monotonic time and power events; the core returns bounded send commands and UI events. Native key-provider interfaces make protected-key access explicit. MC-003 establishes this interface before mesh implementation and proves Kotlin and Swift bindings.
 
 ### 12.1 Hardened-core build requirements (see §18)
 
@@ -855,14 +903,18 @@ These are enforced by build config and CI, not left to discipline:
 
 ## 13. Test & Validation Plan
 
-1. **Unit (core)**: codec round-trips, fuzzing the parser (cargo-fuzz), bucket math, hash vectors for all 8,000 word combos. **Canonical binary golden vectors (cross-implementation contract, R3.2/R3.3/R3.4): every packet type; a multi-fragment logical packet (with `frag_msg_id`/`total_len`); a signed organizer message *with* inline staff-credential chain (root→credential→message); a DM envelope with its exact HKDF inputs and AEAD AAD; an unknown-type frame for version-tolerance. Committed as golden files so Rust/Kotlin/Swift/ESP32 prove byte-exact agreement before any second implementation ships.**
-2. **Simulator**: 200 virtual nodes, configurable topology/loss/mobility/**churn/mixed-version** — verify delivery ratio vs. density, storm control, spam containment. **Key battery metric: relays-per-node-per-message vs. delivery ratio**, swept across density. Acceptance: at 100+ node density, mean relays/node/message ≤ 0.3 (≥ 70% suppression) at delivery ≥ 95%; ≤ 10-node sparse chains ≥ 99%; **two-cluster-single-bridge cut-vertex delivery ≥ 95% (suppression must not sever the bridge, review R2)**; tier-3 nodes carry ≥ 3× tier-0 relay load. Plus: **identity-rotating flooder bounded to the per-link ingress budget (R5)**; **SYNC recovers ≥ 95% of the *newest 100* messages relevant to the requester within one paginated session (≤30s), Bloom FPR ≤ ~2% at 500-item load (R5.2 — the previous '95% of 500 with a 25-item quota' target was impossible)**.
-3. **Bench (radios)**: 10 physical devices (mixed OEM + iOS) in office — interop matrix §8.5, battery profiling, MTU edge cases
-4. **Field**: 30–50 volunteers at a real gathering — measure hop counts (embed hop telemetry in a debug build: `7 - ttl_at_receipt`), latency distribution, iOS background degradation in vivo
-5. **Adversarial**: run `flooder` (including an identity-rotating variant) against a 10-node bench mesh; success = a single physical flooder's total propagated volume is bounded by the per-link ingress budget (§6.5) and does not grow with the number of forged identities — the measurable replacement for the old "zero relay beyond one hop"
-6. **Security regression suite (§18)**: fuzz the packet parser and the deep-link handler as CI gates (persisted corpora, zero panics/OOM); automated attack cases for fragment-buffer exhaustion (M1), SYNC amplification (M2), slot exhaustion (M3), seen-cache pollution (M7); assertion tests that a nickname containing badge glyphs or bidi overrides cannot render as verified (B2); verification that the DB file is unreadable without the keystore key and absent from platform backups (B3)
-7. **Ingress/DoS suite (R5.3)**: invalid-signature flood and invalid-AEAD flood at raw link throughput must be bounded by the per-link byte/frame budget and the 20 verify-ops/sec crypto cap — measure CPU and battery during the attack; assert verification work does not scale with attacker send rate.
-8. **Crypto suite (§7.4/§7.5/§17)**: KATs for Ed25519 and X25519 against reference vectors; DM **authenticated-encryption** round-trip (auth-mode DH) asserting relays cannot decrypt; **DM sender-forgery negative vector (R4.1): an attacker knowing all public values + a current recipient tag but not the sender's static private key cannot produce a message the recipient authenticates as that sender**; AEAD tamper tests (flipped byte ⇒ auth failure, never silent plaintext); replay-with-modified-header negative vectors; recipient-tag vectors across epoch boundaries (`epoch−1/epoch/epoch+1`) and reversed peer ordering; **X25519 all-zero shared-secret and malformed-key rejection (R5.4)**; friend key-change blocks send / forces re-scan; organizer chain vectors (root→credential→message, the two binding checks, multi-staff cache by `(root, staff_key_id)`, **multi-hop CRED_OFFER/CRED_REQ recovery where the immediate peer lacks the credential — R5.6**); **signed ANNOUNCE vectors (§2.5) — R5.5**; both Ed25519 and X25519 keypairs provisioned at first launch; confirm no message key is written to disk. Vetted library primitives only. CI gate before any crypto build ships.
+Tests are implemented with their owning feature, not deferred to hardening. Ticket exit criteria and MC-007's predeclared workload/threshold decision are authoritative.
+
+1. **Core and wire (MC-009–MC-016):** exact vectors for all frame/type forms; logical and transport fragmentation; unknown-type compatibility; malformed/reserved flag cases; channel and QR normalization; parser/deep-link fuzzing with retained regression inputs.
+2. **GATT-overlay simulation (MC-012–MC-016):** deterministic seeds; point-to-point egress counts; runtime capacities; loss, churn, clock skew and topology. Compare dense suppression against an unsuppressed baseline. Sparse chain tests distinguish TTL-reachable recipients from out-of-range endpoints. Include cut vertices and measured battery-tier work shares. The previous absolute 0.3-relays/node/message and ten-node end-to-end gates are withdrawn.
+3. **SYNC (MC-007/MC-015):** a defined byte-bounded eligible set and completion target fitting all frame/byte/crypto/relay budgets; maximum-size signed/encrypted records; mixed-channel traffic; empty sessions, pagination under cache mutation, deterministic Bloom omissions and disconnect/cursor expiry. The previous unconditional 95-of-100-in-30s gate is withdrawn.
+4. **Physical radios (MC-004/MC-025/MC-027):** separate discovery and held-connection matrices, both transmission directions and capacities, realistic background/suspension/force-quit states, backpressure and reconnects; record actual device/OS versions and battery methodology.
+5. **Ingress and resource abuse (MC-013/MC-036):** fragment/session/credential/orphan/cache exhaustion, sender rotation, multiple admitted attacker links, invalid signatures/AEAD, reserved-bit bypass attempts, and invalid-first/valid-second dedup poisoning. Measure per-link and node-wide memory/work bounds. No rejected frame reaches the display path.
+6. **Identity/storage/UI (MC-017–MC-019/MC-028–MC-035):** protected key lifecycle, wrong-key DB failure, backup exclusion, retention/migration/reset; friend re-pairing and presence replay; native text rendering and independent trust chrome; UI never downgrades a DM to plaintext.
+7. **Crypto/full-wire (MC-008/MC-020–MC-022):** selected-library reference vectors, sender-forgery and immutable-header tampering, malformed/all-zero DH rejection, epoch/collision behavior, encrypted reactions and replay, root/staff/message/pin binding, multiple staff credentials and multi-hop recovery. Reference implementations and independent construction review must be distinguished from same-core Kotlin/Swift binding parity.
+8. **Release evidence (MC-037–MC-040):** independent integrated assessment with remediated blockers; predeclared 30–50-device mixed-platform field study and beacon comparison; both platform release readiness and actual authorized store outcomes. Missing evidence blocks the gate.
+
+Each report identifies commands/build IDs, seeds or device matrix, workload, duration, thresholds, observed results and limitations. “Specified” is not “tested”; no hardware measurement or independent review is implied by this design document.
 
 ---
 
@@ -1057,7 +1109,7 @@ Worst-case signed packet with inline credential, itemised (corrected — finding
 
 The mesh itself can never be the root of trust (anyone can broadcast a key). Adoption happens **out of band only**:
 
-1. **Official QR codes** at entrances, screens, totems, wristbands use the single canonical adoption layout (§17.1): `meshfest://event/<base64url(root_pubkey)>/<url-encoded name>` — `event_root_id` is *derived* from the pubkey (its hash), never carried separately, so there is one layout, not two. Scan → confirmation sheet → root trust anchor adopted.
+1. **Official QR codes** at entrances, screens, totems, wristbands use the single canonical adoption layout (§17.1): `meshfest://event/<base64url(0x01 ‖ root_pubkey[32] ‖ root_not_after[4] ‖ root_self_sig[64])>/<url-encoded name>` — `event_root_id` is *derived* from the pubkey (its hash), never carried separately, so there is one layout, not two. Scan → confirmation sheet → root trust anchor adopted.
 2. **The same link shared digitally** pre-event (works via §5's link machinery).
 3. **Beacons broadcast a new `EVENT_INFO` packet** (type `0x05`: event name + `event_root_id`, *not* trusted for adoption) so arriving phones get a prompt: "This event supports verified updates — scan any official QR to enable." Discovery over the mesh, trust only via QR.
 
@@ -1071,7 +1123,7 @@ A phone can hold multiple event roots. **Root-adoption expiry is independent of 
 | Composer | Replaced with "Only event staff can post here" unless the device holds the private key (§17.4). |
 | Rate limit | Verified (valid-signature) #Event Updates messages are relayed under a **raised relay allowance on every node, key-holding or not** (finding 6): a node that can structurally see the signature block and a valid `event_root_id` format grants signed #Event-Updates traffic a 10/min relay budget rather than the 2/min unsigned cap — so an incident burst propagates across a mixed-adoption mesh instead of being throttled to death by intermediaries that never scanned the QR. Nodes still only *display* the Event Staff badge if they've adopted the key and the signature verifies; relay generosity does not imply display trust. Signature *validity* for the raised relay budget is checkable by any node that has adopted the key; nodes without it fall back to structural signal (well-formed signature block present) plus the global per-link ingress cap (§6.5), which bounds abuse. |
 | Replay guard | Signed messages older than 48h by payload timestamp are treated as unverified (generous window because offline clocks drift; short-window replay is already killed by the dedup cache). |
-| Pinning | The signed payload may set a 1-byte pin field (pinned flag + expiry in hours, max 48). Pinned verified messages stick to the top of #Event Updates until expiry. Only meaningful on key-holding phones. |
+| Pinning | Pin state and expiry must have an exact location in the canonical payload and be covered by the staff signature (MC-006). The previous prose-only one-byte field is not implementable until that decision closes. Only authenticated pins under an adopted valid root affect display. |
 | No key adopted | Legacy behavior: open channel, everything displays normally. EVENT_INFO sightings produce the §17.2 prompt. |
 
 ### 17.4 Posting side (staff)
@@ -1089,16 +1141,18 @@ Relay stays **content-neutral**: nodes relay unsigned #Event Updates traffic nor
 
 ## 18. Security Model & Hardening Requirements
 
-Findings from the design-stage adversarial audit, with their required mitigations. IDs are referenced from the sections they modify. Severity: **B** = blocker (fix before ship), **M** = major, **m** = minor. **Status: every finding below has its fix written into the referenced spec section** — this section is the index, the specs are the source of truth. Items marked *(v2)* are mitigated in v1 and fully closed in §20.
+Historical review rounds below describe design changes at the time. Their “resolved” language means specified, not implemented/tested; any values or claims superseded by §0 and the active tickets are non-normative.
+
+Findings from the design-stage adversarial audit, with their required mitigations. IDs are referenced from the sections they modify. Severity: **B** = blocker (fix before ship), **M** = major, **m** = minor. **Evidence status: specified at design stage only.** Each finding needs implementation and validation evidence, plus independent review where required; §0 records approved corrections and outstanding decisions. Items marked *(v2)* are mitigated in v1 and fully closed in §20.
 
 ### 18.1 Can an attacker reach the phone itself?
 
-No path exists in this design, for four structural reasons — worth stating plainly because it's the question users and organizers will ask:
+The design reduces the application attack surface through the following measures. These are defenses, not proof that compromise is impossible; native libraries, FFI, platform APIs and implementation bugs remain in the assessment scope:
 
 1. **Sandbox.** The app can only touch its own container and the permissions it holds (Bluetooth, notifications). Even total compromise of the app process yields message history, nickname, and `sender_id` — not contacts, photos, SMS, or other apps.
 2. **No code-execution primitives in the protocol.** No scripting, no markup interpretation, no dynamic content, no file transfer, no URL fetching, no deserialization of arbitrary object graphs. The only input is length-prefixed bytes → fixed-shape structs → UTF-8 text.
 3. **Text-only is a security feature.** Excluding images/video removes the single largest historical RCE class on mobile (image/video codec parsers). Keep it excluded.
-4. **Memory-safe parser.** The core is Rust with `#![forbid(unsafe_code)]`, so the classic BLE-parser overflow path is closed by construction.
+4. **Memory-safe parser.** The core is Rust with `#![forbid(unsafe_code)]`, which reduces memory-corruption risk in owned core code. It does not prove the safety of dependencies, native code, FFI boundaries or the OS Bluetooth stack.
 
 **Residual risk outside our control:** vulnerabilities in the *OS* Bluetooth stack (BlueBorne/BleedingBit class). Mitigation: require Android 10+/iOS 15+, never implement custom L2CAP/pairing, and document that patch hygiene is the user's OS vendor's job.
 

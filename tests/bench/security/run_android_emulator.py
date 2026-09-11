@@ -29,6 +29,8 @@ for directory in ['debug', 'androidTest/debug']:
     apk = apks[0]
     print(run('install', '-r', '-t', str(apk)).strip())
 for phase in ['create', 'reopen', 'key-loss']:
+    run('shell', 'input', 'keyevent', '224')
+    run('shell', 'input', 'keyevent', '82')
     run('shell', 'am', 'force-stop', package)
     output = run('shell', 'am', 'instrument', '-w', '-e', 'phase', phase,
                  package + '.test/' + package + '.SecurityInstrumentation')

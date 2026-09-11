@@ -13,6 +13,8 @@ Use test devices and synthetic data only. This is an acceptance harness, not a m
 
 CI starts an isolated Android API 29 emulator and runs `python3 -B tests/bench/security/run_android_emulator.py --serial emulator-5554`. The runner refuses non-emulator serials and checks the qemu property before installing the probe/test APKs. Each create/reopen/key-loss phase runs in a separate instrumentation process, with an explicit force-stop between phases. The key-loss phase checks that ciphertext stays unchanged, the wrapping key is not recreated, and only explicit reset permits a fresh fixture. Custom instrumentation uses the platform API and targets existing private bench operations without expanding the app's exported surface. Passing output must include each named phase; an adb command exiting successfully alone is insufficient.
 
+`emulator.sh` checks startup before compilation, stops the VM while native builds run, and starts it again immediately before testing. Readiness requires boot completion and available package/activity services. It uses KVM only when the runner already permits it, otherwise software emulation; it does not change host permissions. Startup failure retains emulator diagnostics, and cleanup targets only the isolated emulator serial.
+
 This can establish software/native-library and emulator Keystore behavior, including actual encrypted database reads. It does not establish physical key isolation, OEM backup/device-transfer behavior or iPhone Secure Enclave operation. Host CryptoKit checks remain distinct from iPhone acceptance. The user requested this emulator path on 2026-09-11; no physical gate was waived.
 
 ## Device procedure

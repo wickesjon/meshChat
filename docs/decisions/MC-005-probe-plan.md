@@ -50,3 +50,5 @@ Follow the [bench runbook](../../tests/bench/security/README.md). Retain device/
 | Uninstall/restore | Observe platform key/file persistence differences and mismatch handling without asserting identity continuity |
 
 Device/Mac/signing inventory is unknown. The final protection model and all MC-005 exit criteria remain open. Secure persistence that cannot be demonstrated blocks persistent identities/DM release. No physical result or independent security assessment is inferred from this code or CI.
+
+Emulator follow-up: run `34638458504` at `331dec9` passed Rust/ticketboard, all native builds/lint/alignment and Swift interoperability. The API 29 emulator booted with a 4096-byte page size, but APK installation failed because Android package service was unavailable after compilation. No lifecycle phase ran. The runner had no KVM access and used software emulation. The workflow now stops the VM during compilation and restarts it before testing, requiring package/activity services as well as boot completion; runtime verification remains pending.

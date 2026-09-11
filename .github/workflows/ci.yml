@@ -97,31 +97,9 @@ jobs:
             --package 'system-images;android-29;default;x86_64' --path "$PWD/.work/android/mc005.avd"
           "$ANDROID_HOME/emulator/emulator" -list-avds
           "$ANDROID_HOME/emulator/emulator" -accel-check || true
-          acceleration=off
-          if [ -r /dev/kvm ] && [ -w /dev/kvm ]; then acceleration=on; fi
-          "$ANDROID_HOME/emulator/emulator" -avd mc005 -port 5554 -no-window -no-audio \
-            -no-boot-anim -no-snapshot -gpu swiftshader -accel "$acceleration" > .work/emulator.log 2>&1 &
-          emulator_pid=$!
-          trap 'tail -n 80 .work/emulator.log; kill "$emulator_pid" 2>/dev/null || true' EXIT
-          "$ANDROID_HOME/platform-tools/adb" start-server
-          boot_deadline=$((SECONDS + 600))
-          booted=false
-          while [ "$SECONDS" -lt "$boot_deadline" ]; do
-            if ! kill -0 "$emulator_pid" 2>/dev/null; then exit 1; fi
-            boot_state=$(timeout 5 "$ANDROID_HOME/platform-tools/adb" -s emulator-5554 shell getprop sys.boot_completed 2>/dev/null | tr -d '\r' || true)
-            if [ "$boot_state" = 1 ]; then
-              booted=true
-              break
-            fi
-            sleep 2
-          done
-          if [ "$booted" != true ]; then
-            tail -n 80 .work/emulator.log
-            exit 1
-          fi
-          "$ANDROID_HOME/platform-tools/adb" -s emulator-5554 shell input keyevent 82
-          echo "Security emulator booted; hardware acceptance remains separate"
-          trap - EXIT
+          source tests/bench/security/emulator.sh
+          start_security_emulator
+          stop_security_emulator
 
       - name: Build Rust library and Kotlin bindings
         run: |
@@ -175,16 +153,14 @@ jobs:
           done
       - name: Security probe emulator lifecycle
         run: |
-          export ANDROID_HOME="$PWD/.work/emulator-sdk"
-          export ANDROID_USER_HOME="$PWD/.work/android"
-          export TMPDIR="$PWD/.work/tmp"
+          source tests/bench/security/emulator.sh
+          start_security_emulator
           python3 -B tests/bench/security/run_android_emulator.py --serial emulator-5554
       - name: Stop isolated security emulator
         if: always()
         run: |
-          if [ -x .work/emulator-sdk/platform-tools/adb ]; then
-            timeout 15 .work/emulator-sdk/platform-tools/adb -s emulator-5554 emu kill || true
-          fi
+          source tests/bench/security/emulator.sh
+          stop_security_emulator
 
   ios:
     runs-on: macos-15

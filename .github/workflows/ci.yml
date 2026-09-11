@@ -65,11 +65,11 @@ jobs:
           echo '9f12ed4c49936e09b48bf862b595cde2fe64fcbd9d74dfacac6131ca824c8d5f  .work/cargo-deny.tar.gz' | sha256sum --check
           tar -xzf .work/cargo-deny.tar.gz -C .work
           .work/cargo-deny-0.20.2-x86_64-unknown-linux-musl/cargo-deny --version
-          .work/cargo-deny-0.20.2-x86_64-unknown-linux-musl/cargo-deny --locked --config src/core/deny.toml check
+          .work/cargo-deny-0.20.2-x86_64-unknown-linux-musl/cargo-deny --all-features --locked --config src/core/deny.toml check
 
   android:
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -79,6 +79,13 @@ jobs:
           distribution: temurin
           java-version: 17.0.15+6
           settings-path: ${{ github.workspace }}/.work/maven
+      - name: Build Rust library and Kotlin bindings
+        run: |
+          mkdir -p "$CARGO_HOME" "$RUSTUP_HOME" .work/tmp
+          export TMPDIR="$PWD/.work/tmp"
+          rustup toolchain install 1.85.1 --profile minimal --no-self-update
+          cat "$ANDROID_HOME/ndk/27.3.13750724/source.properties"
+          python3 -B src/core/build_bindings.py android
       - name: Verify wrapper
         run: echo '81a82aaea5abcc8ff68b3dfcb58b3c3c429378efd98e7433460610fecd7ae45f  src/android/gradle/wrapper/gradle-wrapper.jar' | sha256sum --check
       - name: Android build and lint
@@ -91,11 +98,11 @@ jobs:
           cat "$ANDROID_HOME/platforms/android-36/source.properties"
           cat "$ANDROID_HOME/build-tools/35.0.0/source.properties"
           bash gradlew --version
-          bash gradlew --no-daemon :app:assembleDebug :app:assembleRelease :app:lintDebug
+          bash gradlew --no-daemon :app:assembleDebug :app:assembleRelease :app:lintDebug :app:testDebugUnitTest
 
   ios:
     runs-on: macos-15
-    timeout-minutes: 15
+    timeout-minutes: 30
     env:
       DEVELOPER_DIR: /Applications/Xcode_16.4.app/Contents/Developer
     steps:
@@ -108,6 +115,21 @@ jobs:
           xcrun swift --version
           xcodebuild -showsdks
           plutil -lint src/ios/MeshChat.xcodeproj/project.pbxproj
+      - name: Build Rust libraries and Swift bindings
+        run: |
+          mkdir -p "$CARGO_HOME" "$RUSTUP_HOME" .work/tmp .work/clang-module-cache
+          export TMPDIR="$PWD/.work/tmp"
+          rustup toolchain install 1.85.1 --profile minimal --no-self-update
+          python3 -B src/core/build_bindings.py ios
+      - name: Swift host FFI regression
+        run: |
+          xcrun swiftc -swift-version 6 -warnings-as-errors \
+            -module-cache-path "$PWD/.work/clang-module-cache" \
+            -I .work/ffi/swift -Xcc -fmodule-map-file=.work/ffi/swift/meshchat_coreFFI.modulemap \
+            .work/ffi/swift/meshchat_core.swift tests/integration/ffi/main.swift \
+            -L target/debug -lmeshchat_core -Xlinker -rpath -Xlinker "$PWD/target/debug" \
+            -o .work/ffi/swift-regression
+          .work/ffi/swift-regression
       - name: Build unsigned iOS skeleton
         run: |
           mkdir -p .work/tmp .work/clang-module-cache

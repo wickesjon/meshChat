@@ -6,6 +6,48 @@ db-urls = ["https://github.com/RustSec/advisory-db"]
 allow = ["MIT", "Apache-2.0", "BSD-2-Clause", "BSD-3-Clause", "ISC", "Unicode-3.0", "Zlib"]
 confidence-threshold = 0.95
 
+
+# MC-003 explicitly selects UniFFI. Reassess these exact-version allowances on upgrade.
+[[licenses.exceptions]]
+name = "uniffi"
+version = "=0.29.4"
+allow = ["MPL-2.0"]
+
+[[licenses.exceptions]]
+name = "uniffi_core"
+version = "=0.29.4"
+allow = ["MPL-2.0"]
+
+[[licenses.exceptions]]
+name = "uniffi_macros"
+version = "=0.29.4"
+allow = ["MPL-2.0"]
+
+[[licenses.exceptions]]
+name = "uniffi_internal_macros"
+version = "=0.29.4"
+allow = ["MPL-2.0"]
+
+[[licenses.exceptions]]
+name = "uniffi_meta"
+version = "=0.29.4"
+allow = ["MPL-2.0"]
+
+[[licenses.exceptions]]
+name = "uniffi_pipeline"
+version = "=0.29.4"
+allow = ["MPL-2.0"]
+
+[[licenses.exceptions]]
+name = "uniffi_bindgen"
+version = "=0.29.4"
+allow = ["MPL-2.0"]
+
+[[licenses.exceptions]]
+name = "uniffi_udl"
+version = "=0.29.4"
+allow = ["MPL-2.0"]
+
 [licenses.private]
 ignore = true
 

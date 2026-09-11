@@ -95,6 +95,14 @@ jobs:
           cat "$ANDROID_HOME/system-images/android-29/default/x86_64/source.properties"
           echo no | "$sdk_tools/avdmanager" create avd --name mc005 \
             --package 'system-images;android-29;default;x86_64' --path "$PWD/.work/android/mc005.avd"
+          python3 -B - <<'PY'
+          from pathlib import Path
+          configuration = Path('.work/android/mc005.avd/config.ini')
+          lines = [line for line in configuration.read_text().splitlines()
+                   if line.partition('=')[0].strip() != 'disk.dataPartition.size']
+          configuration.write_text('\n'.join(lines + ['disk.dataPartition.size=2G']) + '\n')
+          print('Security AVD userdata partition: 2 GiB')
+          PY
           "$ANDROID_HOME/emulator/emulator" -list-avds
           "$ANDROID_HOME/emulator/emulator" -accel-check || true
       - name: Build Rust library and Kotlin bindings

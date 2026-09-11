@@ -15,7 +15,7 @@ CI starts an isolated Android API 29 emulator and runs `python3 -B tests/bench/s
 
 `emulator.sh` checks startup before compilation, stops the VM while native builds run, and starts it again immediately before testing. Readiness requires boot completion and available package/activity services. It uses KVM only when the runner already permits it, otherwise software emulation; it does not change host permissions. Startup failure retains emulator diagnostics, and cleanup targets only the isolated emulator serial.
 
-This can establish software/native-library and emulator Keystore behavior, including actual encrypted database reads. It does not establish physical key isolation, OEM backup/device-transfer behavior or iPhone Secure Enclave operation. Host CryptoKit checks remain distinct from iPhone acceptance. The user requested this emulator path on 2026-09-11; no physical gate was waived.
+This can establish software/native-library and emulator Keystore behavior, including actual encrypted database reads. It does not establish physical key isolation, OEM backup/device-transfer behavior or iPhone Secure Enclave operation. Host CryptoKit checks remain distinct from iPhone acceptance. The user requested this emulator path on 2026-09-11, then deferred physical verification to MC-043/044. Physical requirements remain mandatory at those later gates.
 
 ## Device procedure
 
@@ -31,4 +31,4 @@ Record the exact Git revision, build mode, device model/OS, page size on Android
 
 ## Evidence states
 
-Mark every scenario tested/pass, tested/fail, unavailable, or not run with its reason. Hardware status, actual backup exclusion and lock behavior remain separate from build/test success. A failed or missing criterion blocks MC-005 completion and merge. Separate code review is required; it does not stand in for the later independent security assessment.
+Mark every scenario tested/pass, tested/fail, unavailable, or not run with its reason. Hardware status, actual backup exclusion and lock behavior remain separate from build/test success. Physical rows remain deferred/untested under the approved MC-005 scheduling change. A failed or missing physical criterion blocks MC-043/044 and the corresponding platform acceptance/sensitive-data use; it does not block the revised early feasibility spike. Separate code review is required; it does not stand in for the later independent security assessment.

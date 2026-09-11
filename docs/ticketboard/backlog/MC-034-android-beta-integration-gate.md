@@ -1,7 +1,7 @@
 ---
 id: "MC-034"
 title: "Android beta integration gate"
-depends_on: ["MC-025","MC-029","MC-030","MC-031","MC-032","MC-033","MC-042","MC-022"]
+depends_on: ["MC-025","MC-029","MC-030","MC-031","MC-032","MC-033","MC-042","MC-022","MC-043"]
 kind: "gate"
 branch: "ticket/MC-034-android-beta-integration-gate"
 ---
@@ -14,7 +14,7 @@ Exercise every Android v1 feature against production core/radio/storage integrat
 
 ## Dependencies
 
-`MC-025`, `MC-029`, `MC-030`, `MC-031`, `MC-032`, `MC-033`, `MC-042`, `MC-022` See the [current ticket index](../README.md#ticket-index). Dependencies must be complete on main before implementation starts.
+`MC-025`, `MC-029`, `MC-030`, `MC-031`, `MC-032`, `MC-033`, `MC-042`, `MC-022`, `MC-043` See the [current ticket index](../README.md#ticket-index). Dependencies must be complete on main before implementation starts.
 
 ## Scope
 
@@ -29,6 +29,8 @@ Also permitted: this ticket and generated ticketboard index/diagram changes requ
 - Record beta build provenance, known limitations and reproducible end-to-end evidence.
 
 ## Exit criteria
+
+- [ ] Deferred physical protected-key/storage verification `MC-043` is complete with production-provider evidence; simulation or deferral is not a pass.
 
 - [ ] All Android v1 feature acceptance tests pass on the supported device matrix.
 - [ ] Crypto/full-wire gate has passed; no simulated-only implementation is represented as production complete.

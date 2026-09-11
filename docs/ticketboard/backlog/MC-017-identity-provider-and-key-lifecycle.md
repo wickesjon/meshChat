@@ -30,7 +30,7 @@ Also permitted: this ticket and generated ticketboard index/diagram changes requ
 
 ## Exit criteria
 
-- [ ] Both platforms provision and reopen identities through the selected protection model.
+- [ ] Both platform adapters implement the MC-005 development contract; synthetic automated provisioning/reopen/error tests pass, and iOS device/simulator builds pass. Production iOS has no software wrapping fallback. Physical certification is deferred to MC-043/044; test doubles are confined to tests.
 - [ ] Reset rotates both keypairs and invalidates associated pins/state atomically or with recoverable journaled behavior.
 - [ ] Key-unavailable and invalidated states block authenticated sends and have tested recovery paths.
 - [ ] Relevant checks pass, evidence is recorded, required review is complete, and the ticket is squash merged to main.
@@ -43,6 +43,8 @@ Also permitted: this ticket and generated ticketboard index/diagram changes requ
 A triggered fallback must be recorded with evidence. It does not authorize weaker security, invented validation or expanded scope.
 
 ## Evidence
+
+Scheduling decision: the user deferred MC-005 physical verification on 2026-09-11. This implementation ticket uses synthetic data and automated tests; MC-043/044 retest the production provider/storage on actual devices. Its completion does not certify hardware, backup or lock behavior.
 
 Not implemented. Record commands, versions, reproducible inputs and results here. For manual/hardware checks include device/OS, duration and report paths. No test or review is claimed yet.
 

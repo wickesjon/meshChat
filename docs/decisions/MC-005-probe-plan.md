@@ -1,10 +1,23 @@
 # MC-005 — Protected-key and encrypted-store probe
 
-State: implemented feasibility harness, partial automated evidence, 2026-09-11. Physical acceptance, final provider selection and security review remain pending. The MC-004 gate replacement does not change these requirements.
+State: implemented feasibility harness with passing automated evidence, 2026-09-11. The user subsequently deferred physical verification to MC-043 (Android) and MC-044 (iOS). The wrapped-key model below is selected for development; physical support certification and independent security assessments remain required at their later gates.
 
-## Candidate interface and protection model
+## Selected development interface and protection model
 
-MC-017 should use opaque key handles and explicit capabilities: generate, public key, sign, agree, delete/reset and protection metadata. Errors must distinguish unavailable/locked, invalidated/missing, invalid input and provider failure. A provider never promises extraction of a non-exportable private key. The spike exposes synthetic curve functions and native fixture controls, not a production identity provider. Final provider selection remains blocked on device evidence.
+MC-017 should use opaque key handles and explicit capabilities: generate, public key, sign, agree, delete/reset and protection metadata. Errors must distinguish unavailable/locked, invalidated/missing, invalid input and provider failure. A provider never promises extraction of a non-exportable private key. The spike exposes synthetic curve functions and native fixture controls, not a production identity provider. The development provider uses wrapped software Ed25519/X25519 keys on both platforms. Android wraps with an AndroidKeyStore AES-256-GCM key requiring an unlocked device; iOS wraps with the implemented Secure Enclave P-256 policy. Platform-operated Android curve keys remain a capability experiment, not an assumed portable provider. This selection permits implementation against the contract; it does not certify hardware support or waive fail-closed behavior when the selected provider is unavailable.
+
+The native provider contract for MC-017 is:
+
+| Operation | Contract |
+|---|---|
+| Create identity | Explicit first-run/reset action only; returns an opaque identity handle, separate signing/agreement public keys and protection metadata. Retained ciphertext or keys require recovery/reset rather than replacement. |
+| Load identity | Reopens existing protected material without creating keys/files; returns the same public identity or a typed error. |
+| Sign / agree | Takes an opaque handle and bounded caller input; returns an Ed25519 signature or X25519 shared secret. No private-key export operation. MC-008 owns transcript/domain and peer-key validation rules. Wrapped software seeds enter process memory for operations, so handles do not imply hardware curve execution. |
+| Open encrypted store | Native integration obtains the independent protected database key and opens SQLCipher; callers do not log or persist plaintext key material. MC-018 owns schema/migration/retention. |
+| Reset / invalidate | Explicit reset rotates both curve keys and coordinates associated state/pin invalidation; key loss refuses access while preserving encrypted artifacts. MC-017/018 own transactional recovery. |
+| Capabilities / errors | Report actual provider/protection metadata, distinguishing unknown/software/hardware and supported algorithms. Errors distinguish unavailable/locked, invalidated/missing, malformed input and provider failure. Never silently switch to plaintext or a weaker provider. |
+
+MC-017/018 may complete implementation and synthetic automated tests before physical verification. Test doubles must be confined to tests; the production iOS provider still requires Secure Enclave and has no simulator/software wrapping fallback. Physical verification and supported-device decisions are tracked by MC-043/044. Until the corresponding gate passes, development uses synthetic data only; no real sensitive persistence, beta distribution or hardware-protection claim is authorized.
 
 | Candidate | Implemented probe | Limits still to establish |
 |---|---|---|
@@ -40,7 +53,7 @@ The user requested emulator testing on 2026-09-11. A custom Android API 29 instr
 
 The startup helper now stops the VM during compilation and restarts it immediately before testing, requiring package/activity services and boot completion. [CI run 34641115491](https://github.com/wickesjon/meshChat/actions/runs/34641115491) passed all four jobs at source/workflow revision `62f81e68e29e4218362f5176e58eea1ffb707d32`. Android API 29 with 4096-byte pages reported `PASS create`, `PASS reopen` and `PASS key-loss`, each marked `synthetic_functional_only` with instrumentation code `-1`. This verifies synthetic creation, process-restart persistence, wrong-key rejection followed by correct-key reopen, key-loss refusal with unchanged ciphertext, and explicit reset/recreation in the emulator. It does not establish physical hardware isolation, backup/restore, real-device lock/reboot or OS-triggered invalidation. Android native curve capability failures are reported separately and are not promoted to interoperability passes by these lifecycle results.
 
-Separate Terra medium [review #5182864367](https://github.com/wickesjon/meshChat/pull/7#pullrequestreview-5182864367) covered the tested source/workflow revision with no blocking code issue. The final evidence-only update leaves those sources unchanged. No physical requirement is replaced.
+Separate Terra medium [review #5182864367](https://github.com/wickesjon/meshChat/pull/7#pullrequestreview-5182864367) covered the tested source/workflow revision with no blocking code issue. The final evidence-only update leaves those sources unchanged. The subsequent user-approved deferral changes when physical evidence is required, not what constitutes a pass.
 
 Follow the [bench runbook](../../tests/bench/security/README.md). Retain device/OS, exact app revision, wrapping policy, sanitized operation results and observed backup artifacts under docs/decisions. All rows below remain untested on actual phones:
 
@@ -53,4 +66,4 @@ Follow the [bench runbook](../../tests/bench/security/README.md). Retain device/
 | Key loss/reset | Delete wrapping key while retaining encrypted fixture, reopen refuses, explicit reset creates a new fixture; test OS invalidation separately from deletion |
 | Uninstall/restore | Observe platform key/file persistence differences and mismatch handling without asserting identity continuity |
 
-Device/Mac/signing inventory is unknown. The final protection model and all MC-005 exit criteria remain open. Secure persistence that cannot be demonstrated blocks persistent identities/DM release. No physical result or independent security assessment is inferred from this code or CI.
+Device/Mac/signing inventory is unknown. All physical rows above are deferred and untested: MC-043 owns Android and MC-044 owns iOS, including production-provider retests after MC-017/018. MC-034 requires the Android gate; MC-037 requires the iOS gate plus MC-034, carrying both into release. Missing or failed evidence blocks the corresponding later gate and real sensitive-data use. If the provisional model fails, record a scoped remediation/decision before certification; never weaken storage silently. No physical result or independent security assessment is inferred from code, CI or deferral.

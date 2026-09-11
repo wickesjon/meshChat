@@ -18,7 +18,9 @@ Build temporary direct-link probes in both GATT roles using proposed service/cha
 
 ## Scope
 
-Permitted paths (relative to repository root): `src/android/ble/**`, `src/ios/BLE/**`, `tests/bench/**`, `docs/decisions/**`, `docs/mesh-chat-design.md`.
+Permitted paths (relative to repository root): `src/android/ble/**`, `src/ios/BLE/**`, `tests/bench/**`, `docs/decisions/**`, `docs/mesh-chat-design.md`, `.github/workflows/ci.yml`.
+
+Scope approval: on 2026-09-11 the user explicitly approved adding `.github/workflows/ci.yml` for the prepared standalone probe build checks: Android Debug/Release and lint, plus unsigned iOS Debug/Release simulator/device compilation. Signing overrides remain on CI command lines only. This approval does not waive physical evidence or authorize other scope changes.
 
 Also permitted: this ticket and generated ticketboard index/diagram changes required by its workflow. No unrelated file changes or work outside the repository. Read the [design](../../mesh-chat-design.md), its §0 corrections, and the [active plan](../implementation-plan.md). A necessary change outside these paths needs an explicit scope decision.
 
@@ -53,7 +55,7 @@ Device inventory and Mac/Xcode/development-signing access are awaiting user inpu
 - The experimental Android manifest requests location rather than asserting `neverForLocation`; it requests coarse and fine together and records grants. Approximate-only access is exercised on API 31+, while API 29/30 scanning requires fine permission. This is a probe configuration for evidence collection, not the final product/privacy ruling. Background-location and notification visibility controls are separate.
 - iOS uses CoreBluetooth main-queue delegates, separate write/notify readiness callbacks, state-restoration identifiers and bounded traffic. It reports oversized values refused by the probe before an API call distinctly from enqueue acceptance and receiver observation. iOS cannot forcibly disconnect an inbound central; this limitation is explicit in its report. Timers may pause under suspension and are not a keepalive guarantee.
 - Local `gradlew.bat -p src/android/ble --offline --no-daemon assembleDebug assembleRelease lintDebug` passed (87 tasks, 41 executed) with the pinned repository-local JDK/SDK/Gradle. Initial lint caught coarse/fine permission pairing, context typing and string resources; those were fixed without reducing the lint gate. No Android device execution is claimed.
-- The iOS Info.plist and shared scheme parse as XML. Swift/Xcode compilation is not yet verified on this Windows host. A request to add `.github/workflows/ci.yml` to MC-004 for probe build checks is pending user approval; the file has not been modified for MC-004. MC-003's scope approval does not automatically apply. A documented Mac build is an alternative; existing CI currently checks the parent apps/core, not these standalone probes.
+- The iOS Info.plist and shared scheme parse as XML. Swift/Xcode compilation is not yet verified on this Windows host. Following the specific scope approval above, CI now includes standalone Android Debug/Release assembly and strict lint, and iOS Debug/Release compilation for both simulator and device SDKs. It reuses the pinned toolchains, keeps temporary/build output under the repository, and disables signing only on the CI command line. Hosted results and follow-up review are pending; compilation cannot establish physical BLE behavior.
 - Ticketboard validation and whitespace checks pass. Independent code review completed as recorded below; all physical exit criteria remain unchecked.
 
 ## Review and merge

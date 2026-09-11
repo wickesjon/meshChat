@@ -59,9 +59,13 @@ jobs:
           git diff --exit-code -- Cargo.lock
       - name: Dependency advisory, license, version and source gates
         run: |
-          cargo install cargo-deny --version 0.18.3 --locked
-          "$CARGO_HOME/bin/cargo-deny" --version
-          "$CARGO_HOME/bin/cargo-deny" --locked check --config src/core/deny.toml
+          curl --fail --location --retry 3 \
+            https://github.com/EmbarkStudios/cargo-deny/releases/download/0.20.2/cargo-deny-0.20.2-x86_64-unknown-linux-musl.tar.gz \
+            --output .work/cargo-deny.tar.gz
+          echo '9f12ed4c49936e09b48bf862b595cde2fe64fcbd9d74dfacac6131ca824c8d5f  .work/cargo-deny.tar.gz' | sha256sum --check
+          tar -xzf .work/cargo-deny.tar.gz -C .work
+          .work/cargo-deny-0.20.2-x86_64-unknown-linux-musl/cargo-deny --version
+          .work/cargo-deny-0.20.2-x86_64-unknown-linux-musl/cargo-deny --locked --config src/core/deny.toml check
 
   android:
     runs-on: ubuntu-24.04
@@ -74,14 +78,15 @@ jobs:
         with:
           distribution: temurin
           java-version: 17.0.15+6
+          settings-path: ${{ github.workspace }}/.work/maven
       - name: Verify wrapper
         run: echo '2db75c40782f5e8ba1fc278a5574bab070adccb2d21ca5a6e5ed840888448046  src/android/gradle/wrapper/gradle-wrapper.jar' | sha256sum --check
       - name: Android build and lint
         working-directory: src/android
         run: |
-          mkdir -p "$ANDROID_USER_HOME" ../../.work/tmp
+          mkdir -p "$ANDROID_USER_HOME" ../../.work/tmp ../../.work/java-home
           export TMPDIR="$GITHUB_WORKSPACE/.work/tmp"
-          export JAVA_TOOL_OPTIONS="-Djava.io.tmpdir=$TMPDIR"
+          export JAVA_TOOL_OPTIONS="-Djava.io.tmpdir=$TMPDIR -Duser.home=$GITHUB_WORKSPACE/.work/java-home"
           java -version
           cat "$ANDROID_HOME/platforms/android-35/source.properties"
           cat "$ANDROID_HOME/build-tools/35.0.0/source.properties"

@@ -79,6 +79,50 @@ jobs:
           distribution: temurin
           java-version: 17.0.15+6
           settings-path: ${{ github.workspace }}/.work/maven
+      - name: Start isolated security emulator
+        run: |
+          mkdir -p .work/emulator-sdk/cmdline-tools/latest .work/android/avd .work/tmp .work/java-home
+          export TMPDIR="$PWD/.work/tmp"
+          export JAVA_TOOL_OPTIONS="-Djava.io.tmpdir=$TMPDIR -Duser.home=$PWD/.work/java-home"
+          cp -RL "$ANDROID_HOME/cmdline-tools/latest/." .work/emulator-sdk/cmdline-tools/latest/
+          sdk_tools="$PWD/.work/emulator-sdk/cmdline-tools/latest/bin"
+          cp -R "$ANDROID_HOME/licenses" .work/emulator-sdk/licenses
+          "$sdk_tools/sdkmanager" --sdk_root="$PWD/.work/emulator-sdk" \
+            'platform-tools' 'emulator' 'system-images;android-29;default;x86_64'
+          export ANDROID_HOME="$PWD/.work/emulator-sdk"
+          export ANDROID_SDK_ROOT="$ANDROID_HOME"
+          export ANDROID_AVD_HOME="$PWD/.work/android/avd"
+          cat "$ANDROID_HOME/system-images/android-29/default/x86_64/source.properties"
+          echo no | "$sdk_tools/avdmanager" create avd --name mc005 \
+            --package 'system-images;android-29;default;x86_64' --path "$PWD/.work/android/mc005.avd"
+          "$ANDROID_HOME/emulator/emulator" -list-avds
+          "$ANDROID_HOME/emulator/emulator" -accel-check || true
+          acceleration=off
+          if [ -r /dev/kvm ] && [ -w /dev/kvm ]; then acceleration=on; fi
+          "$ANDROID_HOME/emulator/emulator" -avd mc005 -port 5554 -no-window -no-audio \
+            -no-boot-anim -no-snapshot -gpu swiftshader -accel "$acceleration" > .work/emulator.log 2>&1 &
+          emulator_pid=$!
+          trap 'tail -n 80 .work/emulator.log; kill "$emulator_pid" 2>/dev/null || true' EXIT
+          "$ANDROID_HOME/platform-tools/adb" start-server
+          boot_deadline=$((SECONDS + 600))
+          booted=false
+          while [ "$SECONDS" -lt "$boot_deadline" ]; do
+            if ! kill -0 "$emulator_pid" 2>/dev/null; then exit 1; fi
+            boot_state=$(timeout 5 "$ANDROID_HOME/platform-tools/adb" -s emulator-5554 shell getprop sys.boot_completed 2>/dev/null | tr -d '\r' || true)
+            if [ "$boot_state" = 1 ]; then
+              booted=true
+              break
+            fi
+            sleep 2
+          done
+          if [ "$booted" != true ]; then
+            tail -n 80 .work/emulator.log
+            exit 1
+          fi
+          "$ANDROID_HOME/platform-tools/adb" -s emulator-5554 shell input keyevent 82
+          echo "Security emulator booted; hardware acceptance remains separate"
+          trap - EXIT
+
       - name: Build Rust library and Kotlin bindings
         run: |
           mkdir -p "$CARGO_HOME" "$RUSTUP_HOME" .work/tmp
@@ -131,39 +175,16 @@ jobs:
           done
       - name: Security probe emulator lifecycle
         run: |
-          mkdir -p .work/emulator-sdk/cmdline-tools/latest .work/android/avd .work/tmp
-          export TMPDIR="$PWD/.work/tmp"
-          export JAVA_TOOL_OPTIONS="-Djava.io.tmpdir=$TMPDIR -Duser.home=$PWD/.work/java-home"
-          cp -RL "$ANDROID_HOME/cmdline-tools/latest/." .work/emulator-sdk/cmdline-tools/latest/
-          sdk_tools="$PWD/.work/emulator-sdk/cmdline-tools/latest/bin"
-          cp -R "$ANDROID_HOME/licenses" .work/emulator-sdk/licenses
-          "$sdk_tools/sdkmanager" --sdk_root="$PWD/.work/emulator-sdk" \
-            'platform-tools' 'emulator' 'system-images;android-29;default;x86_64'
           export ANDROID_HOME="$PWD/.work/emulator-sdk"
-          export ANDROID_SDK_ROOT="$ANDROID_HOME"
-          export ANDROID_AVD_HOME="$PWD/.work/android/avd"
-          cat "$ANDROID_HOME/system-images/android-29/default/x86_64/source.properties"
-          echo no | "$sdk_tools/avdmanager" create avd --name mc005 \
-            --package 'system-images;android-29;default;x86_64' --path "$PWD/.work/android/mc005.avd"
-          acceleration=off
-          if [ -r /dev/kvm ] && [ -w /dev/kvm ]; then acceleration=on; fi
-          "$ANDROID_HOME/emulator/emulator" -avd mc005 -port 5554 -no-window -no-audio \
-            -no-boot-anim -no-snapshot -gpu swiftshader_indirect -accel "$acceleration" > .work/emulator.log 2>&1 &
-          emulator_pid=$!
-          trap 'kill "$emulator_pid" 2>/dev/null || true' EXIT
-          timeout 600 "$ANDROID_HOME/platform-tools/adb" -s emulator-5554 wait-for-device
-          for attempt in $(seq 1 300); do
-            if [ "$("$ANDROID_HOME/platform-tools/adb" -s emulator-5554 shell getprop sys.boot_completed | tr -d '\r')" = 1 ]; then
-              break
-            fi
-            sleep 2
-          done
-          if [ "$("$ANDROID_HOME/platform-tools/adb" -s emulator-5554 shell getprop sys.boot_completed | tr -d '\r')" != 1 ]; then
-            tail -n 80 .work/emulator.log
-            exit 1
-          fi
-          "$ANDROID_HOME/platform-tools/adb" -s emulator-5554 shell input keyevent 82
+          export ANDROID_USER_HOME="$PWD/.work/android"
+          export TMPDIR="$PWD/.work/tmp"
           python3 -B tests/bench/security/run_android_emulator.py --serial emulator-5554
+      - name: Stop isolated security emulator
+        if: always()
+        run: |
+          if [ -x .work/emulator-sdk/platform-tools/adb ]; then
+            timeout 15 .work/emulator-sdk/platform-tools/adb -s emulator-5554 emu kill || true
+          fi
 
   ios:
     runs-on: macos-15

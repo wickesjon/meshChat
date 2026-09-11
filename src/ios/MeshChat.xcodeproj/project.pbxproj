@@ -105,7 +105,6 @@
                 MARKETING_VERSION = 0.1.0;
                 CURRENT_PROJECT_VERSION = 1;
                 TARGETED_DEVICE_FAMILY = "1,2";
-                CODE_SIGNING_ALLOWED = NO;
             };
             name = Debug;
         };
@@ -120,7 +119,6 @@
                 MARKETING_VERSION = 0.1.0;
                 CURRENT_PROJECT_VERSION = 1;
                 TARGETED_DEVICE_FAMILY = "1,2";
-                CODE_SIGNING_ALLOWED = NO;
             };
             name = Release;
         };

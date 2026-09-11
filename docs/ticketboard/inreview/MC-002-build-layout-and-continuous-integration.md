@@ -44,7 +44,7 @@ A triggered fallback must be recorded with evidence. It does not authorize weake
 
 ## Evidence
 
-Implementation and local/hosted build validation are complete. MC-002 is in review; user review and squash merge remain pending.
+MC-002 is in review. The signing review fix below awaits its hosted rerun and user re-review; squash merge remains pending.
 
 - Baseline verified against remote main: `8346be06e4bcce39e1779e0f0d3982cd508dc39b`; MC-001 is complete. The checkout was clean before branch creation.
 - Added an unpublished, dependency-free Rust workspace; Rust 1.85.1, edition 2024, inherited `unsafe_code = "forbid"`, release overflow checks, and a committed lockfile. MC-003 owns the first core API and behavior tests; MC-002 does not introduce placeholder protocol functions or meaningless unit tests.
@@ -70,6 +70,8 @@ Implementation and local/hosted build validation are complete. MC-002 is in revi
 Reproduce from the repository root with Rust 1.85.1 installed: set `CARGO_HOME`, `RUSTUP_HOME`, `GRADLE_USER_HOME`, `ANDROID_USER_HOME` and temporary-directory environment variables to subdirectories of `.work/` before provisioning tools. Set Java's `-Djava.io.tmpdir` and `-Duser.home` to existing `.work/tmp` and `.work/java-home` directories through `JAVA_TOOL_OPTIONS`. Run the exact commands in `.github/workflows/ci.yml`. Android requires JDK 17.0.15+6 and a provisioned API 36 / build-tools 35.0.0 SDK; `bash src/android/gradlew -p src/android :app:assembleDebug :app:assembleRelease :app:lintDebug` builds it (use `gradlew.bat` on Windows). For iOS select Xcode 16.4 using `DEVELOPER_DIR` and use the workflow's `xcodebuild` commands with repository-local DerivedData. These builds do not establish BLE feasibility or release readiness.
 
 ## Review and merge
+
+- User P1 review fix: removed `CODE_SIGNING_ALLOWED = NO` from both checked-in iOS target configurations so developer signing can be configured for MC-004 physical iPhone work. The existing CI `xcodebuild` command retains its unsigned-build override. Local inspection confirms the override exists only in CI; ticketboard validation and `git diff --check` passed. Hosted simulator builds will rerun on this revision; physical-device signing/deployment is not claimed.
 
 - Branch: `ticket/MC-002-build-layout-and-continuous-integration`.
 - Review/PR: [PR #3](https://github.com/wickesjon/meshChat/pull/3); review pending.

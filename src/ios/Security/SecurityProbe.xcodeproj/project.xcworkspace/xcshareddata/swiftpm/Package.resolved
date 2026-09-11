@@ -5,7 +5,7 @@
       "kind": "remoteSourceControl",
       "location": "https://github.com/sqlcipher/SQLCipher.swift.git",
       "state": {
-        "revision": "c85425b80b8c9f0a1ceb4f72fa174e2b688181ba"
+        "revision": "205df55271aa1ba512a9bfe3fd1813bc9ac52a19"
       }
     }
   ],

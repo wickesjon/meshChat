@@ -7,7 +7,7 @@
         B00000000000000000000001 = {
             isa = XCRemoteSwiftPackageReference;
             repositoryURL = "https://github.com/sqlcipher/SQLCipher.swift.git";
-            requirement = { kind = revision; revision = c85425b80b8c9f0a1ceb4f72fa174e2b688181ba; };
+            requirement = { kind = revision; revision = 205df55271aa1ba512a9bfe3fd1813bc9ac52a19; };
         };
         B00000000000000000000002 = { isa = XCSwiftPackageProductDependency; package = B00000000000000000000001; productName = SQLCipher; };
         B00000000000000000000003 = { isa = PBXBuildFile; productRef = B00000000000000000000002; };

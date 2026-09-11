@@ -12,6 +12,7 @@ android {
         targetSdk = 36
         versionCode = 1
         versionName = "0.1.0-probe"
+        testInstrumentationRunner = "org.meshchat.securityprobe.SecurityInstrumentation"
         ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
     }
     signingConfigs.getByName("debug") { storeFile = file("../../../.work/android/debug.keystore") }
@@ -19,6 +20,7 @@ android {
         java.srcDir("../../../.work/security-ffi/kotlin")
         jniLibs.srcDir("../../../.work/security-ffi/android")
     }
+    sourceSets.getByName("androidTest").java.srcDir("../../../tests/bench/security/android")
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
     lint { warningsAsErrors = true; abortOnError = true; disable += setOf("GradleDependency", "AndroidGradlePluginVersion") }
 }

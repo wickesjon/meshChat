@@ -5,9 +5,15 @@ Use test devices and synthetic data only. This is an acceptance harness, not a m
 ## Build checks
 
 - Core: `cargo test --workspace --all-features --locked` and the same with `--release`; `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`; `cargo fmt --all -- --check`; existing cargo-deny policy.
-- Android (Linux, pinned NDK installed): `python3 -B src/core/build_bindings.py android --security-probe`, then `python3 -B src/android/security/build_sqlcipher.py`, then `bash src/android/gradlew -p src/android/security --no-daemon assembleDebug assembleRelease lintDebug`. Run `check_android_apk.py` on both APKs and Android build-tools `zipalign -c -P 16 4` on each. The source rebuild requires git, make and Tcl. Do not substitute the unaligned published AAR or suppress the alignment check.
+- Android (Linux, pinned NDK installed): `python3 -B src/core/build_bindings.py android --security-probe`, then `python3 -B src/android/security/build_sqlcipher.py`, then `bash src/android/gradlew -p src/android/security --no-daemon assembleDebug assembleRelease assembleDebugAndroidTest lintDebug`. Run `check_android_apk.py` on both APKs and Android build-tools `zipalign -c -P 16 4` on each. The source rebuild requires git, make and Tcl. Do not substitute the unaligned published AAR or suppress the alignment check.
 - iOS (Xcode 16.4): `python3 -B src/core/build_bindings.py ios --security-probe`, then build `src/ios/Security/SecurityProbe.xcodeproj`, scheme `SecurityProbe`, Debug/Release for `iphonesimulator` and `iphoneos`. CI uses `CODE_SIGNING_ALLOWED=NO` and repository-local derived data/package/module caches. A physical run needs separately available development signing. The simulator cannot exercise the Secure Enclave wrapping policy.
 - CI also compiles/runs `main.swift` with generated security bindings against CryptoKit on macOS. This tests curve interoperability through FFI, not iPhone storage or hardware behavior.
+
+## Emulator functional evidence
+
+CI starts an isolated Android API 29 emulator and runs `python3 -B tests/bench/security/run_android_emulator.py --serial emulator-5554`. The runner refuses non-emulator serials and checks the qemu property before installing the probe/test APKs. Each create/reopen/key-loss phase runs in a separate instrumentation process, with an explicit force-stop between phases. The key-loss phase checks that ciphertext stays unchanged, the wrapping key is not recreated, and only explicit reset permits a fresh fixture. Custom instrumentation uses the platform API and targets existing private bench operations without expanding the app's exported surface. Passing output must include each named phase; an adb command exiting successfully alone is insufficient.
+
+This can establish software/native-library and emulator Keystore behavior, including actual encrypted database reads. It does not establish physical key isolation, OEM backup/device-transfer behavior or iPhone Secure Enclave operation. Host CryptoKit checks remain distinct from iPhone acceptance. The user requested this emulator path on 2026-09-11; no physical gate was waived.
 
 ## Device procedure
 

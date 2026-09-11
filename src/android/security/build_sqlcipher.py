@@ -14,7 +14,7 @@ import zipfile
 ROOT = Path(__file__).resolve().parents[3]
 WORK = ROOT / '.work/security-sqlcipher'
 SOURCE = WORK / 'upstream'
-REVISION = '0725b962ffb60b00460b0e315bc632a543b399e7'
+REVISION = 'ae57a61052d8c41ce35cd48319b2f6f20f4de6bf'
 AAR_SHA256 = '44fc40c33d1de597c8339072a71fa0ff20e12d01ab352d6abe4ad5df668ead94'
 
 

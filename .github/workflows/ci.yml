@@ -123,21 +123,26 @@ jobs:
           python3 -B src/core/build_bindings.py android --security-probe
           python3 -B src/android/security/build_sqlcipher.py
           bash src/android/gradlew -p src/android/security --no-daemon assembleDebug assembleRelease assembleDebugAndroidTest lintDebug
-          python3 -B tests/bench/security/check_android_apk.py src/android/security/build/outputs/apk/*/*.apk
-          for apk in src/android/security/build/outputs/apk/*/*.apk; do
+          python3 -B tests/bench/security/check_android_apk.py \
+            src/android/security/build/outputs/apk/debug/*.apk \
+            src/android/security/build/outputs/apk/release/*.apk
+          for apk in src/android/security/build/outputs/apk/debug/*.apk src/android/security/build/outputs/apk/release/*.apk; do
             "$ANDROID_HOME/build-tools/35.0.0/zipalign" -c -P 16 4 "$apk"
           done
       - name: Security probe emulator lifecycle
         run: |
-          mkdir -p .work/emulator-sdk .work/android/avd .work/tmp
+          mkdir -p .work/emulator-sdk/cmdline-tools/latest .work/android/avd .work/tmp
           export TMPDIR="$PWD/.work/tmp"
-          sdk_tools="$ANDROID_HOME/cmdline-tools/latest/bin"
+          export JAVA_TOOL_OPTIONS="-Djava.io.tmpdir=$TMPDIR -Duser.home=$PWD/.work/java-home"
+          cp -RL "$ANDROID_HOME/cmdline-tools/latest/." .work/emulator-sdk/cmdline-tools/latest/
+          sdk_tools="$PWD/.work/emulator-sdk/cmdline-tools/latest/bin"
           cp -R "$ANDROID_HOME/licenses" .work/emulator-sdk/licenses
           "$sdk_tools/sdkmanager" --sdk_root="$PWD/.work/emulator-sdk" \
             'platform-tools' 'emulator' 'system-images;android-29;default;x86_64'
           export ANDROID_HOME="$PWD/.work/emulator-sdk"
           export ANDROID_SDK_ROOT="$ANDROID_HOME"
           export ANDROID_AVD_HOME="$PWD/.work/android/avd"
+          cat "$ANDROID_HOME/system-images/android-29/default/x86_64/source.properties"
           echo no | "$sdk_tools/avdmanager" create avd --name mc005 \
             --package 'system-images;android-29;default;x86_64' --path "$PWD/.work/android/mc005.avd"
           acceleration=off
@@ -153,6 +158,10 @@ jobs:
             fi
             sleep 2
           done
+          if [ "$("$ANDROID_HOME/platform-tools/adb" -s emulator-5554 shell getprop sys.boot_completed | tr -d '\r')" != 1 ]; then
+            tail -n 80 .work/emulator.log
+            exit 1
+          fi
           "$ANDROID_HOME/platform-tools/adb" -s emulator-5554 shell input keyevent 82
           python3 -B tests/bench/security/run_android_emulator.py --serial emulator-5554
 

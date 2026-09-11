@@ -1,6 +1,6 @@
 # Detailed Design Document — Offline BLE Mesh Chat
 **Working name: "Meshfest" (placeholder)**
-Version 0.5 — Canonical base wire specified; crypto and budget decisions pending
+Version 0.6 — Canonical base wire and budget gates specified; crypto decision pending
 
 ---
 
@@ -13,7 +13,7 @@ This revision incorporates the approved review of the design and original implem
 ### 0.1 Approved corrections
 
 1. **One outer frame per GATT value.** A write or notification contains exactly one §2.1 frame, with no additional two-byte batching prefix. Scheduling may flush multiple separate values. Capacity is runtime and direction-specific, including notify capacity. Unsupported capacity has an explicit refusal/recovery path; MC-004 supplies documented capacity constraints; MC-006 chooses and proves a protocol admission floor with runtime refusal. No physical minimum is guaranteed by online evidence.
-2. **Feasible budgets and metrics.** MC-007 must reconcile all frame, byte, crypto, queue, relay and SYNC budgets. The prior 95-of-100-in-30-seconds gate is withdrawn: the stated ingress bucket permits at most 45 frames over 30 seconds, and maximum-size signed items can exceed the 32 KB session budget. Define a byte-bounded eligible set, framing overhead, concurrent traffic and a measured completion target. Subscription relevance cannot be assumed when no selection information is exchanged.
+2. **Feasible budgets and metrics.** The normative [MC-007 budget contract](decisions/MC-007-budgets-and-acceptance.md) reconciles frame, byte, crypto, queue, forwarding and SYNC units. The prior 95-of-100-in-30-seconds gate is withdrawn. The replacement selects at most 8 items/8192 encoded bytes and requires a 120-second lossless ready-link test including framing, control and concurrent traffic. Its worksheet is arithmetic evidence, not a passed simulator/device gate. Subscription relevance cannot be assumed when no selection information is exchanged.
 3. **TTL-reachable testing.** With sender TTL 7 and decrement-before-forwarding, an endpoint nine edges away in a ten-node chain is out of range for a single live flood. Test reachable paths and explicit out-of-range behavior. Count actual per-egress GATT sends, fragments and origin sends separately; replace the unsupported absolute 0.3 relays/node/message target with a measured reduction against an unsuppressed GATT-overlay baseline.
 4. **Early rejection and accepted-message dedup.** Over-budget frames are dropped before reassembly/display/crypto. Unknown reserved bits do not bypass known-type checks. Maintain bounded rejected-attempt tracking separately from accepted/authenticated message identity so an invalid first copy cannot suppress a valid later copy with the same msg_id. Budget actual verification work, including embedded SYNC packets, and separate pending/unverified state from trusted acceptance.
 5. **Connection bootstrap.** Advertisements contain only the service UUID. Identity-dependent duplicate-link arbitration therefore occurs after an established-link exchange, not before discovery. An asymmetric iOS-compatible connection can remain even when a nominal identity ordering would prefer an unavailable discovery direction.
@@ -26,7 +26,7 @@ This revision incorporates the approved review of the design and original implem
 | Owner | Required decision |
 |---|---|
 | MC-006 | Specified in the normative [canonical wire contract](decisions/MC-006-wire-contract.md): framing, capacity, discovery, reassembly, SYNC, QR, pin and cosmetic fields; crypto extension points remain owned by MC-008 |
-| MC-007 | Consistent budgets and memory ceilings; SYNC eligible-set selection and time target; cursor/session expiry; cache-age/TTL policy; topology/loss/traffic seeds and delivery/latency/battery acceptance |
+| MC-007 | Specified in the normative [budget and acceptance contract](decisions/MC-007-budgets-and-acceptance.md): token units, memory ceilings, SYNC selected set, deadlines, deterministic scenarios and physical measurement thresholds |
 | MC-008 | Selected DM construction and library, exact encrypted plaintext/padding and authenticated header encoding, signature domain encodings, replay policy, friend presence freshness and key-change states |
 | MC-018 | Persistent versus transient data model, trust provenance, encrypted DB/key lifecycle, migration/reset and pruning |
 
@@ -156,7 +156,7 @@ Sent every 30s to each connected peer over the GATT link (never in BLE advertise
 | `digest` | `digest_len` B | Recent-message Bloom (below); 0-length permitted when the node has nothing recent |
 | *(optional)* friend signature block | 0 or var | Present iff `flags.signed` with `sig_type=0` (§7.4); located after `digest` via `digest_len` |
 
-**Recent-digest Bloom (proposed parameters, MC-007):** covers msg_ids held from the **last 60 seconds** only (not the 15-min cache). `m = 2048` bits (256 bytes), `k = 6`, same double-hash construction and byte/bit order as §2.6 but with `bloom_salt = "meshfest-digest-v1"`. At ≤200 recent items this yields ~2% FPR. Advisory only: a false positive skips one relay to one peer (§3.4a), recovered by flooding or SYNC.
+**Recent-digest Bloom:** at most 200 msg_ids held from the last 60 seconds; evict oldest at capacity. `m = 2048` bits (256 bytes), `k = 6`, same double-hash/bit order as §2.6 with salt `meshfest-digest-v1`. Expire a received digest 60 seconds after reception. Advisory only: false positives can skip useful relays and neither flooding nor a fixed-filter SYNC retry guarantees repair. MC-007 defines reproducible omission cases; never treat a digest match as authentication or delivery proof.
 
 **Signed ANNOUNCE:** includes the full signer key on every signed ANNOUNCE and follows the complete MC-006 coverage requirement, with final domains/encoding blocked on MC-008. It authenticates historical content, not fresh direct presence without the MC-008 proof. ANNOUNCE uses TTL 1/channel 0 and is never relayed or stored for SYNC. Maximum unsigned/signed sizes are 316/421 bytes.
 
@@ -208,13 +208,11 @@ When two nodes connect, each offers the other recent history it may be missing.
 
 **Explicit completion:** every page ends with one zero-blob marker: flags 3/nonzero cursor means continue this admitted session; flags 5/cursor 0 means complete; flags 7/cursor 0 means budget complete with more available for a later new session. Empty responses are markers at sequence 0, never empty logical packets. Sequence numbers increase across data and markers without wrapping; process all prior sequences before accepting a marker. Identical duplicates are ignored, conflicts abort, and missing sequences remain bounded pending until timeout. Only one walk per link direction is active; continuations repeat session_id, item_count and Bloom. Stale, reused or altered-filter cursors reject. The [SYNC contract](decisions/MC-006-wire-contract.md#6-sync-request-pages-and-completion) defines exact request/response bindings.
 
-**Provisional budgets — require MC-007 reconciliation (§0).** The old "25 items per session" could not deliver the "95% of a 500-message cache" gate (25/500 = 5%; repeating hourly-capped sessions outlived the 15-minute cache). Corrected:
+**Budgets and acceptance — MC-007.** Serve at most 8 CHAT items and 8192 encoded logical bytes per session, at most 4 items per page, newest-first across all channels. Framing and markers count additionally against frame/byte/forwarding limits. Session deadlines are 120 seconds; gap deadlines 30 seconds, neither reset by duplicates/continuations. One walk per link direction and at most 2 serving plus 2 requesting walks per node. New sessions consume link capacity 1/refill 1 per 60 s and node capacity 2/refill 1 per 30 s; continuations still pay frame/byte/work costs. Node forwarding credit includes every served SYNC fragment and marker.
 
-- **Within one session:** up to **100 items or 32 KB, whichever first**, delivered as a paginated walk; a flags-3 page marker with `next_cursor` lets the requester continue **immediately within the same session** (no 60s wait) up to the session budget.
-- **Session admission:** 1 new session per peer per 60s per link (unchanged, prevents amplification); continuations inside an admitted session are free.
-- **Global:** 400 SYNC-served items/min per node, 128 KB/min, shared with the §11 relay budget.
-- **Acceptance decision pending MC-007:** SYNC provides bounded recent context. The previous ≥95%-of-newest-100-in-30s gate is withdrawn (§0.1): neither the frame budget nor signed-packet byte budget supports it. MC-007 must define the eligible set, subscription-selection mechanism (if any), overhead, concurrent traffic, and completion target before implementation. Older cache entries beyond that are best-effort and typically irrelevant to a person who just arrived.
-- **Bloom false positives** are deterministic for a fixed set + fixed salt, so "retry later" does **not** repair them. Recovery comes from live flooding (the message is still circulating within its 15-min window) or a different responder whose cache differs. SYNC is an accelerator layered on flooding, never the sole delivery path.
+The [budget contract and worksheet](decisions/MC-007-budgets-and-acceptance.md#sync-workload-and-feasibility) specify the simultaneous-direction workload: eight 1024-byte sizing envelopes, signed ANNOUNCE and reactions on a 146-byte ready link. The target is every selected non-Bloom-matching item plus ordered completion within 120 s; it is not whole-cache replication or a guarantee for a congested/lossy link. Actual signed and encrypted fixtures are required when their codec/crypto tickets implement them.
+
+Bloom false positives are deterministic for the same set and salt. Count omissions separately. Different live traffic or cache contents may recover an omission, but no recovery guarantee follows from retrying the same filter. Only eligible held CHAT IDs enter the requester's filter, at most 5000; reject greater item_count. Subscription relevance is unknown to the responder.
 
 ### 2.7 REACTION packet
 
@@ -255,10 +253,12 @@ This keeps a mixed-version crowd on one connected mesh while bounding what an ol
 Ordered so that **cheap checks and rate accounting happen before expensive work** (finding R5.3 — the previous ordering ran signature/AEAD verification at step 2 but charged the rate limiter at step 5, letting a connected attacker force Ed25519/AEAD operations at raw GATT throughput despite the advertised ingress cap):
 
 ```
-FRAME LAYER (per arriving GATT write — no crypto, no allocation beyond the frame)
-F1. parse the 4-byte outer frame header (§2.1); malformed → drop, penalize link
-F2. CHARGE the per-link ingress budget in BYTES AND FRAMES (§6.5) for this frame,
-    whatever it turns out to contain. Over budget → drop the frame here.
+FRAME LAYER (per arriving GATT value: write or notification; bounded staging)
+F1. enforce bounded native staging; CHARGE per-link AND node ingress
+    BYTES AND FRAMES (§6.5), including malformed/oversized attempts.
+    Over budget -> drop before parsing or allocating group state.
+F2. parse the 4-byte outer frame header (§2.1); malformed -> drop. Charges apply
+    whatever the frame contains, including rejected syntax.
     *** All later failures, including invalid signatures and failed AEAD, have
         already consumed this budget — that is the point. ***
 F3. dispatch by frame_kind:
@@ -271,7 +271,7 @@ F3. dispatch by frame_kind:
 F4. reserve no trust at the frame boundary. Each actual Ed25519 / AEAD operation
     in the logical pipeline, including a packet extracted from SYNC_ITEM,
     must acquire per-link and global work allowance before execution.
-    MC-007 fixes the coherent ceilings. No allowance -> bounded deferral or drop;
+    MC-007 defines operation units, ceilings and pending limits. No allowance -> bounded deferral or drop;
     encrypted bytes are never displayed as plaintext/unverified message text.
 
 LOGICAL LAYER (on a complete logical packet P)
@@ -301,15 +301,17 @@ Two invariants: exact accepted duplicates are rejected cheaply before repeated c
 
 ### 3.2 Seen-message cache
 
-Ring buffer of (msg_id → first_seen_time). 4096 entries × 16B ≈ 64KB. The 15-minute TTL must exceed the maximum plausible mesh traversal time (seconds) by a wide margin; 15 min also bounds SYNC replay so old messages don't circulate forever.
+MC-007 bounds accepted exact variants at 512 entries per arrival-link partition, 4096 node-wide/384 KiB allocated, aged 15 minutes from first local acceptance. Identify the immutable content variant as well as claimed msg_id; mutable TTL does not create a new variant. MC-013 implements trust-state-aware dedup so a rejected/unverified variant cannot suppress a later valid one. Overflow evicts oldest within that source partition, not another peer's entries. A replacement link cannot evict an unrelated live partition; node caps remain mandatory.
 
-**Pollution resistance (see §18-M7):** the cache is **partitioned per source peer** — each connected peer gets a bounded share of entries, so one peer flooding unique `msg_id`s cannot evict legitimate entries learned from other peers (which would force already-delivered messages to be re-relayed and re-displayed). If a single peer's partition churns faster than a threshold, that peer is flagged as abusive: its traffic is de-prioritized and, past a second threshold, the link is dropped and back-listed like an idle slot-filler (§8.1). A coarse time-bucketed bloom filter backs the exact cache as a second layer so eviction of an exact entry still probably suppresses a re-relay.
+Rejected fragment identities and other rejected variants have separate 30-second bounded tables. A two-generation, 8 KiB coarse Bloom may advise relay suppression only: positives cannot suppress display eligibility, trust verification or valid variants. This probabilistic cache is not proof of acceptance. Node/link budgets bound churn even if claimed identities rotate.
 
 ### 3.3 Transmission scheduling
 
-Relayed packets go into a per-peer outbound queue with a **random hold-off of 80–400ms** before send. The hold-off serves two purposes: it desynchronizes rebroadcasts from neighbors who received the same packet simultaneously (collision avoidance), and it opens the **suppression window** used to cancel redundant relays entirely (§3.4a). Own messages skip the hold-off. Queue is priority-ordered: own messages > relayed CHAT > relayed REACTION > SYNC_ITEM > ANNOUNCE. Queue packet and byte caps are fixed by MC-007. Overflow evicts eligible relayed traffic first. Own messages are preserved once admitted; when no bounded capacity remains, reject a new own-message enqueue with an explicit not-sent/retry result.
+Relays wait 80–400 ms Normal, 40–150 ms tier 3, 300–700 ms tier 0, 10–40 ms Beacon before becoming eligible. Own traffic skips hold-off. The MC-007 scheduler uses bounded frame-cost deficit round robin across controls, own traffic, forwarded CHAT/control/unknown, forwarded REACTION and served SYNC/ANNOUNCE, with quanta 8/16/8/4/8. SYNC and ANNOUNCE alternate within their class when both are ready. At object boundaries, each active class receives bounded service; global contention rotates links. Platform backpressure or missing budget credit prevents a latency guarantee.
 
-**TX scheduling:** a scheduled flush may send multiple separate GATT values while platform readiness permits. Each value contains exactly one §2.1 outer frame; there is no two-byte batching prefix. Use the runtime write or notify capacity for that direction. The proposed 200ms flush interval and ANNOUNCE piggybacking are tuning inputs for MC-007; measure their effects rather than asserting a battery improvement.
+Pace each link at no more than one GATT frame/second without catch-up bursts. Every frame pays aggregate egress limits and forwarded/SYNC frames also pay the mode forwarding bucket. Finish an object's fragments contiguously in index order before choosing another. MC-007 specifies 32 objects/48 KiB per link and 128/192 KiB node-wide, overflow order and 30-second waiting expiry. Preserve admitted own/in-flight work; new own admission fails explicitly when no bounded space remains. Never equate queue admission with delivery.
+
+This replaces the unmeasured 200 ms multi-value flush proposal. Faster pacing requires a reviewed compatible budget change and physical validation. One frame per GATT value and runtime directional capacities remain unchanged.
 
 ### 3.4 Relay minimization (storm control + battery)
 
@@ -321,28 +323,17 @@ Naive flooding makes every node retransmit every message — in a dense crowd th
 
 **(b) Global cancel only when every egress peer is covered.** The whole queued relay is cancelled only if *every* current egress peer independently satisfies (a) — i.e. the node has positive per-link evidence that all its neighbors already hold the message. In a dense cluster this happens readily (everyone hears everyone), reproducing the battery win; on a bridge it essentially never happens, preserving the one path.
 
-**(c) Probabilistic gossip — safety valve for extreme *local* density.** After (a)/(b), a residual per-egress relay probability applies, keyed to the node's own connected-peer count (a real, locally-known number — *not* the advisory `peer_count` from ANNOUNCE, which is a coarse density hint and is never treated as topology truth), shifted down one row at battery tier ≤ 1:
+**(c) No extra probabilistic thinning in v1.** Coverage evidence already cancels an egress under (a). When evidence is absent, forward if budgets allow, regardless of connected-peer count or another peer's advisory density. The earlier residual probability table adds no distinct safe behavior after coverage suppression. MC-007 compares actual per-egress GATT costs to an unsuppressed baseline and reports the measured reduction, including zero; it does not impose the withdrawn 0.3-relays/node/message target.
 
-| Connected peers | Relay probability |
-|---|---|
-| ≤ 3 | 1.0 (sparse — every hop matters) |
-| 4–8 | 1.0 ((a)/(b) already thin this regime) |
-| 9–15 | 0.7 |
-| 16+ | 0.5 |
+**(d) Battery-tier load shifting.** Tier 3 uses 40–150 ms hold-off and tier 0 uses 300–700 ms; the mode also selects the finite forwarding budget. Under the declared low-load gate a Saver bridge must preserve reachable delivery. At budget exhaustion even a bridge can shed forwards; no unconditional coverage or energy benefit is promised.
 
-**Bridge protection — default to relay under uncertainty (finding R2.1).** The protocol does **not** exchange adjacency, so a node generally cannot *prove* an egress link is a cut edge. The safe rule is therefore inverted from "detect bridges and force relay" to "**relay unless you have positive evidence the egress peer is already covered**": the residual probability in the table above is applied *only when* mechanism (a)/(b) gave positive per-egress coverage evidence for that peer (its recent-digest contained the msg_id, or we observed it send the msg_id). For any egress peer with **no** coverage evidence, probability is forced to **1.0**. Consequence: on a genuine bridge — where the far-side peer's digest never shows the message — the node always relays, because it has no evidence of coverage. Suppression only ever fires on peers that have demonstrably already got the message. This needs no topology inference at all.
-
-*(Optional future mechanism, off by default, v2 candidate): a privacy-bounded neighbor sketch — each node includes a rotating salted Bloom of its current peers' key-fingerprints in ANNOUNCE, letting a node estimate whether two peers are mutually connected and thin relays more aggressively in dense meshes. Not in v1; the default-to-relay rule above is correct without it and cannot sever a path.)*
-
-**(d) Battery-tier load shifting.** Tier-3 (charging/full) nodes shorten hold-off to 40–150ms; tier-0 (critical) lengthen to 300–700ms and cap relay probability at 0.5. Healthy phones thus win the (a)/(b) race in dense clusters and shoulder relay duty, while dying phones coast — but a tier-0 node still relays to any egress peer lacking coverage evidence (the default-to-relay rule in (c) overrides tier shifting), so a low-battery bridge does not drop the path.
-
-**First-hop guarantee:** fresh packets (`ttl == 7`) bypass (c)/(d) and relay to all egress peers not already covered by (a).
+**First-hop rule:** fresh packets (`ttl == 7`) remain eligible for all uncovered egress peers, subject to the same admission, queue and power budgets. No TTL bypass grants unlimited work.
 
 **What we deliberately do not do:** full relay-node election (connected-dominating-set). Needs topology consensus that churns badly at crowd scale. The per-egress stateless mechanisms above get most of the win with only pairwise digest exchange. **Required simulator case (finding 2):** two dense clusters joined by one or two GATT bridge nodes, verifying the bridge relays and delivery crosses — this scenario gates the suppression thresholds before they're fixed.
 
 ### 3.5 Store-and-forward
 
-`forward_cache`: last 15 minutes of valid CHAT packets, cap 500 messages / ~256KB, LRU, indexed by an internal monotonic cache sequence number. SYNC exposes only opaque tokens bound to a snapshot position, link, session and filter (§2.6). On each new peer connection, run one SYNC session (§2.6) — newest-first, paginated, budgeted. Result: someone opening the app mid-set sees the recent minutes of their channels within seconds. Older cache entries are best-effort by design; SYNC targets *recent context*, not full-cache replication.
+`forward_cache` holds eligible CHAT for 15 minutes from first local arrival, bounded by 500 records, 256 KiB encoded and 320 KiB allocated. Re-access/replay cannot refresh that age. Phone Beacon uses 60 minutes, 5000 records, 5 MiB encoded/6 MiB allocated. Enforce all caps with LRU eviction; unsigned/pending/verified states remain distinct and encrypted content never downgrades to plaintext. Internal monotonic cache sequence numbers support newest-first snapshots; SYNC exposes only opaque bound cursors. New admitted sessions offer bounded recent context under §2.6; no instant full-history promise is made.
 
 ### 3.6 What is deliberately NOT in the mesh layer
 
@@ -442,7 +433,7 @@ On open, the app validates all three words against the known lists (case-insensi
 
 ## 6. Rate Limiting
 
-The numbers below are provisional tuning inputs until MC-007 reconciles frame, byte, message, crypto and SYNC budgets. The early-rejection and identity-independent admission rules are normative now; implementers must not select conflicting numeric limits independently.
+The [MC-007 budget contract](decisions/MC-007-budgets-and-acceptance.md) is normative. Token buckets specify burst capacity and refill, not strict sliding-window counts. KiB means 1024 bytes. All frame/byte/crypto/queue limits apply together before their associated work; no rate allowance grants trust.
 
 ### 6.1 Threat model
 
@@ -450,15 +441,19 @@ Spam on public channels from (a) enthusiastic humans, (b) modified clients. No s
 
 ### 6.2 Parameters (v1)
 
-| Scope | Limit | Mechanism |
+| Scope | Capacity / refill | Accounting |
 |---|---|---|
-| #General, #Confessions | 5 msgs / 60s per sender | Token bucket: capacity 5, refill 1 per 12s |
-| #Event Updates | 2 msgs / 60s per sender | Token bucket: capacity 2, refill 1 per 30s |
-| Private channels | 15 msgs / 60s per sender | Loose anti-flood only |
-| Reactions (all channels) | 30 / 60s per sender | Separate bucket; a reaction never consumes a message token |
-| Any sender, all channels combined | 20 msgs / 60s | Global bucket, catches channel-hopping spam |
-| Relay bandwidth (self-protection) | 60 relayed packets / 10s per link | Drops excess from a firehosing peer, penalizes link |
-| **Per-link ingress (Sybil control)** | Frame and byte admission independent of claimed sender identity; no display after early rejection | MC-007 and §6.5 |
+| General+Confessions CHAT |5 /1 per 12 s|Per claimed sender across both channels/all links|
+| Ordinary Event Updates CHAT |2 /1 per 30 s|Per claimed sender|
+| Structurally organizer-signed Event Updates |10 /1 per 6 s|Preserves mixed-adoption allowance; no badge or trust implied|
+| Private CHAT |15 /1 per 4 s|Per sender across private channels|
+| All CHAT |20 /1 per 3 s|Additional sender-wide bucket|
+| REACTION |30 /1 per 2 s|Separate sender bucket|
+| Each link ingress AND egress |15 frames /1 per second; 24 KiB /2 KiB per second|Complete GATT values including headers/fragments/control|
+| Node ingress AND egress |60 frames /8 per second; 64 KiB /8 KiB per second|Independent direction buckets, shared across links/reconnects|
+| Crypto |20 units /20 per second per link; 40 /40 per second node|Actual operations, including failed/embedded work|
+
+MC-007 defines all control/unknown/session/connection buckets, finite tables, mode forwarding budgets and fairness. Do not retain the old redundant 60-relayed-packets/10 s limit or interpret per-logical-item budgets as per-frame quotas.
 
 ### 6.3 Sender-side (UX)
 
@@ -468,13 +463,13 @@ The composer disables at 0 tokens and shows a countdown ("You can post again in 
 
 Every node runs the same per-sender token-bucket table **keyed by `sender_id` × channel class** for all traffic it sees. A packet exceeding its per-sender bucket is dropped at §3.1 step L5 — **neither displayed nor relayed** (this is the single authoritative rule; see the §6.5 clarification below for how it interacts with the per-link ingress bucket). Honest nodes compute the same per-sender verdict, so a spammer using *one stable identity* sees its reach collapse toward its 1-hop radius. The residual case — a spammer *rotating* identities to dodge per-sender buckets — is bounded not by per-sender verdicts but by the per-link aggregate ingress bucket (§6.5).
 
-Buckets for idle senders are garbage-collected after 5 minutes; memory is bounded (~50B × active senders).
+The sender table holds at most 4096 entries/1 MiB allocated, covering the node ingress bound of 2460 new one-frame senders over a 300-second idle window. Expire after 300 s inactivity; when full, reject a new sender rather than evict an active bucket and grant fresh burst credit. Link/node admission applies before accessing this table.
 
 ### 6.5 Known bypass and accepted residual risk
 
 A modified client can rotate sender IDs. Admission therefore uses per-link frame and byte budgets independently of claimed identity, charged before reassembly or crypto. **An over-budget frame is dropped; it cannot subsequently be displayed.** The previous display-without-relay rule for such frames is withdrawn.
 
-MC-007 owns the coherent numeric budget decision. Previous proposed values (15-frame burst, 1 frame/sec refill, 24 KB byte burst, 2 KB/sec byte refill and 20 verifies/sec/link) are measurement inputs, not final acceptance constants: they cannot support the old SYNC target. The decision must define byte units, overhead, control traffic, session/reconnect handling and node-wide work ceilings.
+MC-007 selects the 15-frame/1-per-second link bucket, 24 KiB/2-KiB-per-second byte bucket and 20-unit/20-per-second link work bucket, with additional node ceilings and explicit reconnect handling. The 120-second 8-item/8192-byte selected-set target includes all frame overhead and concurrent traffic. Its worksheet proves arithmetic feasibility only; actual simulator and device gates remain required.
 
 Per-sender admission remains an additional check; passing it cannot override frame rejection. New identities do not obtain a new physical-link allowance. Crypto budgets count actual verification/decryption operations, including multiple operations for credential chains and packets extracted from SYNC.
 
@@ -625,7 +620,7 @@ Target: maintain **3–6 concurrent connections** per device (fewer burns covera
 
 Connection bootstrap cannot use `sender_id` before a link exists: discovery advertisements expose only the service UUID. The MC-006 HELLO state machine exchanges roles, full public keys, fresh nonces and capacities after connection. Keep a sole asymmetric link. Consolidate duplicate links only after both have the MC-008 fresh identity proof, by the common initiator-key/nonce tuple; unproved HELLO claims cannot evict a verified link. Exact fields and UUIDs are in the [discovery contract](decisions/MC-006-wire-contract.md#3-discovery-and-duplicate-links).
 
-**Slot-exhaustion defense (see §18-M3):** an attacker opening links from many spoofed identities could fill every slot and isolate a phone. Therefore: (a) **at least 2 of 6 slots are reserved** for peers not yet seen in this session, rotated every 60s; (b) a peer that sends no valid CHAT/ANNOUNCE traffic within 20s of connecting is dropped and back-listed for 5 min; (c) peer scoring favors **RSSI diversity** — a cluster of links at near-identical RSSI (one physical attacker) cannot occupy more than 3 slots; (d) inbound connection rate per remote address is capped at 3/min.
+**Slot-exhaustion defense (see §18-M3):** reserve two of the six Normal Android slots for new peers, rotated every 60s; with a lower native/mode cap L, reserve min(2, L−1), preserving one existing slot. A peer with no valid CHAT/ANNOUNCE within 20s of connection is dropped and back-listed for five minutes. Keep the existing RSSI-diversity rule of at most three links in a near-identical RSSI cluster; this is a heuristic, not proof that several links belong to one attacker. MC-007 caps total links including handshakes, adds node-wide connection admission, and defines the observed-address bucket as capacity 3/refill 1 per 20s. Address/identity rotation cannot refill node buckets or evict a verified connection through an unproved HELLO claim.
 
 ### 8.2 GATT service definition
 
@@ -642,7 +637,7 @@ Write-without-response + notify gives symmetric pipes matching the protocol's be
 
 **Per-link transmit state machine (normative — finding R4).** "Write-without-response" is *not* fire-and-forget, but the two platforms expose backpressure through **different, non-interchangeable models** — imposing one on the other was the round-two bug. The queue/priority/cleanup rules are shared; the flow-control primitive is platform-specific:
 
-*Shared:* one logical send in progress per link; the §3.3 outbound queue drains in priority order (own > CHAT > REACTION > SYNC_ITEM > ANNOUNCE); all fragments of a logical packet are enqueued contiguously and sent in `frag_index` order without interleaving other packets' fragments; bounded queue (cap 100, oldest relayed dropped first); on disconnect, flush the link queue, cancel in-flight, free partial reassembly buffers (§2.4).
+*Shared:* one object send in progress per link, with fragments contiguous and increasing by index. MC-007 defines frame-cost fair queues (32 objects/48 KiB per link, 128/192 KiB globally), one-frame/second pacing and overflow order; platform readiness can slow this further. On disconnect flush queued/in-flight work with explicit local failure and free link-scoped partial reassembly. Node buckets and bounded address admission records do not refill on reconnect.
 
 *iOS (readiness model — no per-write completion for writes-without-response):* the driver **must not** await `didWriteValueFor` (that fires only for writes *with* response). Instead it writes while `peripheral.canSendWriteWithoutResponse == true`, and when that returns false it **stops and waits for the `peripheralIsReady(toSendWriteWithoutResponse:)` delegate callback** before resuming. There is no per-frame timeout; liveness is inferred from the link staying connected and readiness callbacks continuing to fire. A link that stops delivering readiness callbacks *and* shows no inbound traffic for 15s is torn down (triggers §8.1 re-selection).
 
@@ -797,32 +792,13 @@ Icon color is free for everyone (it's part of avatar identity); the Supporter pe
 
 ## 11. Power Management
 
-### 11.1 Component power budget (screen off, Android)
+### 11.1 Measuring power
 
-Counterintuitively, at typical chat traffic **scanning dominates, not relaying** — the receiver must stay open on a duty cycle whether or not anything is happening. Relay TX only becomes the top cost at peak crowd traffic (constant CPU wakeups + airtime contention), which is precisely the regime §3.4 suppresses.
+Radio scans, held connections, advertising, packet work and screen use must be measured on named devices. The earlier component estimates and cross-app drain comparisons were unverified hypotheses; they are not release evidence or in-product promises. GATT frame counts exclude BLE link-layer overhead and cannot be converted into energy without physical instrumentation.
 
-| Component | Approx. cost | Notes |
-|---|---|---|
-| Continuous balanced scan | 1–3%/hr | The floor; the main lever for saver mode |
-| 3–6 held GATT connections | 0.3–0.8%/hr total | Connection events are a few bytes per ~100ms — cheap, which is why we hold links rather than churn them |
-| Advertising | ~0.2%/hr | Near-free |
-| Message TX/relay | trivial per event | ~ms of radio per 300B packet; matters only in aggregate at peak (suppression + batching keep it there) |
+### 11.2 Predeclared physical acceptance
 
-### 11.2 Expected drain by mode
-
-The default **Auto** mode (§11.4) moves between the Normal and Saver rows below based on battery and local redundancy; a typical festival day therefore lands between them, weighted toward Normal while battery is healthy.
-
-| Mode | Expected drain | Composition |
-|---|---|---|
-| Normal, quiet traffic | ~2–3%/hr | Mostly scanning |
-| Normal, peak crowd | ~3–5%/hr | Scanning + relay/CPU wakeups; naive flooding would run 6–10%/hr — §3.4 is worth roughly a 2× battery-life margin here |
-| Battery saver | ~1–1.5%/hr | Scan duty-cycled to ⅙, relay cap 40/min |
-| Beacon Mode, unplugged | ~8–15%/hr | Continuous low-latency scan, 8 links, uncapped relay — hence §15.7's warning and 30% auto-downgrade |
-| iOS backgrounded | ~0.5–1%/hr | Apple's throttling cuts relaying and drain alike |
-
-Reference points: normal mode sits below continuous GPS navigation (~5–8%/hr), comparable to BT-headphone streaming; a 12-hour festival day costs roughly 25–40% of a battery in normal mode, ~15% in saver. Figures are consistent with reported BitChat/Bridgefy-class drain (2–6%/hr) — treat as design targets until Phase 5 measures them (power monitor / `adb batterystats` across Pixel, Samsung, Xiaomi, and two iPhone generations minimum).
-
-**Support/FAQ note:** screen-on time dwarfs all of the above. Active chatting costs 8–15%/hr in *any* messaging app, ~90% of it display. The mesh will be blamed for this; document it preemptively in-app.
+MC-007 specifies paired 4-hour screen-off runs, three repetitions per device/mode, idle-app control, fixed temperature/start charge and randomized order. Report raw and incremental battery percentage-point drain/hour, energy where available, traffic and delivery. Targets are Normal≤ 5 percentage points/hour, Saver≤ 2 and held-background iOS≤ 2, alongside actual delivery/lifecycle gates. A suspended phone cannot pass by consuming no energy while doing no required work. Beacon power and 30% auto-downgrade are measured separately. Screen-on results must be separated from screen-off acceptance. MC-025/027/038 own actual measurements; none are claimed here.
 
 ### 11.3 The lone-wanderer trap
 
@@ -842,8 +818,8 @@ A phone with 0 peers runs low-latency burst scanning to find someone (§8.3) —
 
 Rationale: uniform Saver would slow peer discovery ~6× (deadly in high-churn crowds — topology tears faster than it repairs), flatten the battery-tier heterogeneity that §3.4d's load-shifting depends on, and effectively raise §14's venue-wide adoption threshold — all to save battery mostly where Normal already costs only 2–3%/hr. Auto keeps sparse-area bridges at full duty while letting redundant phones in dense clusters coast. Mode transitions are hysteresis-damped (no flapping at a threshold: switch only after the condition holds 60s). Manual override to forced-Normal or forced-Saver remains in settings.
 
-- **Relay budget (provisional ceiling, MC-007 must reconcile with SYNC and ingress):** independent of §3.4's adaptive behavior, each node caps relay transmissions at **120 packets/min** (Normal) or **40 packets/min** (Saver / tier ≤ 1). At the ceiling, the node keeps receiving and displaying everything but sheds relay duty; ANNOUNCE's battery tier lets neighbors compensate. This bounds worst-case drain regardless of crowd behavior.
-- **TX batching** (§3.3): ≤ 1 radio flush per peer per 200ms — radio wake-ups cost far more than payload bytes.
+- **Forwarding budget:** Normal capacity 120 frames/refill 2 per second; Saver 40/refill 2 per 3 seconds. Includes every per-egress relay and served-SYNC fragment/marker. Own/control traffic still pays aggregate egress limits. Forwarding exhaustion may shed relays while otherwise valid local acceptance proceeds; ingress rejection always blocks display. Counts bound work, not measured battery drain.
+- **TX pacing** (§3.3): at most one separately framed GATT value/second/link, plus native backpressure and all node/link limits; no catch-up burst.
 - **Normal**: continuous balanced scan, 3–6 connections, ANNOUNCE every 30s
 - **Saver**: scan duty-cycled 10s on / 50s off, max 3 connections, ANNOUNCE every 60s, battery tier broadcast forces relay de-prioritization per §3.4d
 - Screen-off ≠ background on Android (foreground service keeps full function); iOS screen-off follows background rules (§8.4)
@@ -966,8 +942,8 @@ The pilot answer is "old Android phones," the production answer is ESP32. Both s
 
 - **Placement:** mounted 3–5m up (light poles, vendor stalls, delay towers), above the bodies that soak up 2.4GHz. Effective radius jumps from ~15m to **50–150m**.
 - **`infra` flag** (§2.5 status bit 2) + permanent battery tier 3. Mechanism under the corrected per-egress rule (§3.4, finding R9): the beacon's fast rebroadcast (10–40ms hold-off) enters nearby phones' recent-digests quickly, so those phones gain *per-egress coverage evidence* for the peers the beacon also reaches and can suppress relays **to those specific peers** — but only where the beacon demonstrably covers them, not globally. A beacon's fast relay proves the *beacon* has the message, not that a phone's other peers do, so phones still relay toward any peer lacking coverage evidence. **Expected effect on phone battery is therefore a measured hypothesis, not a design guarantee:** beacons should reduce redundant phone transmissions in their radius, but the magnitude is validated by per-phone TX measurement with vs. without a beacon (M6/M7 field test), not asserted as a marketing number.
-- **No relay budget, no probabilistic thinning:** beacons relay at probability 1.0, unbounded rate (subject only to the per-link anti-flood cap, which stays — beacons must not amplify spam; they run the identical §6 receiver-side rate limiter).
-- **Big store-and-forward:** cache window extended from 15 min to 60 min and 5,000 messages. A beacon near the entrance replays the last hour of #Event Updates to every arriving phone via normal SYNC.
+- **No additional mode forwarding bucket:** phone Beacon remains bounded by every aggregate ingress/egress, crypto, session, queue and memory limit in MC-007. It has no protocol privilege and never has an unbounded actual rate.
+- **Big store-and-forward:** phone Beacon extends retention to 60 minutes/5,000 messages with MC-007's encoded/allocated byte caps. Each arriving phone still receives only the budgeted newest-first mixed-channel SYNC selection; no full-hour or subscription-specific replay is promised.
 - **Connection capacity:** 8+ concurrent GATT links (ESP32-S3 handles this), with connection slots reserved preferentially for phones advertising 0–1 peers (rescuing isolated users first).
 
 ### 15.3 Optional backbone (the real superpower)
@@ -1001,13 +977,13 @@ A settings toggle that turns any phone into a high-capacity relay — for organi
 |---|---|---|
 | Relay hold-off (§3.3) | 80–400ms | 10–40ms — enters neighbors' digests fast, enabling per-egress suppression where the beacon covers those peers (offload magnitude is measured, not assumed — §15.2) |
 | Relay probability (§3.4c/d) | adaptive | always 1.0 |
-| Relay budget (§11) | 120/min | uncapped (per-link anti-flood cap §6 still applies) |
+| Forwarding budget (§11) |120-frame burst +2 frames/s|No extra mode bucket; all aggregate limits still apply|
 | Concurrent connections | 3–6 | 7–8, slots reserved first for phones announcing 0–1 peers |
-| Store-and-forward | 15 min / 500 msgs | 60 min / 5,000 msgs |
+| Store-and-forward |15 min/500/256 KiB encoded|60 min/5000/5 MiB encoded; allocated caps MC-007|
 | Scanning | balanced/duty-cycled | continuous low-latency |
 | ANNOUNCE `infra` bit | never | set **only while external power is connected** |
 
-**Power guardrails.** Beacon Mode is designed around external power, not required to have it: enabling while unplugged shows a drain warning ("expect 8–15%/hour"), and the mode **auto-downgrades to normal operation at 30% battery** (notifying the user) so nobody accidentally kills their phone playing hero. An "auto-beacon while charging" toggle lets a phone on a power bank flip into beacon duty whenever plugged in and back out when unplugged — zero attention required. Note the `infra` bit tracks charging state, not the toggle: an unplugged beacon-mode phone still relays generously but doesn't claim infrastructure permanence to the mesh.
+**Power guardrails.** Beacon Mode is designed around external power, not required to have it: enabling while unplugged shows a drain warning ("Beacon Mode uses more power; keep your phone charged"), and the mode **auto-downgrades to normal operation at 30% battery** (notifying the user) so nobody accidentally kills their phone playing hero. An "auto-beacon while charging" toggle lets a phone on a power bank flip into beacon duty whenever plugged in and back out when unplugged — zero attention required. Note the `infra` bit tracks charging state, not the toggle: an unplugged beacon-mode phone still relays generously but doesn't claim infrastructure permanence to the mesh.
 
 **Beacon screen.** Activating the mode swaps the UI for a dim, burn-in-safe status display: peers connected, packets relayed, messages cached, uptime, battery/power state, and a hold-to-exit button (prevents pocket-taps from killing a deployed relay). Screen-off operation works fully on Android (foreground service); the screen display is for the taped-to-a-pole case where ops staff want at-a-glance health.
 
@@ -1084,10 +1060,10 @@ Credential size ≈ 130 bytes.
 
 **Credential distribution — multi-hop safe (finding R5.6).** One-hop CRED_REQ was insufficient: the immediate peer is often an ordinary relay that never adopted the root and holds no credential. So credentials are a **floodable, cacheable object**:
 
-- **CRED_OFFER (type `0x08`)** carries exactly one staff credential (~130B) and nothing else. It floods the mesh like any other packet (TTL 7, dedup, rate-limited normally) and **any node caches it regardless of whether it adopted that event's root** — caching is free and harmless, since a credential is public data whose authority is only realizable with the matching private key. A node with an adopted root additionally verifies `root_sig` before trusting it; nodes without the root cache it opaquely for later.
+- **CRED_OFFER (type `0x08`)** carries exactly one staff credential (~130B) and nothing else. It floods the mesh like any other packet (TTL 7, dedup, rate-limited normally) and **any node caches it regardless of whether it adopted that event's root** — public data still consumes memory/work: enforce MC-007's 128-entry/64-KiB credential cache and keep unverified entries separate from adopted trust. A node with an adopted root additionally verifies `root_sig` before trusting it; nodes without the root cache it opaquely for later.
 - A staff device emits CRED_OFFER on launch, on first post to a channel, and every 5 minutes while active — cheap (130-byte packets at that cadence are negligible) and it means credentials propagate ahead of, and independently of, the messages that need them.
 - **CRED_REQ (type `0x07`)** remains as a fast path: payload `event_root_id ‖ staff_key_id`, unicast to the arrival peer, rate-limited 1/5s/link. **Any** node holding the credential in cache may answer with a CRED_OFFER — not only the staff device — so the request usually resolves locally. If the peer has neither the credential nor a route, it simply doesn't answer (no negative response needed); the requester relies on CRED_OFFER flooding and retries at most twice, 5s apart, then waits.
-- Net effect: a late joiner's unverified-pending window is bounded by CRED_OFFER flood latency (seconds), not by "until the staff device happens to resend." Required test: multi-hop recovery where the immediate peer lacks the credential (§13).
+- Pending credential recovery expires after 30 seconds under MC-007; loss, missing offers or budget exhaustion may leave the message unverified. Multi-hop recovery where the immediate peer lacks the credential remains a required test; no seconds-level recovery guarantee is assumed.
 
 **QR encodings (single canonical form each).** Adoption QR (public): `meshfest://event/<base64url(0x01 ‖ root_pubkey[32] ‖ root_not_after[4] ‖ root_self_sig[64])>/<url-encoded name>` — a 101-byte bundle. The root self-signature must cover its first 37 bytes (version, public key and expiry); MC-008 freezes exact domains/encoding. The recipient derives `event_root_id = SHA-256(root_pubkey)[:8]`; it is never a separate URL field. Staff provisioning is `meshfest://staff/<base64url(credential)>/<base64url(staff_seed[32])>`, with an exact 32-byte Ed25519 seed whose derived public key must match the credential. The canonical URI grammar (§5.3) governs decoding and confirmation. The **root private key is never in any QR or on any device**.
 
@@ -1111,7 +1087,7 @@ A phone can hold multiple event roots. **Root-adoption expiry is independent of 
 |---|---|
 | Display | Valid-signature messages show a ✓ "Event Staff" badge. Unsigned/invalid messages in #Event Updates are **hidden behind a collapsed "unverified messages" drawer** (viewable, never silently deleted — the mesh shouldn't memory-hole content, and false-positive hiding must be recoverable). |
 | Composer | Replaced with "Only event staff can post here" unless the device holds the private key (§17.4). |
-| Rate limit | Verified (valid-signature) #Event Updates messages are relayed under a **raised relay allowance on every node, key-holding or not** (finding 6): a node that can structurally see the signature block and a valid `event_root_id` format grants signed #Event-Updates traffic a 10/min relay budget rather than the 2/min unsigned cap — so an incident burst propagates across a mixed-adoption mesh instead of being throttled to death by intermediaries that never scanned the QR. Nodes still only *display* the Event Staff badge if they've adopted the key and the signature verifies; relay generosity does not imply display trust. Signature *validity* for the raised relay budget is checkable by any node that has adopted the key; nodes without it fall back to structural signal (well-formed signature block present) plus the global per-link ingress cap (§6.5), which bounds abuse. |
+| Rate limit | Structurally organizer-signed Event Updates use the sender bucket capacity 10/refill 1 per 6s instead of ordinary capacity 2/refill 1 per 30s, preserving the mixed-adoption allowance. All sender-wide, link/node, crypto, queue and forwarding limits still apply. This structural rate classification grants no badge: only an adopted root and valid signature establish staff authority. Invalid signatures remain untrusted. |
 | Replay guard | Signed messages older than 48h by payload timestamp are treated as unverified (generous window because offline clocks drift; short-window replay is already killed by the dedup cache). |
 | Pinning | Five bytes after CHAT text: pin_state:u8 then pin_expiry:u32, before the organizer block. State 0 requires expiry 0; state 1 requires positive expiry within both root and credential lifetimes. All bytes are signed; only authenticated, adopted, unexpired authority affects pin display. |
 | No key adopted | Legacy behavior: open channel, everything displays normally. EVENT_INFO sightings produce the §17.2 prompt. |

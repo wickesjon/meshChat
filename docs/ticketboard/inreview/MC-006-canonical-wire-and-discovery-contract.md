@@ -50,11 +50,11 @@ Decisions: one frame per value, 146–512-byte directional admission, explicit t
 
 Evidence state is **specified**. Python 3.14 standard-library arithmetic checks pass for four structural frame lengths, reaction reassembly, all 17 size/fragment worksheet rows, the 146-byte floor and the three public-channel SHA-256 IDs. The vector README contains the reproducible structural/count check. These are document checks, not a working codec, cryptographic verification or measured device support. MC-008/MC-022 retain crypto extension/review gates; MC-007 retains budgets and measured acceptance.
 
-Validation: `python -B tests/ticketboard/validate.py --write`, default validator, all 12 ticketboard unit tests and `git diff --check` pass. Required separate Terra review and final CI remain pending before merge.
+Validation: `python -B tests/ticketboard/validate.py --write`, default validator, all 12 ticketboard unit tests and `git diff --check` pass. Separate Terra medium review [5183932501](https://github.com/wickesjon/meshChat/pull/8#pullrequestreview-5183932501) reviewed revision `2e083cb652fb5d3bcb1e29e32ed2947c22d5be42` and requested two corrections: the expiry anchor for a rejected first fragment and explicit unknown-type flood scope. Both are corrected in the contract, design and vector expectations. A rejected first envelope expires 30 seconds after observation; an aborted admitted group retains its initial deadline. Unknown types follow ordinary flood TTL rules and cannot introduce direct controls. Follow-up review and final CI remain required before merge; their exact revision and outcomes will be recorded in PR #8.
 
 ## Review and merge
 
 - Branch: `ticket/MC-006-canonical-wire-and-discovery-contract`.
-- Review/PR: pending.
+- Review/PR: [PR #8](https://github.com/wickesjon/meshChat/pull/8); separate Terra medium review and follow-up are recorded there. Agent review is not an independent cryptographic/security assessment.
 - Squash commit title: `MC-006: Canonical wire and discovery contract`.
 - Completion becomes effective only when the reviewed squash commit lands on main.

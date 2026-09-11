@@ -24,6 +24,7 @@ This is 40 bytes total, with one 36-byte logical packet. Synthetic identifiers a
 - Reserved type `04`, known REACTION flags `02`, a different version, outer flags `01`, or a trailing byte rejects.
 - Logical flags `80` remains unsigned, with the raw reserved bit preserved.
 - Live TTL 0 rejects; TTL `ff` clamps to 7 before the ordinary forwarding rule.
+- Changing type to unknown `09` permits only opaque flood processing: TTL 0 rejects, TTL 1 processes without forwarding, TTL 7 forwards with 6, and TTL `ff` clamps then forwards with 6. It never enters history/UI or establishes authentication, regardless of opaque flags or channel. Unknown-type origins use TTL 7.
 - This REACTION inside SYNC rejects because only CHAT is history-eligible. Stored TTL 0 local-only behavior requires a separate eligible CHAT fixture.
 
 Same reaction split into two legal small fragments at capacity 146, grouping `0001`:
@@ -33,6 +34,8 @@ Same reaction split into two legal small fragments at capacity 146, grouping `00
 `01 00 0020 0102030405060708 0001 01 02 0024 1718bcf0eae3000a21222324252627280000`
 
 Each value is 36 bytes: four outer-header bytes, 14 envelope bytes and an 18-byte slice. A decoder accepts either arrival order; an encoder emits whole form at this capacity. An identical duplicate has no effect. Different bytes for an already accepted fragment index abort only the scoped group; a later valid whole packet with this msg_id remains eligible. A different arrival link has independent group state. Count 0/9 rejects; conflicting count/total metadata across the group rejects; nonzero outer flags rejects; an inner msg_id mismatch rejects at completion. None of these failures poisons accepted dedup. Late fragments cannot extend the original group's deadline.
+
+Timeline expectations: an admitted group at t=0 aborted at t=10 remains rejected until t=30. A complete known envelope first rejected at t=10 before admission instead expires at t=40. Repeats at t=20 or t=39 never extend that deadline; at t=40 the entry is removed and a valid fragment may begin a newly budgeted attempt. Truncated envelopes and unknown transport types create no group entry. Rejected tracking never blocks the whole reaction fixture or another group/link. These are specification cases for MC-010, not evidence of a reassembler implementation.
 
 ## Size worksheet
 

@@ -31,7 +31,7 @@ Also permitted: this ticket and generated ticketboard index/diagram changes requ
 ## Exit criteria
 
 - [x] Rust tests, formatting, strict linting and dependency checks pass from a fresh checkout.
-- [ ] Android skeleton builds; the macOS job builds the iOS skeleton with recorded SDK/toolchain versions.
+- [x] Android skeleton builds; the macOS job builds the iOS skeleton with recorded SDK/toolchain versions.
 - [x] No generated build output, credentials, or signing material is tracked.
 - [ ] Relevant checks pass, evidence is recorded, required review is complete, and the ticket is squash merged to main.
 
@@ -44,7 +44,7 @@ A triggered fallback must be recorded with evidence. It does not authorize weake
 
 ## Evidence
 
-Implementation prepared and locally checked on Windows; hosted Linux/macOS validation and review remain pending. MC-002 stays in progress until those gates pass.
+Implementation and local/hosted build validation are complete. MC-002 is in review; user review and squash merge remain pending.
 
 - Baseline verified against remote main: `8346be06e4bcce39e1779e0f0d3982cd508dc39b`; MC-001 is complete. The checkout was clean before branch creation.
 - Added an unpublished, dependency-free Rust workspace; Rust 1.85.1, edition 2024, inherited `unsafe_code = "forbid"`, release overflow checks, and a committed lockfile. MC-003 owns the first core API and behavior tests; MC-002 does not introduce placeholder protocol functions or meaningless unit tests.
@@ -62,8 +62,10 @@ Implementation prepared and locally checked on Windows; hosted Linux/macOS valid
 - Java's temporary directory and `user.home` are redirected into `.work/` as well as Android/Gradle preferences, preventing fallback analytics/settings writes outside the checkout. No global PATH, registry, Git settings or machine ACL changes were made.
 - Publication authorization: after automatic approval review initially blocked publication, the user explicitly approved pushing this branch and opening the draft PR on 2026-09-11. [PR #3](https://github.com/wickesjon/meshChat/pull/3) is open; review and squash merge remain pending.
 - [Initial hosted run](https://github.com/wickesjon/meshChat/actions/runs/34611415933), head `a04238cc306d7ab1948aa7c5dbee235f74e9300e`: Linux Rust and ticketboard jobs passed. macOS 15.7.9 arm64 built both iOS configurations with Xcode 16.4 (16F6), Swift 6.1.2 and iOS Simulator SDK 18.5. The empty app emits nonblocking Xcode notices for missing AppIntents metadata and the default header-map setting; no device or runtime result is claimed.
-- The initial hosted Android job assembled both variants but strict lint failed `OldTargetApi` for API 35. Updated the build baseline to API 36 and compatible pinned AGP/Gradle/Kotlin versions; retained minSdk 29 and the target-API lint gate. The earlier local Android evidence above applies to the initial baseline. Updated-baseline local assembly and lint passed (87 tasks, 12 executed and 75 up-to-date); hosted rerun pending.
+- The initial hosted Android job assembled both variants but strict lint failed `OldTargetApi` for API 35. Updated the build baseline to API 36 and compatible pinned AGP/Gradle/Kotlin versions; retained minSdk 29 and the target-API lint gate. The earlier local Android evidence above applies to the initial baseline. Updated-baseline local assembly and lint passed (87 tasks, 12 executed and 75 up-to-date); hosted rerun passed as recorded below.
 - Online lint also suggested newer Gradle via `AndroidGradlePluginVersion`. Together with `GradleDependency`, this informational version-update rule is excluded from the pinned build gate; API compatibility, correctness and dependency-advisory checks remain enabled. This is not an advisory exception or a release-readiness claim. Reassess build-tool pins with the next foundation ticket; MC-039 owns release SDK/store policy.
+
+- [Passing hosted run](https://github.com/wickesjon/meshChat/actions/runs/34612371470), head `3c7ddfd6ab63b539f67085f8392da8db383eec75`: all four jobs passed from fresh checkouts. Android on Ubuntu 24.04 used Temurin 17.0.15+6, API 36 revision 2, build-tools 35.0.0 and Gradle 8.13; both APK variants and strict lint passed (87 tasks executed, 2m 23s). Rust format/Clippy/debug and release tests/build/advisory-license gates, iOS Debug/Release builds and ticketboard validation/tests also passed. The move to inreview changes only ticket evidence and generated board status; source/build configuration is unchanged from this verified revision.
 
 Reproduce from the repository root with Rust 1.85.1 installed: set `CARGO_HOME`, `RUSTUP_HOME`, `GRADLE_USER_HOME`, `ANDROID_USER_HOME` and temporary-directory environment variables to subdirectories of `.work/` before provisioning tools. Set Java's `-Djava.io.tmpdir` and `-Duser.home` to existing `.work/tmp` and `.work/java-home` directories through `JAVA_TOOL_OPTIONS`. Run the exact commands in `.github/workflows/ci.yml`. Android requires JDK 17.0.15+6 and a provisioned API 36 / build-tools 35.0.0 SDK; `bash src/android/gradlew -p src/android :app:assembleDebug :app:assembleRelease :app:lintDebug` builds it (use `gradlew.bat` on Windows). For iOS select Xcode 16.4 using `DEVELOPER_DIR` and use the workflow's `xcodebuild` commands with repository-local DerivedData. These builds do not establish BLE feasibility or release readiness.
 

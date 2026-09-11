@@ -10,7 +10,7 @@ branch: "ticket/MC-016-base-transport-freeze-gate"
 
 ## Objective
 
-Run the base codec, framing, ingress, relay and SYNC suite against the recorded physical transport assumptions.
+Run the base codec, framing, ingress, relay and SYNC suite against the recorded MC-004 transport assumptions and online evidence.
 
 ## Dependencies
 
@@ -24,14 +24,14 @@ Also permitted: this ticket and generated ticketboard index/diagram changes requ
 
 ## Implementation details
 
-- Run the base codec, framing, ingress, relay and SYNC suite against the recorded physical transport assumptions.
+- Run the base codec, framing, ingress, relay and SYNC suite against the recorded MC-004 transport assumptions and online evidence.
 - Review all base type/flag layouts and freeze vectors plus a compatibility/versioning policy.
 - Record test commands, seeds, versions, pass results and remaining crypto-only decisions.
 
 ## Exit criteria
 
 - [ ] All MC-007 base gates and fuzz regressions pass with reproducible evidence.
-- [ ] MC-004 hardware and permission evidence exists; no unresolved base-wire ambiguity remains.
+- [ ] Approved MC-004 online feasibility and permission evidence exists; runtime capacity assumptions/refusal cases are explicit and no unresolved base-wire ambiguity remains. This does not certify physical radio support.
 - [ ] Base freeze is documented without falsely declaring unfinished crypto envelopes frozen.
 - [ ] Relevant checks pass, evidence is recorded, required review is complete, and the ticket is squash merged to main.
 
@@ -43,6 +43,8 @@ Also permitted: this ticket and generated ticketboard index/diagram changes requ
 A triggered fallback must be recorded with evidence. It does not authorize weaker security, invented validation or expanded scope.
 
 ## Evidence
+
+Acceptance reference updated under the user-approved MC-004 physical-gate replacement on 2026-09-11; see [the decision](../../decisions/MC-004-online-feasibility.md). MC-025/MC-027 retain physical radio acceptance.
 
 Not implemented. Record commands, versions, reproducible inputs and results here. For manual/hardware checks include device/OS, duration and report paths. No test or review is claimed yet.
 

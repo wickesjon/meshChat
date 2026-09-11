@@ -1,0 +1,5 @@
+<resources>
+    <string name="bench_intro">MC-004 synthetic BLE bench. Test-only UUIDs. Copy the report before restarting. RSSI testing requests location permission; this is not the production permission decision.</string>
+    <string name="grant_first">Grant the required permissions first.</string>
+    <string name="default_size" translatable="false">20</string>
+</resources>

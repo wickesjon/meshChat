@@ -108,6 +108,13 @@ jobs:
             "$ANDROID_HOME/build-tools/35.0.0/zipalign" -c -P 16 4 "$apk"
           done
 
+      - name: BLE probe Android build and lint
+        run: |
+          mkdir -p "$ANDROID_USER_HOME" .work/tmp .work/java-home
+          export TMPDIR="$PWD/.work/tmp"
+          export JAVA_TOOL_OPTIONS="-Djava.io.tmpdir=$TMPDIR -Duser.home=$PWD/.work/java-home"
+          bash src/android/gradlew -p src/android/ble --no-daemon assembleDebug assembleRelease lintDebug
+
   ios:
     runs-on: macos-15
     timeout-minutes: 30
@@ -149,4 +156,19 @@ jobs:
               -clonedSourcePackagesDirPath "$PWD/.work/swift-packages" \
               CLANG_MODULE_CACHE_PATH="$PWD/.work/clang-module-cache" \
               CODE_SIGNING_ALLOWED=NO build
+          done
+      - name: Build unsigned iOS BLE probe
+        run: |
+          mkdir -p .work/tmp .work/ble-module-cache
+          export TMPDIR="$PWD/.work/tmp"
+          plutil -lint src/ios/BLE/BLEProbe.xcodeproj/project.pbxproj src/ios/BLE/BLEProbe/Info.plist
+          for platform in iphonesimulator iphoneos; do
+            for configuration in Debug Release; do
+              xcodebuild -project src/ios/BLE/BLEProbe.xcodeproj -scheme BLEProbe \
+                -configuration "$configuration" -sdk "$platform" \
+                -derivedDataPath "$PWD/.work/ble-ios-derived-data/$platform" \
+                -clonedSourcePackagesDirPath "$PWD/.work/ble-swift-packages" \
+                CLANG_MODULE_CACHE_PATH="$PWD/.work/ble-module-cache" \
+                CODE_SIGNING_ALLOWED=NO build
+            done
           done

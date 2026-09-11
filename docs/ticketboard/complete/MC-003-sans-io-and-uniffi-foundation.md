@@ -32,10 +32,10 @@ Also permitted: this ticket and generated ticketboard index/diagram changes requ
 
 ## Exit criteria
 
-- [ ] Both native skeletons call the same core through generated bindings.
-- [ ] A deterministic event trace produces identical commands across repeated runs.
-- [ ] Malformed input and disconnect sequences return defined errors without unwinding into native callers or leaking link state.
-- [ ] Relevant checks pass, evidence is recorded, required review is complete, and the ticket is squash merged to main.
+- [x] Both native skeletons call the same core through generated bindings.
+- [x] A deterministic event trace produces identical commands across repeated runs.
+- [x] Malformed input and disconnect sequences return defined errors without unwinding into native callers or leaking link state.
+- [x] Implementation checks and independent review are complete; completion is staged for the squash merge and becomes effective only on main. The exact final PR revision must pass CI before merge.
 
 ## Potential fallbacks
 
@@ -46,7 +46,7 @@ A triggered fallback must be recorded with evidence. It does not authorize weake
 
 ## Evidence
 
-Implementation started from main `f5acefe4ea201cb7aa4ce6b0c71e1a202b234901`, where MC-002 is complete after reviewed squash merge [PR #4](https://github.com/wickesjon/meshChat/pull/4). MC-003 is submitted for review; hosted native checks and independent review remain required before completion.
+Implementation started from main `f5acefe4ea201cb7aa4ce6b0c71e1a202b234901`, where MC-002 is complete after reviewed squash merge [PR #4](https://github.com/wickesjon/meshChat/pull/4). MC-003 implementation is tested and independently reviewed, with completion staged pending the final CI run and squash merge.
 
 ### Implementation choices and boundaries
 
@@ -67,12 +67,12 @@ Implementation started from main `f5acefe4ea201cb7aa4ce6b0c71e1a202b234901`, whe
 - Native packaging follow-up: [Android's NDK r27 guidance](https://developer.android.com/guide/practices/page-sizes) requires explicit 16 KB maximum/common page linker flags. Added them to the new Rust cross-build and a CI check of both APKs for the exact Rust/JNA ABI set, ELF LOAD/RELRO alignment and ZIP alignment. The pinned JNA 5.17.0 arm64/x86_64 artifacts pass the local ELF alignment check. This is binary compatibility validation, not a claim of physical 16 KB device execution.
 - Ticketboard validation, actionlint 1.7.7 (without shellcheck) and `git diff --check` passed.
 - [Initial hosted CI](https://github.com/wickesjon/meshChat/actions/runs/34617237786), revision `8c46df19dca4596a1113ed81ec19096e6aba9bdd`: macOS compiled all three Rust iOS targets, ran the Swift FFI lifecycle/binary/error regression successfully, and built the SwiftUI app in Debug and Release for the simulator. Android cross-compilation passed; native Gradle gates need the AndroidX flag follow-up. The final full CI run remains required.
+- [Passing hosted CI](https://github.com/wickesjon/meshChat/actions/runs/34618021150), revision `c0599fad947f6431701f44164f88ff027ebc93e1`: all four jobs passed from fresh checkouts. Rust format/strict Clippy/debug and release tests/build/full-feature audit passed. Android built Debug and Release, ran Kotlin FFI regression and strict lint (2m 43s), and both APKs passed native-library presence, LOAD/RELRO and ZIP alignment checks. macOS passed Swift FFI regression and both iOS simulator builds. The later architecture assertion was checked locally against real positive and mislabeled-negative JNA binaries and independently reviewed; final CI on the staged completion revision remains required. All 12 ticketboard unit tests also passed locally.
 
 ## Review and merge
 
 - Branch: `ticket/MC-003-sans-io-and-uniffi-foundation`.
-- Review/PR: [PR #5](https://github.com/wickesjon/meshChat/pull/5), published ready for review. A separate gpt-5.6-terra worker at medium effort reviewed `8c46df19dca4596a1113ed81ec19096e6aba9bdd` against `f5acefe4ea201cb7aa4ce6b0c71e1a202b234901` and returned no actionable findings. It reviewed code, scope and evidence without running builds or modifying files. The AndroidX flag follow-up will receive a final review before merge.
-- Follow-up Terra medium review of `6bc3019347f0c1f90d76a939eae6b058d047054c` returned no actionable findings. The additional native page-alignment change remains subject to review and CI.
-- Review of `c0599fad947f6431701f44164f88ff027ebc93e1` identified a packaging-check gap: ELF architecture was inferred from the ZIP folder. Added explicit `e_machine` checks (AArch64 183 / x86_64 62). Both pinned JNA binaries pass; an actual x86_64 binary presented under an arm64 path is rejected. Follow-up review remains required before merge.
+- Review/PR: [PR #5](https://github.com/wickesjon/meshChat/pull/5), published ready for review. A separate gpt-5.6-terra worker at medium effort reviewed `8c46df19dca4596a1113ed81ec19096e6aba9bdd` against `f5acefe4ea201cb7aa4ce6b0c71e1a202b234901` and returned no actionable findings. It reviewed code, scope and evidence without running builds or modifying files. Follow-up review of the AndroidX fix `6bc3019347f0c1f90d76a939eae6b058d047054c` also returned no findings.
+- Review of `c0599fad947f6431701f44164f88ff027ebc93e1` identified a packaging-check gap: ELF architecture was inferred from the ZIP folder. Added explicit `e_machine` checks (AArch64 183 / x86_64 62). Both pinned JNA binaries pass; an actual x86_64 binary presented under an arm64 path is rejected. Final follow-up review of `75d20edcb580a59f526b2e7e3178a985bc9082f1` confirmed the fix and returned no actionable findings. This final completion change updates only ticket status/evidence and the generated index. Each worker completion was awaited without polling its status.
 - Squash commit title: `MC-003: Sans-IO and UniFFI foundation`.
 - Completion becomes effective only when the reviewed squash commit lands on main.

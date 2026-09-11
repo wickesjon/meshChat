@@ -1,6 +1,6 @@
 # MC-004 physical BLE measurement plan
 
-State: procedure and probe source prepared. Android probe assembly/lint passed locally; iOS source is unbuilt. No device execution, measured capacity or supported-platform decision is claimed.
+State: procedure and probe source prepared. Android Debug/Release assembly and strict lint, plus iOS Debug/Release simulator and device SDK compilation, passed in hosted CI at `8a148b1aa28ecdd95523b79607d7a0678c8f4b5d` ([run 34627732316](https://github.com/wickesjon/meshChat/actions/runs/34627732316), all four jobs passed). No device execution, measured capacity or supported-platform decision is claimed.
 
 ## Required access and inventory
 
@@ -14,7 +14,7 @@ Temporary standalone probes belong under `src/android/ble/` and `src/ios/BLE/`; 
 
 Expose central and peripheral roles, service-UUID-filtered discovery, subscribe/unsubscribe, one write without response, one notification, disconnect/reconnect and stop controls. Advertisements contain only the test service UUID. Use bounded synthetic counter/pattern values, never user messages or identity/crypto material. The event recorder uses monotonic timestamps and bench-local connection generations. Record API capacities, attempted/received lengths, readiness transitions, callback outcomes and counts; omit nearby-device identifiers and raw message content.
 
-The Android probe must serialize GATT operations and retain both callback/API failure outcomes. The iOS probe must distinguish central write readiness from peripheral notification readiness. A queue-full return cannot count as a successful send. Clear pending operations on disconnect and verify that old callbacks do not affect the replacement connection. The sources implement this probe contract; iOS compilation and all physical execution remain unverified. Callback timeout handling is a measurement/refusal path, not the later production retry policy.
+The Android probe must serialize GATT operations and retain both callback/API failure outcomes. The iOS probe must distinguish central write readiness from peripheral notification readiness. A queue-full return cannot count as a successful send. Clear pending operations on disconnect and verify that old callbacks do not affect the replacement connection. The sources implement this probe contract and iOS compilation passed as recorded above; all physical execution remains unverified. Callback timeout handling is a measurement/refusal path, not the later production retry policy.
 
 ## Cases and durations
 

@@ -1,0 +1,62 @@
+---
+id: "MC-005"
+title: "Platform key and encrypted-store feasibility"
+depends_on: ["MC-003"]
+kind: "spike"
+branch: "ticket/MC-005-platform-key-and-encrypted-store-feasibility"
+---
+
+# MC-005 — Platform key and encrypted-store feasibility
+
+## Objective
+
+Probe Ed25519/X25519 use from the shared core and each platform's key APIs on minimum supported OS versions.
+
+## Dependencies
+
+`MC-003` See the [current ticket index](../README.md#ticket-index). Dependencies must be complete on main before implementation starts.
+
+## Scope
+
+Permitted paths (relative to repository root): `src/core/**`, `src/android/security/**`, `src/ios/Security/**`, `tests/bench/security/**`, `docs/decisions/**`, `Cargo.lock`, `.github/workflows/ci.yml`.
+
+Scope approval: the user explicitly approved adding `Cargo.lock` and `.github/workflows/ci.yml` on 2026-09-11 for the prepared Rust crypto dependencies and standalone security-probe checks. No physical or security acceptance criterion is waived.
+
+Also permitted: this ticket and generated ticketboard index/diagram changes required by its workflow. No unrelated file changes or work outside the repository. Read the [design](../../mesh-chat-design.md), its §0 corrections, and the [active plan](../implementation-plan.md). A necessary change outside these paths needs an explicit scope decision.
+
+## Implementation details
+
+- Probe Ed25519/X25519 use from the shared core and each platform's key APIs on minimum supported OS versions.
+- Compare platform-operated non-exportable keys with encrypted software key material protected by a platform wrapping key; document the threat model honestly.
+- Prove SQLCipher open/reopen, backup exclusion and locked-device behavior on both platforms; record dependency/build implications.
+
+## Exit criteria
+
+- [ ] An explicit key-provider interface and supported protection model are selected for both platforms.
+- [ ] A protected test database survives restart, fails to open with the wrong key, and has a documented backup-exclusion test.
+- [ ] Record reset, key invalidation, uninstall/restore and device-lock behavior without writing secrets to logs.
+- [ ] Relevant checks pass, evidence is recorded, required review is complete, and the ticket is squash merged to main.
+
+## Potential fallbacks
+
+- If a platform cannot perform the selected curves in its protected hardware, use reviewed wrapped software keys with the weaker protection clearly recorded.
+- If secure persistence cannot be demonstrated, block persistent identities/DM release instead of falling back to plaintext storage.
+
+A triggered fallback must be recorded with evidence. It does not authorize weaker security, invented validation or expanded scope.
+
+## Evidence
+
+Started from main `9e3c75a17b759391fa53217d6002ade6336ff55c`, where MC-003 and MC-004 are complete. The [probe plan](../../decisions/MC-005-probe-plan.md) records implemented candidate protection models, dependency/build implications, automated evidence and required device scenarios. The [bench runbook](../../../tests/bench/security/README.md) provides concrete build and acceptance procedures.
+
+Implemented: optional Rust Ed25519/X25519 probe exports and RFC vectors; isolated generated bindings; standalone Android/iOS wrapped-key and SQLCipher fixtures; native/core interoperability; explicit key deletion/reset and lock-read controls; backup exclusion configuration; sanitized bounded reports. These are feasibility tools, not production identity/storage providers.
+
+Automated local evidence: Rust 1.85.1 all-feature Clippy and Debug/Release tests pass (four foundation and three probe tests); cargo-deny advisories/bans/licenses/sources pass; security host bindings generate; Android Debug/Release Kotlin compile and lint pass against upstream SQLCipher 4.17.0. The Android published native artifact fails the 16 KB RELRO check, so the final harness builds pinned upstream JNI with corrected linker flags. Final native rebuild/APK alignment and unsigned iOS checks await CI. Workflow syntax validates. No physical evidence is claimed.
+
+Device/Mac/signing inventory remains unknown. Hardware capability, restart/wrong-key behavior on devices, actual backup/restore exclusion, lock/reboot, OS invalidation and uninstall/restore results are still required. No final protection model is selected yet. The ticket is inreview for code review with all exit criteria unchecked and is **not merge-ready**; MC-004's replaced gate does not waive MC-005 security evidence.
+
+## Review and merge
+
+- Branch: `ticket/MC-005-platform-key-and-encrypted-store-feasibility`.
+- Review/PR: pending.
+- Squash commit title: `MC-005: Platform key and encrypted-store feasibility`.
+- Completion becomes effective only when the reviewed squash commit lands on main.

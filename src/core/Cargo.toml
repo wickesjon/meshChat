@@ -12,7 +12,13 @@ crate-type = ["lib", "cdylib", "staticlib"]
 uniffi = { version = "=0.29.4", default-features = false }
 thiserror = "=2.0.12"
 
+ed25519-dalek = { version = "=2.2.0", default-features = false, features = ["std", "zeroize"], optional = true }
+x25519-dalek = { version = "=2.0.1", default-features = false, features = ["static_secrets", "zeroize"], optional = true }
+getrandom = { version = "=0.4.3", optional = true }
+zeroize = { version = "=1.8.1", optional = true }
+
 [features]
+security-probe = ["dep:ed25519-dalek", "dep:x25519-dalek", "dep:getrandom", "dep:zeroize"]
 bindgen = ["uniffi/cli", "uniffi/cargo-metadata"]
 
 [[bin]]
@@ -23,6 +29,11 @@ required-features = ["bindgen"]
 [[test]]
 name = "foundation"
 path = "../../tests/integration/ffi/foundation.rs"
+
+[[test]]
+name = "security_probe"
+path = "../../tests/bench/security/curves.rs"
+required-features = ["security-probe"]
 
 [lints]
 workspace = true

@@ -15,9 +15,15 @@ def run(*args, env=None):
 
 
 def main():
+    global OUT
     parser = argparse.ArgumentParser()
     parser.add_argument('platform', choices=['host', 'android', 'ios'])
+    parser.add_argument('--security-probe', action='store_true')
     args = parser.parse_args()
+    if args.security_probe:
+        OUT = ROOT / '.work' / 'security-ffi'
+    target_dir = ROOT / ('.work/security-target' if args.security_probe else 'target')
+    features = ['--features', 'security-probe'] if args.security_probe else []
     OUT.mkdir(parents=True, exist_ok=True)
     for name, suffix in [('CARGO_HOME', 'cargo'), ('RUSTUP_HOME', 'rustup'),
                          ('CARGO_TARGET_DIR', '../target'), ('TMPDIR', 'tmp'),
@@ -25,13 +31,14 @@ def main():
         path = (ROOT / '.work' / suffix).resolve()
         path.mkdir(parents=True, exist_ok=True)
         os.environ[name] = str(path)
-    run('cargo', 'build', '--locked', '-p', 'meshchat-core', '--features', 'bindgen')
+    os.environ['CARGO_TARGET_DIR'] = str(target_dir)
+    run('cargo', 'build', '--locked', '-p', 'meshchat-core', '--features', 'bindgen', *features)
     system = platform.system()
     library = {'Windows': 'meshchat_core.dll', 'Darwin': 'libmeshchat_core.dylib',
                'Linux': 'libmeshchat_core.so'}[system]
-    host_lib = ROOT / 'target' / 'debug' / library
+    host_lib = target_dir / 'debug' / library
     for language in ['kotlin', 'swift']:
-        run('cargo', 'run', '--locked', '-p', 'meshchat-core', '--features', 'bindgen',
+        run('cargo', 'run', '--locked', '-p', 'meshchat-core', '--features', 'bindgen', *features,
             '--bin', 'uniffi-bindgen', '--', 'generate', '--library', host_lib,
             '--language', language, '--out-dir', OUT / language,
             '--config', ROOT / 'src/core/uniffi.toml', '--no-format')
@@ -51,22 +58,22 @@ def main():
                 '-C link-arg=-Wl,-z,max-page-size=16384 '
                 '-C link-arg=-Wl,-z,common-page-size=16384'
             )
-            run('cargo', 'build', '--locked', '--lib', '--release', '--target', target, env=env)
+            run('cargo', 'build', '--locked', '--lib', '--release', '--target', target, *features, env=env)
             destination = OUT / 'android' / abi
             destination.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(ROOT / 'target' / target / 'release' / 'libmeshchat_core.so', destination)
+            shutil.copy2(target_dir / target / 'release' / 'libmeshchat_core.so', destination)
     elif args.platform == 'ios':
         for target in ['aarch64-apple-ios', 'aarch64-apple-ios-sim', 'x86_64-apple-ios']:
             run('rustup', 'target', 'add', target)
             env = os.environ.copy()
             env['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
-            run('cargo', 'build', '--locked', '--lib', '--release', '--target', target, env=env)
+            run('cargo', 'build', '--locked', '--lib', '--release', '--target', target, *features, env=env)
         for sdk in ['iphoneos', 'iphonesimulator']:
             (OUT / sdk).mkdir(exist_ok=True)
-        shutil.copy2(ROOT / 'target/aarch64-apple-ios/release/libmeshchat_core.a', OUT / 'iphoneos')
+        shutil.copy2(target_dir / 'aarch64-apple-ios/release/libmeshchat_core.a', OUT / 'iphoneos')
         run('xcrun', 'lipo', '-create',
-            ROOT / 'target/aarch64-apple-ios-sim/release/libmeshchat_core.a',
-            ROOT / 'target/x86_64-apple-ios/release/libmeshchat_core.a',
+            target_dir / 'aarch64-apple-ios-sim/release/libmeshchat_core.a',
+            target_dir / 'x86_64-apple-ios/release/libmeshchat_core.a',
             '-output', OUT / 'iphonesimulator/libmeshchat_core.a')
 
 

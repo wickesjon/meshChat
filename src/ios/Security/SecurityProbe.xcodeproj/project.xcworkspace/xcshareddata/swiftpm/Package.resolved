@@ -1,0 +1,13 @@
+{
+  "pins": [
+    {
+      "identity": "sqlcipher.swift",
+      "kind": "remoteSourceControl",
+      "location": "https://github.com/sqlcipher/SQLCipher.swift.git",
+      "state": {
+        "revision": "c85425b80b8c9f0a1ceb4f72fa174e2b688181ba"
+      }
+    }
+  ],
+  "version": 2
+}

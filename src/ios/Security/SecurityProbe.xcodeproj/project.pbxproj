@@ -1,0 +1,151 @@
+// !$*UTF8*$!
+{
+    archiveVersion = 1;
+    classes = {};
+    objectVersion = 56;
+    objects = {
+        B00000000000000000000001 = {
+            isa = XCRemoteSwiftPackageReference;
+            repositoryURL = "https://github.com/sqlcipher/SQLCipher.swift.git";
+            requirement = { kind = revision; revision = c85425b80b8c9f0a1ceb4f72fa174e2b688181ba; };
+        };
+        B00000000000000000000002 = { isa = XCSwiftPackageProductDependency; package = B00000000000000000000001; productName = SQLCipher; };
+        B00000000000000000000003 = { isa = PBXBuildFile; productRef = B00000000000000000000002; };
+        A00000000000000000000001 = {
+            isa = PBXProject;
+            attributes = { LastUpgradeCheck = 1640; };
+            buildConfigurationList = A00000000000000000000010;
+            compatibilityVersion = "Xcode 14.0";
+            developmentRegion = en;
+            hasScannedForEncodings = 0;
+            knownRegions = (en, Base);
+            mainGroup = A00000000000000000000002;
+            productRefGroup = A00000000000000000000003;
+            projectDirPath = "";
+            projectRoot = "";
+            targets = (A00000000000000000000004);
+            packageReferences = (B00000000000000000000001);
+        };
+        A00000000000000000000002 = {
+            isa = PBXGroup;
+            children = (A00000000000000000000005, A00000000000000000000016, A00000000000000000000003);
+            sourceTree = "<group>";
+        };
+        A00000000000000000000003 = {
+            isa = PBXGroup;
+            children = (A00000000000000000000006);
+            name = Products;
+            sourceTree = "<group>";
+        };
+        A00000000000000000000004 = {
+            isa = PBXNativeTarget;
+            buildConfigurationList = A00000000000000000000011;
+            buildPhases = (A00000000000000000000007, A00000000000000000000008, A00000000000000000000009);
+            buildRules = ();
+            dependencies = ();
+            packageProductDependencies = (B00000000000000000000002);
+            name = SecurityProbe;
+            productName = SecurityProbe;
+            productReference = A00000000000000000000006;
+            productType = "com.apple.product-type.application";
+        };
+        A00000000000000000000005 = {
+            isa = PBXFileReference;
+            lastKnownFileType = sourcecode.swift;
+            path = SecurityProbe/SecurityProbeApp.swift;
+            sourceTree = "<group>";
+        };
+        A00000000000000000000006 = {
+            isa = PBXFileReference;
+            explicitFileType = wrapper.application;
+            includeInIndex = 0;
+            path = SecurityProbe.app;
+            sourceTree = BUILT_PRODUCTS_DIR;
+        };
+        A00000000000000000000007 = {
+            isa = PBXSourcesBuildPhase;
+            buildActionMask = 2147483647;
+            files = (A0000000000000000000000A, A00000000000000000000017);
+            runOnlyForDeploymentPostprocessing = 0;
+        };
+        A00000000000000000000008 = {
+            isa = PBXFrameworksBuildPhase;
+            buildActionMask = 2147483647;
+            files = (B00000000000000000000003);
+            runOnlyForDeploymentPostprocessing = 0;
+        };
+        A00000000000000000000009 = {
+            isa = PBXResourcesBuildPhase;
+            buildActionMask = 2147483647;
+            files = ();
+            runOnlyForDeploymentPostprocessing = 0;
+        };
+        A0000000000000000000000A = { isa = PBXBuildFile; fileRef = A00000000000000000000005; };
+        A00000000000000000000016 = {
+            isa = PBXFileReference;
+            lastKnownFileType = sourcecode.swift;
+            path = ../../../.work/security-ffi/swift/meshchat_core.swift;
+            sourceTree = "<group>";
+        };
+        A00000000000000000000017 = { isa = PBXBuildFile; fileRef = A00000000000000000000016; };
+        A00000000000000000000010 = {
+            isa = XCConfigurationList;
+            buildConfigurations = (A00000000000000000000012, A00000000000000000000013);
+            defaultConfigurationIsVisible = 0;
+            defaultConfigurationName = Release;
+        };
+        A00000000000000000000011 = {
+            isa = XCConfigurationList;
+            buildConfigurations = (A00000000000000000000014, A00000000000000000000015);
+            defaultConfigurationIsVisible = 0;
+            defaultConfigurationName = Release;
+        };
+        A00000000000000000000012 = {
+            isa = XCBuildConfiguration;
+            buildSettings = { SDKROOT = iphoneos; IPHONEOS_DEPLOYMENT_TARGET = 15.0; SWIFT_VERSION = 6.0; SWIFT_TREAT_WARNINGS_AS_ERRORS = YES; SWIFT_OPTIMIZATION_LEVEL = "-Onone"; };
+            name = Debug;
+        };
+        A00000000000000000000013 = {
+            isa = XCBuildConfiguration;
+            buildSettings = { SDKROOT = iphoneos; IPHONEOS_DEPLOYMENT_TARGET = 15.0; SWIFT_VERSION = 6.0; SWIFT_TREAT_WARNINGS_AS_ERRORS = YES; SWIFT_COMPILATION_MODE = wholemodule; };
+            name = Release;
+        };
+        A00000000000000000000014 = {
+            isa = XCBuildConfiguration;
+            buildSettings = {
+                SWIFT_INCLUDE_PATHS = "$(SRCROOT)/../../../.work/security-ffi/swift";
+                OTHER_SWIFT_FLAGS = "$(inherited) -Xcc -DSQLITE_HAS_CODEC -Xcc -fmodule-map-file=$(SRCROOT)/../../../.work/security-ffi/swift/meshchat_coreFFI.modulemap";
+                LIBRARY_SEARCH_PATHS = "$(SRCROOT)/../../../.work/security-ffi/$(PLATFORM_NAME)";
+                OTHER_LDFLAGS = "$(inherited) -lmeshchat_core -framework Security";
+                GENERATE_INFOPLIST_FILE = YES;
+                INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+                INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+                PRODUCT_BUNDLE_IDENTIFIER = org.meshchat.securityprobe;
+                PRODUCT_NAME = "$(TARGET_NAME)";
+                MARKETING_VERSION = 0.1.0;
+                CURRENT_PROJECT_VERSION = 1;
+                TARGETED_DEVICE_FAMILY = "1,2";
+            };
+            name = Debug;
+        };
+        A00000000000000000000015 = {
+            isa = XCBuildConfiguration;
+            buildSettings = {
+                SWIFT_INCLUDE_PATHS = "$(SRCROOT)/../../../.work/security-ffi/swift";
+                OTHER_SWIFT_FLAGS = "$(inherited) -Xcc -DSQLITE_HAS_CODEC -Xcc -fmodule-map-file=$(SRCROOT)/../../../.work/security-ffi/swift/meshchat_coreFFI.modulemap";
+                LIBRARY_SEARCH_PATHS = "$(SRCROOT)/../../../.work/security-ffi/$(PLATFORM_NAME)";
+                OTHER_LDFLAGS = "$(inherited) -lmeshchat_core -framework Security";
+                GENERATE_INFOPLIST_FILE = YES;
+                INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+                INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+                PRODUCT_BUNDLE_IDENTIFIER = org.meshchat.securityprobe;
+                PRODUCT_NAME = "$(TARGET_NAME)";
+                MARKETING_VERSION = 0.1.0;
+                CURRENT_PROJECT_VERSION = 1;
+                TARGETED_DEVICE_FAMILY = "1,2";
+            };
+            name = Release;
+        };
+    };
+    rootObject = A00000000000000000000001;
+}

@@ -115,6 +115,19 @@ jobs:
           export JAVA_TOOL_OPTIONS="-Djava.io.tmpdir=$TMPDIR -Duser.home=$PWD/.work/java-home"
           bash src/android/gradlew -p src/android/ble --no-daemon assembleDebug assembleRelease lintDebug
 
+      - name: Security probe Android build and lint
+        run: |
+          mkdir -p "$ANDROID_USER_HOME" .work/tmp .work/java-home
+          export TMPDIR="$PWD/.work/tmp"
+          export JAVA_TOOL_OPTIONS="-Djava.io.tmpdir=$TMPDIR -Duser.home=$PWD/.work/java-home"
+          python3 -B src/core/build_bindings.py android --security-probe
+          python3 -B src/android/security/build_sqlcipher.py
+          bash src/android/gradlew -p src/android/security --no-daemon assembleDebug assembleRelease lintDebug
+          python3 -B tests/bench/security/check_android_apk.py src/android/security/build/outputs/apk/*/*.apk
+          for apk in src/android/security/build/outputs/apk/*/*.apk; do
+            "$ANDROID_HOME/build-tools/35.0.0/zipalign" -c -P 16 4 "$apk"
+          done
+
   ios:
     runs-on: macos-15
     timeout-minutes: 30
@@ -172,3 +185,28 @@ jobs:
                 CODE_SIGNING_ALLOWED=NO build
             done
           done
+      - name: Build unsigned iOS security probe
+        run: |
+          mkdir -p .work/tmp .work/security-module-cache
+          export TMPDIR="$PWD/.work/tmp"
+          python3 -B src/core/build_bindings.py ios --security-probe
+          for platform in iphonesimulator iphoneos; do
+            for configuration in Debug Release; do
+              xcodebuild -project src/ios/Security/SecurityProbe.xcodeproj -scheme SecurityProbe \
+                -configuration "$configuration" -sdk "$platform" \
+                -derivedDataPath "$PWD/.work/security-ios-derived-data/$platform" \
+                -clonedSourcePackagesDirPath "$PWD/.work/security-swift-packages" \
+                CLANG_MODULE_CACHE_PATH="$PWD/.work/security-module-cache" \
+                CODE_SIGNING_ALLOWED=NO build
+            done
+          done
+      - name: Security curves Swift host interoperability
+        run: |
+          xcrun swiftc -swift-version 6 -warnings-as-errors \
+            -module-cache-path "$PWD/.work/security-module-cache" \
+            -I .work/security-ffi/swift -Xcc -fmodule-map-file=.work/security-ffi/swift/meshchat_coreFFI.modulemap \
+            .work/security-ffi/swift/meshchat_core.swift tests/bench/security/main.swift \
+            -L .work/security-target/debug -lmeshchat_core \
+            -Xlinker -rpath -Xlinker "$PWD/.work/security-target/debug" \
+            -o .work/security-ffi/swift-regression
+          .work/security-ffi/swift-regression

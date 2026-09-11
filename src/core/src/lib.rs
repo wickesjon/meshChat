@@ -6,6 +6,10 @@ use std::sync::Mutex;
 
 uniffi::setup_scaffolding!();
 
+// Temporary MC-005 feasibility surface; absent from normal application builds.
+#[cfg(feature = "security-probe")]
+pub mod security_probe;
+
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error, uniffi::Error)]
 pub enum CoreError {
     #[error("invalid configuration")]

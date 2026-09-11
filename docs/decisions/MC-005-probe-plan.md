@@ -1,40 +1,50 @@
-# MC-005 — Protected-key and encrypted-store probe plan
+# MC-005 — Protected-key and encrypted-store probe
 
-State: planning and isolated dependency preflight, 2026-09-11. No key-provider implementation, database test, protected-hardware result or final protection-model selection is claimed. The user replaced MC-004's early BLE gate only; MC-005 security evidence remains required.
+State: implemented feasibility harness, partial automated evidence, 2026-09-11. Physical acceptance, final provider selection and security review remain pending. The MC-004 gate replacement does not change these requirements.
 
-## Interface and implementation to evaluate
+## Candidate interface and protection model
 
-The core must distinguish platform-operated keys from wrapped software keys. A proposed provider uses opaque key handles and explicit capabilities: generate, public key, sign, agree, delete/reset and protection metadata. Errors distinguish unavailable/locked, invalidated/missing, invalid input and provider failure. No operation promises extraction of a non-exportable platform private key. This is a probe-interface proposal; MC-017 owns the production provider.
+MC-017 should use opaque key handles and explicit capabilities: generate, public key, sign, agree, delete/reset and protection metadata. Errors must distinguish unavailable/locked, invalidated/missing, invalid input and provider failure. A provider never promises extraction of a non-exportable private key. The spike exposes synthetic curve functions and native fixture controls, not a production identity provider. Final provider selection remains blocked on device evidence.
 
-For platform-operated keys, cryptographic work remains in native APIs and the core receives operation results. For wrapped software keys, encrypted key material is unwrapped into application memory for curve operations; at-rest protection must not be presented as resistance to a compromised running process. No identity/message material is introduced in this spike, and private/shared/database keys must never enter logs, traces or repository fixtures.
+| Candidate | Implemented probe | Limits still to establish |
+|---|---|---|
+| Android platform-operated curves | AndroidKeyStore Ed25519/XDH generation, private-key exportability/hardware metadata, actual sign/agreement checked against Rust | Algorithm/provider availability and lock policy on API 29 and newer hardware; an unavailable result is not a pass |
+| Android wrapped software curves | AndroidKeyStore AES-256-GCM wrapping key with unlocked-device requirement; authenticated versioned envelope in noBackupFilesDir; Rust curve operations after unwrap | Hardware support is measured, not assumed; native software interoperability depends on OS provider availability |
+| iOS wrapped software curves | Secure Enclave P-256 ECIES wrapping with WhenUnlockedThisDeviceOnly access; CryptoKit/Rust Ed25519 and X25519 interoperability; complete file protection | Curve25519 is software, not Secure Enclave P-256; physical iPhone required for wrapping; no simulator/software wrapping fallback |
 
-Compare Ed25519 signing/verification and X25519 agreement through the shared Rust core and native providers. Use published test vectors for deterministic interoperability and fresh ephemeral secrets for lifecycle tests; report only checks/outcomes. This does not select a DM construction or transcript, which belongs to MC-008.
+Each fresh fixture contains 96 random bytes: independent 32-byte signing seed, agreement seed and database passphrase. SQLCipher uses its normal key derivation; this is not a custom encryption format for production databases. No real identity or message can be imported. Software keys and database keys enter process memory; zeroization is best effort across Swift/Kotlin/UniFFI copies and native provider objects. At-rest protection does not protect against a compromised running process. Held database mode deliberately retains an open database across lock to measure that limitation.
 
-## Platform evidence inputs
+Creation refuses retained files or an existing wrapping key. Reopen never creates a missing key/database. Key deletion retains ciphertext and requires explicit fixture reset. A partial creation also requires explicit reset; it is never recovered through plaintext or silent replacement. Reports contain only predefined operation names, statuses, provider/OS metadata, cipher version and lock state. Exception messages, private/shared bytes and database content are not reported. Reports are bounded and memory-only, with explicit clipboard copy.
 
-- [Android Keystore](https://developer.android.com/privacy-and-security/keystore) describes non-exportable operation and hardware support conditional on algorithm/parameters. Query actual provider/security-level capabilities; do not infer StrongBox or curve support from Android version alone. Probe API 29 minimum and newer devices, including lock and invalidation behavior.
-- [Apple Secure Enclave guidance](https://developer.apple.com/documentation/security/protecting-keys-with-the-secure-enclave) and [SecureEnclave.P256](https://developer.apple.com/documentation/cryptokit/secureenclave/p256) identify P-256 support. P-256 is not a substitute for the specified Ed25519/X25519 curves. Compare platform-operated APIs with a separately protected software-key path; [CryptoKit Keychain guidance](https://developer.apple.com/documentation/cryptokit/storing-cryptokit-keys-in-the-keychain) is a storage input, not proof that Curve25519 runs inside the Secure Enclave. Minimum iOS remains 15.
-- [SQLCipher Android upstream](https://github.com/sqlcipher/sqlcipher-android) supplies the native database integration; [Zetetic documentation](https://www.zetetic.net/sqlcipher/documentation/) is the integration reference for both platforms. Pin selected native packages/source before implementation and record their licensing, build and Android 16 KB implications. No commercial purchase or signing/distribution is authorized by this plan.
+## Primary platform inputs
 
-## Required scenarios
+- [Android Keystore](https://developer.android.com/privacy-and-security/keystore): non-exportable operations and conditional hardware support. The probe reports actual KeyInfo metadata. [Android key generator source](https://android.googlesource.com/platform/frameworks/base/+/80a664262667cf14ee1ae52ab7c53abc26e17d1e/keystore/java/android/security/keystore2/AndroidKeyStoreKeyPairGeneratorSpi.java) informs curve-specific parameters; availability still requires runtime evidence.
+- [Apple Secure Enclave guidance](https://developer.apple.com/documentation/security/protecting-keys-with-the-secure-enclave), [SecureEnclave.P256](https://developer.apple.com/documentation/cryptokit/secureenclave/p256), and [CryptoKit Keychain guidance](https://developer.apple.com/documentation/cryptokit/storing-cryptokit-keys-in-the-keychain) distinguish protected wrapping from software Curve25519. Minimum iOS remains 15.
+- [RFC 8032 section 7.1](https://www.rfc-editor.org/rfc/rfc8032#section-7.1) and [RFC 7748 section 6.1](https://www.rfc-editor.org/rfc/rfc7748#section-6.1) supply exact Rust vectors. [RFC 8410](https://www.rfc-editor.org/rfc/rfc8410) defines the fixed public/private encodings used for Android interoperability; unexpected public encodings are rejected.
 
-| Scenario | Evidence to retain |
+## Dependencies and builds
+
+The user approved adding Cargo.lock and .github/workflows/ci.yml to MC-005 scope on 2026-09-11. The optional security-probe feature pins ed25519-dalek 2.2.0, x25519-dalek 2.0.1, zeroize 1.8.1 and getrandom 0.4.3. Default foundation builds do not enable the probe. Cargo.lock preserves existing versions. Generated probe bindings/artifacts are isolated in .work/security-ffi and .work/security-target, preventing the parent skeleton from accidentally linking probe exports.
+
+Android uses SQLCipher 4.17.0 and AndroidX SQLite 2.5.2, with existing JNA 5.17.0. The upstream 4.17.0 AAR SHA-256 is `44fc40c33d1de597c8339072a71fa0ff20e12d01ab352d6abe4ad5df668ead94`. Its prebuilt library fails the required 16 KB RELRO check (the inspected 4.19.0 artifact also fails, so it was not adopted). [Android's alignment guidance](https://developer.android.com/guide/practices/page-sizes#check-relro) requires the RELRO end to align along with LOAD segments. The repository rebuilds only JNI from upstream revision `0725b962ffb60b00460b0e315bc632a543b399e7` and its pinned submodules, adding `common-page-size=16384` to the existing max-page-size flag with NDK 27.3.13750724. Java/classes and resources remain from the checksummed AAR. The generated AAR contains only arm64-v8a/x86_64. CI must validate the resulting APKs; rebuilding is not itself evidence of compatibility. This is a necessary native build implication of the spike, not a SQLCipher algorithm change.
+
+iOS uses the [official SQLCipher Swift package](https://github.com/sqlcipher/SQLCipher.swift/tree/4.17.0), pinned at `c85425b80b8c9f0a1ceb4f72fa174e2b688181ba` (4.17.0). Its manifest pins the binary checksum `dd5a650346c1ba9933d6ba179f8844e03e4a075b3dd3a892796149864cd9ae57`. SQLITE_HAS_CODEC is enabled; the probe imports SQLCipher, keys through sqlite3_key and confirms a nonempty cipher_version before using the fixture. Unsigned simulator/device Debug/Release builds do not imply installation or Secure Enclave validation.
+
+SQLCipher uses BSD-style licensing with attribution requirements; Android also contains upstream Android/SQLite/LibTomCrypt components. The original AAR metadata/resources are retained when replacing native libraries. [Android license](https://github.com/sqlcipher/sqlcipher-android/blob/v4.17.0/LICENSE) and [Apple license](https://github.com/sqlcipher/SQLCipher.swift/blob/4.17.0/LICENSE.md) are dependency inputs; release attribution/distribution review remains necessary before shipping. No commercial package, purchase or distribution is part of this spike.
+
+## Evidence and required acceptance
+
+Local Rust 1.85.1 all-feature Clippy and Debug/Release tests pass: four existing foundation tests plus three curve/vector/input tests. Cargo-deny 0.20.2 advisories, bans, licenses and sources pass (only existing unused-license warnings). Host Kotlin/Swift binding generation passes. Android Debug/Release Kotlin compilation and lint pass against upstream 4.17.0; the final rebuilt AAR and iOS builds await hosted CI. Workflow syntax validation passes. These are automated results, not security/device acceptance.
+
+Follow the [bench runbook](../../tests/bench/security/README.md). Retain device/OS, exact app revision, wrapping policy, sanitized operation results and observed backup artifacts under docs/decisions. All rows below remain untested on actual phones:
+
+| Scenario | Required evidence |
 |---|---|
-| Curves | Core/native sign/verify and agreement outcomes, provider/OS and protection metadata; no private/shared bytes |
-| SQLCipher | Confirm cipher implementation/version, create synthetic row, close/restart/reopen and verify it; wrong key must fail an actual schema/data read |
-| Backup | Inspect exclusions and attempt the supported backup/restore path; exclude database, journals/WAL and wrapped secrets as applicable |
-| Lock/reboot | Before/after first unlock, screen lock with open and closed DB, process restart; distinguish API refusal from data protection |
-| Key loss | Delete/invalidate wrapping key, verify fail-closed behavior and explicit reset; never silently create a replacement key over retained ciphertext |
-| Reinstall/reset | Observe platform persistence differences, explicit deletion and restore mismatch; no identity-continuity claim after reset |
+| Minimum OS curves | Android API 29 and iOS 15 core/native results and capability failures, plus current OS provider/hardware metadata |
+| SQLCipher lifecycle | Create synthetic integer row, close/force-stop/relaunch, reopen/read; wrong key fails a real data/schema read; correct key still works |
+| Backup | Cloud and supported device-transfer/restore attempt excludes folder, database, journals/WAL and wrapped secrets; inspect artifacts, not just manifest flags |
+| Lock/reboot | Closed and intentionally held DB before/after lock, before first unlock and after reboot; record actual lock/protected-data state at execution and delayed/suspended probes |
+| Key loss/reset | Delete wrapping key while retaining encrypted fixture, reopen refuses, explicit reset creates a new fixture; test OS invalidation separately from deletion |
+| Uninstall/restore | Observe platform key/file persistence differences and mismatch handling without asserting identity continuity |
 
-Record device/OS/build, configured accessibility/authentication policy, procedure and observed results under `docs/decisions/`. Put harnesses under `tests/bench/security/`. A simulator can help functional testing but cannot attest hardware-backed behavior. Device/Mac/signing availability is unknown; no unavailability is inferred.
-
-## Concrete scope blocker and prepared proposal
-
-The existing ticket permits `src/core/**` and standalone native probe paths, but excludes root `Cargo.lock` and `.github/workflows/ci.yml`. Reproducible shared-core curve dependencies require a root lockfile change. Standalone native security probes also need explicit CI coverage rather than relying on the existing parent-app/BLE builds. Under AGENTS.md, these two paths need a scope decision before application.
-
-Prepared ignored proposals are in `.work/mc005-scope-proposal/`: `core-manifest.patch`, `lockfile.patch` and `ci.patch`. The CI proposal adds standalone Android Debug/Release assembly/lint and iOS Debug/Release simulator/device builds; signing remains a command-line override. These commands target the planned probe projects and cannot run until those projects exist. Neither real root lockfile nor real workflow has been changed for MC-005.
-
-Proposed optional `security-probe` dependencies: [ed25519-dalek 2.2.0](https://docs.rs/ed25519-dalek/2.2.0/ed25519_dalek/), [x25519-dalek 2.0.1](https://docs.rs/x25519-dalek/2.0.1/x25519_dalek/), `zeroize 1.8.1` and the already-locked `getrandom 0.4.3`. OS randomness supplies software key seeds, with failures propagated. The feature is intended for the feasibility harness, not activation of production identities. These versions were selected and checked with the pinned Rust toolchain; adoption remains subject to scope approval and implementation review.
-
-An isolated copy under `.work/` resolved the dependencies and passed `cargo check --locked --features security-probe --lib` with Rust 1.85.1. Existing cargo-deny 0.20.2 policy passed advisories, bans, licenses and sources with `--all-features --locked`; only unused-license-allowance warnings appeared. This checks dependency compatibility and policy, not crypto correctness, native packaging or storage behavior. Actual curve vectors, native builds and lifecycle scenarios remain unimplemented.
+Device/Mac/signing inventory is unknown. The final protection model and all MC-005 exit criteria remain open. Secure persistence that cannot be demonstrated blocks persistent identities/DM release. No physical result or independent security assessment is inferred from this code or CI.

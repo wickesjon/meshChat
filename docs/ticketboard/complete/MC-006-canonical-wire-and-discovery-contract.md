@@ -33,7 +33,7 @@ Also permitted: this ticket and generated ticketboard index/diagram changes requ
 - [x] Independent readers can determine exact bytes and parser behavior for every v1 packet, QR bundle and flag combination.
 - [x] Every supported packet fits the selected capacity/fragment limits or has a documented explicit refusal case.
 - [x] No pin/cosmetic field is described without a byte position and authentication rule; unresolved crypto choices remain blocked on MC-008 before MC-020.
-- [ ] Relevant checks pass, evidence is recorded, required review is complete, and the ticket is squash merged to main.
+- [x] Relevant checks pass, evidence is recorded, required review is complete, and the ticket is squash merged to main (completion staged for the reviewed squash; effective only after final CI and merge).
 
 ## Potential fallbacks
 
@@ -50,7 +50,7 @@ Decisions: one frame per value, 146–512-byte directional admission, explicit t
 
 Evidence state is **specified**. Python 3.14 standard-library arithmetic checks pass for four structural frame lengths, reaction reassembly, all 17 size/fragment worksheet rows, the 146-byte floor and the three public-channel SHA-256 IDs. The vector README contains the reproducible structural/count check. These are document checks, not a working codec, cryptographic verification or measured device support. MC-008/MC-022 retain crypto extension/review gates; MC-007 retains budgets and measured acceptance.
 
-Validation: `python -B tests/ticketboard/validate.py --write`, default validator, all 12 ticketboard unit tests and `git diff --check` pass. Separate Terra medium review [5183932501](https://github.com/wickesjon/meshChat/pull/8#pullrequestreview-5183932501) reviewed revision `2e083cb652fb5d3bcb1e29e32ed2947c22d5be42` and requested two corrections: the expiry anchor for a rejected first fragment and explicit unknown-type flood scope. Both are corrected in the contract, design and vector expectations. A rejected first envelope expires 30 seconds after observation; an aborted admitted group retains its initial deadline. Unknown types follow ordinary flood TTL rules and cannot introduce direct controls. Follow-up review and final CI remain required before merge; their exact revision and outcomes will be recorded in PR #8.
+Validation: `python -B tests/ticketboard/validate.py --write`, default validator, all 12 ticketboard unit tests and `git diff --check` pass. Separate Terra medium review [5183932501](https://github.com/wickesjon/meshChat/pull/8#pullrequestreview-5183932501) reviewed revision `2e083cb652fb5d3bcb1e29e32ed2947c22d5be42` and requested two corrections: the expiry anchor for a rejected first fragment and explicit unknown-type flood scope. Both are corrected in the contract, design and vector expectations. A rejected first envelope expires 30 seconds after observation; an aborted admitted group retains its initial deadline. Unknown types follow ordinary flood TTL rules and cannot introduce direct controls. Follow-up review [5183944190](https://github.com/wickesjon/meshChat/pull/8#pullrequestreview-5183944190) found no remaining blockers at `1237fe7ae6c28ed2d10e1deb59f4af8438513b08` and reproduced the local checks. This completion staging is pending final CI and squash merge; the final reviewed revision and CI outcomes are recorded in PR #8 before merge.
 
 ## Review and merge
 

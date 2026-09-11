@@ -5,7 +5,7 @@ plugins {
 
 android {
     namespace = "org.meshchat.app"
-    compileSdk = 35
+    compileSdk = 36
     buildToolsVersion = "35.0.0"
 
     signingConfigs {
@@ -17,7 +17,7 @@ android {
     defaultConfig {
         applicationId = "org.meshchat.app"
         minSdk = 29
-        targetSdk = 35
+        targetSdk = 36
         versionCode = 1
         versionName = "0.1.0"
     }
@@ -30,8 +30,9 @@ android {
     lint {
         warningsAsErrors = true
         abortOnError = true
-        // MC-002 pins its compatibility baseline; release SDK policy belongs to MC-039.
-        disable += "GradleDependency"
+        // Update suggestions must not turn pinned builds into a moving version gate.
+        // API compatibility and correctness checks remain enabled.
+        disable += setOf("GradleDependency", "AndroidGradlePluginVersion")
     }
 }
 

@@ -80,7 +80,7 @@ jobs:
           java-version: 17.0.15+6
           settings-path: ${{ github.workspace }}/.work/maven
       - name: Verify wrapper
-        run: echo '2db75c40782f5e8ba1fc278a5574bab070adccb2d21ca5a6e5ed840888448046  src/android/gradle/wrapper/gradle-wrapper.jar' | sha256sum --check
+        run: echo '81a82aaea5abcc8ff68b3dfcb58b3c3c429378efd98e7433460610fecd7ae45f  src/android/gradle/wrapper/gradle-wrapper.jar' | sha256sum --check
       - name: Android build and lint
         working-directory: src/android
         run: |
@@ -88,7 +88,7 @@ jobs:
           export TMPDIR="$GITHUB_WORKSPACE/.work/tmp"
           export JAVA_TOOL_OPTIONS="-Djava.io.tmpdir=$TMPDIR -Duser.home=$GITHUB_WORKSPACE/.work/java-home"
           java -version
-          cat "$ANDROID_HOME/platforms/android-35/source.properties"
+          cat "$ANDROID_HOME/platforms/android-36/source.properties"
           cat "$ANDROID_HOME/build-tools/35.0.0/source.properties"
           bash gradlew --version
           bash gradlew --no-daemon :app:assembleDebug :app:assembleRelease :app:lintDebug

@@ -18,7 +18,7 @@ After edits run `python tests/ticketboard/validate.py --write`; then run `python
 | Ticket | Task | State | Depends on |
 |---|---|---|---|
 | [MC-001](complete/MC-001-project-rules-and-executable-ticketboard.md) | Project rules and executable ticketboard | complete | None |
-| [MC-002](backlog/MC-002-build-layout-and-continuous-integration.md) | Build layout and continuous integration | backlog | MC-001 |
+| [MC-002](inreview/MC-002-build-layout-and-continuous-integration.md) | Build layout and continuous integration | inreview | MC-001 |
 | [MC-003](backlog/MC-003-sans-io-and-uniffi-foundation.md) | Sans-IO and UniFFI foundation | backlog | MC-002 |
 | [MC-004](backlog/MC-004-two-platform-ble-and-permission-feasibility.md) | Two-platform BLE and permission feasibility | backlog | MC-003 |
 | [MC-005](backlog/MC-005-platform-key-and-encrypted-store-feasibility.md) | Platform key and encrypted-store feasibility | backlog | MC-003 |

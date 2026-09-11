@@ -1,3 +1,13 @@
 .work/
 __pycache__/
 *.pyc
+target/
+.gradle/
+.kotlin/
+build/
+local.properties
+.idea/
+*.iml
+DerivedData/
+xcuserdata/
+*.xcuserstate

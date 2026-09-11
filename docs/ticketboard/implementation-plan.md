@@ -54,6 +54,7 @@ Only populated documentation/test directories are created in MC-001. Implementat
 | Identity and security | MC-017–MC-022 | Protected identity/storage, friends, DMs, organizer trust; full-wire freeze |
 | Native radios | MC-023–MC-027 | Android bench mesh, iOS driver and physical cross-platform interop |
 | Product integration | MC-028–MC-035, MC-041–MC-042 | Native features, sharing, purchases, phone beacons, organizer tools and honest stats |
+| Deferred physical key/storage evidence | MC-043–MC-044 | Production Android/iOS protection, backup and lifecycle verification |
 | Release evidence | MC-036–MC-040 | Integrated adversarial checks, independent assessment, field results and release |
 
 MC-006 and MC-008 are coordinated decisions, not circular dependencies: MC-006 defines the outer format and the pending crypto extension points; MC-008 selects the crypto construction. MC-020 cannot implement DMs until both are resolved. MC-022 freezes their final combined wire representation.
@@ -66,8 +67,9 @@ No reliable calendar critical path can be claimed before feasibility evidence an
 
 Every ticket carries its implementation scope, exit criteria and conditional fallbacks. Tests are added alongside each implementation; MC-036 aggregates them rather than postponing security until release.
 
-- Base freeze requires the approved MC-004 online feasibility/permission evidence, explicit transport assumptions and refusal cases, exact vectors and the feasible workload defined by MC-007. The user replaced the early MC-004 physical gate on 2026-09-11; this is not physical certification. MC-025/MC-027 and release field gates still require actual devices. MC-005 protected-storage evidence is unchanged.
+- Base freeze requires the approved MC-004 online feasibility/permission evidence, explicit transport assumptions and refusal cases, exact vectors and the feasible workload defined by MC-007. The user replaced the early MC-004 physical gate on 2026-09-11; this is not physical certification. MC-025/MC-027 and release field gates still require actual devices. The later user-approved MC-005 deferral moves physical protected-storage verification to MC-043/044; its automated evidence and selected development contract permit implementation with synthetic data.
 - Full-wire freeze requires authenticated negative vectors, lifecycle checks and independent crypto review.
+- MC-043 verifies Android production key/storage behavior before MC-034; MC-044 verifies iOS before MC-037. Both require named minimum/current OS devices and the deferred MC-005 scenarios. Android beta does not depend on iOS verification. Real sensitive-data use requires the corresponding platform verification; independent security assessments remain separate.
 - Radio gates require named physical devices/OS versions and retained measurement methods.
 - Release requires both applications, independent integrated assessment, predeclared scale targets and actual store outcomes.
 - A fallback may reduce optional behavior only where approved. It may never replace encrypted storage with plaintext, trust with a cosmetic signal, actual hardware evidence with simulation, or a failed acceptance gate with an unsupported success claim.
@@ -115,10 +117,12 @@ flowchart TD
     MC_041["MC-041: Offline organizer key and credential tooling"]
     MC_030["MC-030: Android organizer UI and staff provisioning"]
     MC_042["MC-042: Honest contribution and power feedback"]
-    MC_034["MC-034: Android beta integration gate"]
     MC_035["MC-035: iOS feature parity and lifecycle UI"]
-    MC_037["MC-037: Independent security assessment and remediation"]
+    MC_043["MC-043: Android physical key and storage verification"]
+    MC_034["MC-034: Android beta integration gate"]
     MC_038["MC-038: Mixed-platform scale and battery field validation"]
+    MC_044["MC-044: iOS physical key and storage verification"]
+    MC_037["MC-037: Independent security assessment and remediation"]
     MC_039["MC-039: Release operations, store readiness and user docs"]
     MC_040["MC-040: v1 release acceptance gate"]
     MC_001 --> MC_002
@@ -195,6 +199,14 @@ flowchart TD
     MC_041 --> MC_030
     MC_028 --> MC_042
     MC_024 --> MC_042
+    MC_027 --> MC_035
+    MC_029 --> MC_035
+    MC_030 --> MC_035
+    MC_031 --> MC_035
+    MC_032 --> MC_035
+    MC_042 --> MC_035
+    MC_017 --> MC_043
+    MC_018 --> MC_043
     MC_025 --> MC_034
     MC_029 --> MC_034
     MC_030 --> MC_034
@@ -203,18 +215,16 @@ flowchart TD
     MC_033 --> MC_034
     MC_042 --> MC_034
     MC_022 --> MC_034
-    MC_027 --> MC_035
-    MC_029 --> MC_035
-    MC_030 --> MC_035
-    MC_031 --> MC_035
-    MC_032 --> MC_035
-    MC_042 --> MC_035
-    MC_034 --> MC_037
-    MC_035 --> MC_037
-    MC_036 --> MC_037
+    MC_043 --> MC_034
     MC_034 --> MC_038
     MC_035 --> MC_038
     MC_036 --> MC_038
+    MC_017 --> MC_044
+    MC_018 --> MC_044
+    MC_034 --> MC_037
+    MC_035 --> MC_037
+    MC_036 --> MC_037
+    MC_044 --> MC_037
     MC_034 --> MC_039
     MC_035 --> MC_039
     MC_037 --> MC_039

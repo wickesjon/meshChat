@@ -1,7 +1,7 @@
 ---
 id: "MC-037"
 title: "Independent security assessment and remediation"
-depends_on: ["MC-034","MC-035","MC-036"]
+depends_on: ["MC-034","MC-035","MC-036","MC-044"]
 kind: "gate"
 branch: "ticket/MC-037-independent-security-assessment-and-remediation"
 ---
@@ -14,7 +14,7 @@ Prepare threat model, frozen vectors, builds and evidence for independent assess
 
 ## Dependencies
 
-`MC-034`, `MC-035`, `MC-036` See the [current ticket index](../README.md#ticket-index). Dependencies must be complete on main before implementation starts.
+`MC-034`, `MC-035`, `MC-036`, `MC-044` See the [current ticket index](../README.md#ticket-index). Dependencies must be complete on main before implementation starts.
 
 ## Scope
 
@@ -29,6 +29,8 @@ Also permitted: this ticket and generated ticketboard index/diagram changes requ
 - Retest fixes and update evidence without treating design-stage statements as proof of security.
 
 ## Exit criteria
+
+- [ ] Deferred physical protected-key/storage verification `MC-044` is complete with production-provider evidence; simulation or deferral is not a pass.
 
 - [ ] Independent assessment is completed and all release-blocking findings are remediated/retested.
 - [ ] Accepted residual risks have explicit rationale and product disclosure; no unresolved exception is hidden.

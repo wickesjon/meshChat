@@ -21,7 +21,7 @@ After edits run `python tests/ticketboard/validate.py --write`; then run `python
 | [MC-002](complete/MC-002-build-layout-and-continuous-integration.md) | Build layout and continuous integration | complete | MC-001 |
 | [MC-003](complete/MC-003-sans-io-and-uniffi-foundation.md) | Sans-IO and UniFFI foundation | complete | MC-002 |
 | [MC-004](complete/MC-004-two-platform-ble-and-permission-feasibility.md) | Two-platform BLE and permission feasibility | complete | MC-003 |
-| [MC-005](backlog/MC-005-platform-key-and-encrypted-store-feasibility.md) | Platform key and encrypted-store feasibility | backlog | MC-003 |
+| [MC-005](complete/MC-005-platform-key-and-encrypted-store-feasibility.md) | Platform key and encrypted-store feasibility | complete | MC-003 |
 | [MC-006](backlog/MC-006-canonical-wire-and-discovery-contract.md) | Canonical wire and discovery contract | backlog | MC-004 |
 | [MC-007](backlog/MC-007-budgets-and-measurable-mesh-acceptance.md) | Budgets and measurable mesh acceptance | backlog | MC-004, MC-006 |
 | [MC-008](backlog/MC-008-reviewed-dm-and-trust-contract.md) | Reviewed DM and trust contract | backlog | MC-005 |
@@ -50,15 +50,17 @@ After edits run `python tests/ticketboard/validate.py --write`; then run `python
 | [MC-031](backlog/MC-031-offline-sharing-and-installed-app-link-support.md) | Offline sharing and installed-app link support | backlog | MC-011, MC-028 |
 | [MC-032](backlog/MC-032-supporter-entitlements-and-accessible-cosmetics.md) | Supporter entitlements and accessible cosmetics | backlog | MC-028, MC-006 |
 | [MC-033](backlog/MC-033-android-phone-beacon-mode.md) | Android phone Beacon Mode | backlog | MC-024, MC-018, MC-028 |
-| [MC-034](backlog/MC-034-android-beta-integration-gate.md) | Android beta integration gate | backlog | MC-025, MC-029, MC-030, MC-031, MC-032, MC-033, MC-042, MC-022 |
+| [MC-034](backlog/MC-034-android-beta-integration-gate.md) | Android beta integration gate | backlog | MC-025, MC-029, MC-030, MC-031, MC-032, MC-033, MC-042, MC-022, MC-043 |
 | [MC-035](backlog/MC-035-ios-feature-parity-and-lifecycle-ui.md) | iOS feature parity and lifecycle UI | backlog | MC-027, MC-029, MC-030, MC-031, MC-032, MC-042 |
 | [MC-036](backlog/MC-036-integrated-security-and-resource-regression-gate.md) | Integrated security and resource regression gate | backlog | MC-022, MC-027, MC-033 |
-| [MC-037](backlog/MC-037-independent-security-assessment-and-remediation.md) | Independent security assessment and remediation | backlog | MC-034, MC-035, MC-036 |
+| [MC-037](backlog/MC-037-independent-security-assessment-and-remediation.md) | Independent security assessment and remediation | backlog | MC-034, MC-035, MC-036, MC-044 |
 | [MC-038](backlog/MC-038-mixed-platform-scale-and-battery-field-validation.md) | Mixed-platform scale and battery field validation | backlog | MC-034, MC-035, MC-036 |
 | [MC-039](backlog/MC-039-release-operations-store-readiness-and-user-docs.md) | Release operations, store readiness and user docs | backlog | MC-034, MC-035, MC-037, MC-038 |
 | [MC-040](backlog/MC-040-v1-release-acceptance-gate.md) | v1 release acceptance gate | backlog | MC-039 |
 | [MC-041](backlog/MC-041-offline-organizer-key-and-credential-tooling.md) | Offline organizer key and credential tooling | backlog | MC-021 |
 | [MC-042](backlog/MC-042-honest-contribution-and-power-feedback.md) | Honest contribution and power feedback | backlog | MC-028, MC-024 |
+| [MC-043](backlog/MC-043-android-physical-key-and-storage-verification.md) | Android physical key and storage verification | backlog | MC-017, MC-018 |
+| [MC-044](backlog/MC-044-ios-physical-key-and-storage-verification.md) | iOS physical key and storage verification | backlog | MC-017, MC-018 |
 <!-- INDEX:END -->
 
 ## Status interpretation

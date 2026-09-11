@@ -25,14 +25,14 @@ Also permitted: this ticket and generated ticketboard index/diagram changes requ
 ## Implementation details
 
 - Define and implement migrations for messages, subscriptions, friend pins, DM conversations, trust provenance, event roots/credentials, settings and reaction state where persistent.
-- Use SQLCipher through the selected key provider, parameterized SQL and verified platform backup exclusions.
+- Use SQLCipher through the selected key provider, parameterized SQL and explicit platform backup exclusions. Under the user-approved MC-005 deferral, physical restore/exclusion verification belongs to MC-043/044.
 - Implement continuous/launch pruning, deletion and identity-reset coordination; distinguish local history from bounded forward caches.
 
 ## Exit criteria
 
 - [ ] Wrong-key reads fail; plaintext message/key markers are absent from the database and auxiliary files in controlled tests.
 - [ ] Restart preserves appropriate history and trust state; rotating DM tags do not split a conversation.
-- [ ] Migration rollback/failure, retention limits, deletion and backup-exclusion tests pass on supported platforms.
+- [ ] Synthetic migration rollback/failure, retention, deletion and backup-configuration tests pass for both platform integrations. Physical backup/transfer/restore tests remain mandatory at MC-043/044 before real sensitive-data use.
 - [ ] Relevant checks pass, evidence is recorded, required review is complete, and the ticket is squash merged to main.
 
 ## Potential fallbacks
@@ -43,6 +43,8 @@ Also permitted: this ticket and generated ticketboard index/diagram changes requ
 A triggered fallback must be recorded with evidence. It does not authorize weaker security, invented validation or expanded scope.
 
 ## Evidence
+
+Scheduling decision: the user deferred MC-005 physical verification on 2026-09-11. This implementation ticket uses synthetic data and automated tests; MC-043/044 retest the production provider/storage on actual devices. Its completion does not certify hardware, backup or lock behavior.
 
 Not implemented. Record commands, versions, reproducible inputs and results here. For manual/hardware checks include device/OS, duration and report paths. No test or review is claimed yet.
 

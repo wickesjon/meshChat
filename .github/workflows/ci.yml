@@ -69,7 +69,7 @@ jobs:
 
   android:
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -79,6 +79,32 @@ jobs:
           distribution: temurin
           java-version: 17.0.15+6
           settings-path: ${{ github.workspace }}/.work/maven
+      - name: Prepare isolated security emulator
+        run: |
+          mkdir -p .work/emulator-sdk/cmdline-tools/latest .work/android/avd .work/tmp .work/java-home
+          export TMPDIR="$PWD/.work/tmp"
+          export JAVA_TOOL_OPTIONS="-Djava.io.tmpdir=$TMPDIR -Duser.home=$PWD/.work/java-home"
+          cp -RL "$ANDROID_HOME/cmdline-tools/latest/." .work/emulator-sdk/cmdline-tools/latest/
+          sdk_tools="$PWD/.work/emulator-sdk/cmdline-tools/latest/bin"
+          cp -R "$ANDROID_HOME/licenses" .work/emulator-sdk/licenses
+          "$sdk_tools/sdkmanager" --sdk_root="$PWD/.work/emulator-sdk" \
+            'platform-tools' 'emulator' 'system-images;android-29;default;x86_64'
+          export ANDROID_HOME="$PWD/.work/emulator-sdk"
+          export ANDROID_SDK_ROOT="$ANDROID_HOME"
+          export ANDROID_AVD_HOME="$PWD/.work/android/avd"
+          cat "$ANDROID_HOME/system-images/android-29/default/x86_64/source.properties"
+          echo no | "$sdk_tools/avdmanager" create avd --name mc005 \
+            --package 'system-images;android-29;default;x86_64' --path "$PWD/.work/android/mc005.avd"
+          python3 -B - <<'PY'
+          from pathlib import Path
+          configuration = Path('.work/android/mc005.avd/config.ini')
+          lines = [line for line in configuration.read_text().splitlines()
+                   if line.partition('=')[0].strip() != 'disk.dataPartition.size']
+          configuration.write_text('\n'.join(lines + ['disk.dataPartition.size=6G']) + '\n')
+          print('Security AVD userdata partition: 6 GiB')
+          PY
+          "$ANDROID_HOME/emulator/emulator" -list-avds
+          "$ANDROID_HOME/emulator/emulator" -accel-check || true
       - name: Build Rust library and Kotlin bindings
         run: |
           mkdir -p "$CARGO_HOME" "$RUSTUP_HOME" .work/tmp
@@ -114,6 +140,33 @@ jobs:
           export TMPDIR="$PWD/.work/tmp"
           export JAVA_TOOL_OPTIONS="-Djava.io.tmpdir=$TMPDIR -Duser.home=$PWD/.work/java-home"
           bash src/android/gradlew -p src/android/ble --no-daemon assembleDebug assembleRelease lintDebug
+
+      - name: Security probe Android build and lint
+        run: |
+          mkdir -p "$ANDROID_USER_HOME" .work/tmp .work/java-home
+          export TMPDIR="$PWD/.work/tmp"
+          export JAVA_TOOL_OPTIONS="-Djava.io.tmpdir=$TMPDIR -Duser.home=$PWD/.work/java-home"
+          python3 -B src/core/build_bindings.py android --security-probe
+          python3 -B src/android/security/build_sqlcipher.py
+          bash src/android/gradlew -p src/android/security --no-daemon assembleDebug assembleRelease assembleDebugAndroidTest lintDebug
+          python3 -B tests/bench/security/check_android_apk.py \
+            src/android/security/build/outputs/apk/debug/*.apk \
+            src/android/security/build/outputs/apk/release/*.apk
+          for apk in src/android/security/build/outputs/apk/debug/*.apk src/android/security/build/outputs/apk/release/*.apk; do
+            "$ANDROID_HOME/build-tools/35.0.0/zipalign" -c -P 16 4 "$apk"
+          done
+      - name: Security probe emulator lifecycle
+        run: |
+          python3 -B -m unittest discover -s tests/bench/security -p 'test_*.py' -v
+          python3 -B tests/bench/security/prepare_emulator_disk.py
+          source tests/bench/security/emulator.sh
+          start_security_emulator
+          python3 -B tests/bench/security/run_android_emulator.py --serial emulator-5554
+      - name: Stop isolated security emulator
+        if: always()
+        run: |
+          source tests/bench/security/emulator.sh
+          stop_security_emulator
 
   ios:
     runs-on: macos-15
@@ -172,3 +225,28 @@ jobs:
                 CODE_SIGNING_ALLOWED=NO build
             done
           done
+      - name: Build unsigned iOS security probe
+        run: |
+          mkdir -p .work/tmp .work/security-module-cache
+          export TMPDIR="$PWD/.work/tmp"
+          python3 -B src/core/build_bindings.py ios --security-probe
+          for platform in iphonesimulator iphoneos; do
+            for configuration in Debug Release; do
+              xcodebuild -project src/ios/Security/SecurityProbe.xcodeproj -scheme SecurityProbe \
+                -configuration "$configuration" -sdk "$platform" \
+                -derivedDataPath "$PWD/.work/security-ios-derived-data/$platform" \
+                -clonedSourcePackagesDirPath "$PWD/.work/security-swift-packages" \
+                CLANG_MODULE_CACHE_PATH="$PWD/.work/security-module-cache" \
+                CODE_SIGNING_ALLOWED=NO build
+            done
+          done
+      - name: Security curves Swift host interoperability
+        run: |
+          xcrun swiftc -swift-version 6 -warnings-as-errors \
+            -module-cache-path "$PWD/.work/security-module-cache" \
+            -I .work/security-ffi/swift -Xcc -fmodule-map-file=.work/security-ffi/swift/meshchat_coreFFI.modulemap \
+            .work/security-ffi/swift/meshchat_core.swift tests/bench/security/main.swift \
+            -L .work/security-target/debug -lmeshchat_core \
+            -Xlinker -rpath -Xlinker "$PWD/.work/security-target/debug" \
+            -o .work/security-ffi/swift-regression
+          .work/security-ffi/swift-regression

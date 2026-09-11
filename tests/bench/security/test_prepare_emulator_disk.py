@@ -34,7 +34,7 @@ class CleanupBoundaryTests(unittest.TestCase):
         self.assertEqual([call.args[0].relative_to(cleanup.ROOT).as_posix()
                           for call in self.remove.call_args_list],
                          ['target', '.work/security-target', '.work/gradle/caches',
-                          '.work/security-sqlcipher/obj'])
+                          '.work/security-sqlcipher/obj', '.work/rustup', '.work/cargo'])
 
     def test_symlink_aborts_entire_allowlist_before_deletion(self):
         with patch.object(Path, 'is_symlink', lambda path: path.name == 'obj'):

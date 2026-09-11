@@ -8,7 +8,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[3]
 CACHES = ('target', '.work/security-target', '.work/gradle/caches',
-          '.work/security-sqlcipher/obj')
+          '.work/security-sqlcipher/obj', '.work/rustup', '.work/cargo')
 
 
 def main():

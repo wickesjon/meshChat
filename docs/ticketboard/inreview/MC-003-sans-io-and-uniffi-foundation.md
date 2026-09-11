@@ -62,13 +62,14 @@ Implementation started from main `f5acefe4ea201cb7aa4ce6b0c71e1a202b234901`, whe
 ### Validation
 
 - Local Rust format, strict all-feature Clippy, and all four lifecycle/limit regression tests in debug and release passed. Generated Kotlin and Swift sources were produced from the compiled library.
-- Local Kotlin/JVM execution of the generated bindings passed its deterministic binary round-trip and typed-error regression against the host Rust DLL. Strict lint then caught the generator's default JVM cleaner referencing API 33; enabled UniFFI's Android-specific cleaner configuration, preserving minSdk 29 and the NewApi lint gate. Final Android rerun is pending.
+- Local Kotlin/JVM execution of the generated bindings passed its deterministic binary round-trip and typed-error regression against the host Rust DLL. Strict lint then caught the generator's default JVM cleaner referencing API 33; enabled UniFFI's Android-specific cleaner configuration and its required AndroidX annotations 1.9.1 / `android.useAndroidX` flag, preserving minSdk 29 and the NewApi lint gate. Final local `:app:testDebugUnitTest :app:lintDebug` passed (32 tasks, 13 executed).
 - Full-feature cargo-deny passed advisories, licenses, versions and sources. Expected unused baseline license allowances remain warnings.
 - Ticketboard validation, actionlint 1.7.7 (without shellcheck) and `git diff --check` passed.
+- [Initial hosted CI](https://github.com/wickesjon/meshChat/actions/runs/34617237786), revision `8c46df19dca4596a1113ed81ec19096e6aba9bdd`: macOS compiled all three Rust iOS targets, ran the Swift FFI lifecycle/binary/error regression successfully, and built the SwiftUI app in Debug and Release for the simulator. Android cross-compilation passed; native Gradle gates need the AndroidX flag follow-up. The final full CI run remains required.
 
 ## Review and merge
 
 - Branch: `ticket/MC-003-sans-io-and-uniffi-foundation`.
-- Review/PR: pending.
+- Review/PR: [PR #5](https://github.com/wickesjon/meshChat/pull/5), published ready for review. A separate gpt-5.6-terra worker at medium effort reviewed `8c46df19dca4596a1113ed81ec19096e6aba9bdd` against `f5acefe4ea201cb7aa4ce6b0c71e1a202b234901` and returned no actionable findings. It reviewed code, scope and evidence without running builds or modifying files. The AndroidX flag follow-up will receive a final review before merge.
 - Squash commit title: `MC-003: Sans-IO and UniFFI foundation`.
 - Completion becomes effective only when the reviewed squash commit lands on main.

@@ -100,8 +100,8 @@ jobs:
           configuration = Path('.work/android/mc005.avd/config.ini')
           lines = [line for line in configuration.read_text().splitlines()
                    if line.partition('=')[0].strip() != 'disk.dataPartition.size']
-          configuration.write_text('\n'.join(lines + ['disk.dataPartition.size=2G']) + '\n')
-          print('Security AVD userdata partition: 2 GiB')
+          configuration.write_text('\n'.join(lines + ['disk.dataPartition.size=6G']) + '\n')
+          print('Security AVD userdata partition: 6 GiB')
           PY
           "$ANDROID_HOME/emulator/emulator" -list-avds
           "$ANDROID_HOME/emulator/emulator" -accel-check || true
@@ -157,6 +157,8 @@ jobs:
           done
       - name: Security probe emulator lifecycle
         run: |
+          python3 -B -m unittest discover -s tests/bench/security -p 'test_*.py' -v
+          python3 -B tests/bench/security/prepare_emulator_disk.py
           source tests/bench/security/emulator.sh
           start_security_emulator
           python3 -B tests/bench/security/run_android_emulator.py --serial emulator-5554

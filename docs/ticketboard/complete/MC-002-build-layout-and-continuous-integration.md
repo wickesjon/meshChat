@@ -3,7 +3,7 @@ id: "MC-002"
 title: "Build layout and continuous integration"
 depends_on: ["MC-001"]
 kind: "foundation"
-branch: "ticket/MC-002-build-layout-and-continuous-integration"
+branch: "ticket/MC-002-closeout"
 ---
 
 # MC-002 — Build layout and continuous integration
@@ -33,7 +33,7 @@ Also permitted: this ticket and generated ticketboard index/diagram changes requ
 - [x] Rust tests, formatting, strict linting and dependency checks pass from a fresh checkout.
 - [x] Android skeleton builds; the macOS job builds the iOS skeleton with recorded SDK/toolchain versions.
 - [x] No generated build output, credentials, or signing material is tracked.
-- [ ] Relevant checks pass, evidence is recorded, required review is complete, and the ticket is squash merged to main.
+- [x] Relevant checks pass, evidence is recorded, required review is complete, and the implementation is squash merged to main through PR #3. The board closeout is staged for its reviewed squash merge.
 
 ## Potential fallbacks
 
@@ -44,7 +44,7 @@ A triggered fallback must be recorded with evidence. It does not authorize weake
 
 ## Evidence
 
-MC-002 is in review. The signing review fix below awaits its hosted rerun and user re-review; squash merge remains pending.
+MC-002 implementation was accepted by the user and squash merged through PR #3. This closeout stages complete board status and records the user's new review workflow; board completion takes effect when the closeout lands on main.
 
 - Baseline verified against remote main: `8346be06e4bcce39e1779e0f0d3982cd508dc39b`; MC-001 is complete. The checkout was clean before branch creation.
 - Added an unpublished, dependency-free Rust workspace; Rust 1.85.1, edition 2024, inherited `unsafe_code = "forbid"`, release overflow checks, and a committed lockfile. MC-003 owns the first core API and behavior tests; MC-002 does not introduce placeholder protocol functions or meaningless unit tests.
@@ -71,9 +71,14 @@ Reproduce from the repository root with Rust 1.85.1 installed: set `CARGO_HOME`,
 
 ## Review and merge
 
-- User P1 review fix: removed `CODE_SIGNING_ALLOWED = NO` from both checked-in iOS target configurations so developer signing can be configured for MC-004 physical iPhone work. The existing CI `xcodebuild` command retains its unsigned-build override. Local inspection confirms the override exists only in CI; ticketboard validation and `git diff --check` passed. Hosted simulator builds will rerun on this revision; physical-device signing/deployment is not claimed.
+- User accepted the signing correction and merged [PR #3](https://github.com/wickesjon/meshChat/pull/3) at 2026-09-11T15:10:20Z. Squash commit `769619eefd06f4210b9f677042262a4da3cbe971` has one parent, `8346be06e4bcce39e1779e0f0d3982cd508dc39b`.
+- [Final implementation CI](https://github.com/wickesjon/meshChat/actions/runs/34613945949), head `61ff26260168a2f4e36c9196e533fef4b4264ed2`: all four jobs passed, including both unsigned iOS simulator configurations after the signing fix. No physical-device signing/deployment result is claimed.
+- Explicit scope addition for this closeout: the user's 2026-09-11 instruction to establish the ongoing ready-PR / Terra-medium review / wait / fix / squash-merge / continue workflow authorizes its persistent rules in `AGENTS.md`. No production changes are included.
+- Closeout branch: `ticket/MC-002-closeout`; [PR #4](https://github.com/wickesjon/meshChat/pull/4). A separate gpt-5.6-terra worker at medium effort reviewed `9a8b73cd4db1f1f2b07da0166494b06610e40716` against main `769619eefd06f4210b9f677042262a4da3cbe971` and returned no findings. It independently confirmed whitespace checks, ticketboard validity and all 12 tests. This follow-up records that review without changing implementation or policy.
+
+- User P1 review fix: removed `CODE_SIGNING_ALLOWED = NO` from both checked-in iOS target configurations so developer signing can be configured for MC-004 physical iPhone work. The existing CI `xcodebuild` command retains its unsigned-build override. Local inspection confirms the override exists only in CI; ticketboard validation and `git diff --check` passed. The hosted simulator rerun passed as recorded above; physical-device signing/deployment is not claimed.
 
 - Branch: `ticket/MC-002-build-layout-and-continuous-integration`.
-- Review/PR: [PR #3](https://github.com/wickesjon/meshChat/pull/3); review pending.
+- Review/PR: [PR #3](https://github.com/wickesjon/meshChat/pull/3); user review accepted by merge. Closeout Terra review returned no findings as recorded above.
 - Squash commit title: `MC-002: Build layout and continuous integration`.
 - Completion becomes effective only when the reviewed squash commit lands on main.

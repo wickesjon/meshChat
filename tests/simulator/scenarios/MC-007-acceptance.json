@@ -68,6 +68,7 @@
     "max_work_units_per_item": 8,
     "pass": {"selected_nonmatching_item_delivery_ratio": 1.0, "ordered_terminal_received": true, "completion_seconds_max": 120, "resource_cap_violations": 0},
     "fixture_status": "1024-byte sizing envelope is arithmetic-only; actual signed556 and final MC-008 encrypted fixtures required for codec/crypto gates",
+    "fixed_selection_fixtures": "MC-007-sync-fixtures.json",
     "variants": ["empty", "nine-items-budget-marker", "mixed-channels", "fixed-bloom-false-positive-repeat", "cache-insert", "cache-evict", "reorder", "conflicting-sequence", "gap-timeout", "stale-cursor", "new-link-stale-response"]
   },
   "adversarial": {

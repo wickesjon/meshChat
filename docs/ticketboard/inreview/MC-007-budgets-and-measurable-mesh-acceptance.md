@@ -52,11 +52,13 @@ Evidence state is **specified**, with arithmetic and scenario-definition checks 
 
 The approved correction already withdrew the unsupported 95-of-100-in-30-seconds and absolute 0.3-relays/node/message targets. This decision selects an eight-item/8192-byte/120-second workload without relaxing ingress. It follows the ticket's explicit fallback to report actual suppression cost, including zero, while preserving reachable delivery: three-fragment transfers paced at one frame/second can outlast the 400ms hold-off, so a universal positive saving cannot be inferred. No physical evidence or security gate is waived. Persistent schema/disk limits remain MC-018; live protocol memory is bounded here.
 
-Validation: both scenario/worksheet commands pass, ticketboard write/default validation and `git diff --check` pass. Required separate Terra medium review and final CI remain pending before merge.
+Validation: both scenario/worksheet commands pass, ticketboard write/default validation, all 12 ticketboard unit tests and `git diff --check` pass. Separate Terra medium review [5184122599](https://github.com/wickesjon/meshChat/pull/9#pullrequestreview-5184122599) at `2bb55b97f874a6361465af39eba6baa95395eb00` requested concrete mixed-channel and deterministic-Bloom fixtures. Versioned inputs now fix subscriptions, held IDs, all Bloom bytes, selected/omitted IDs, pages and display outcomes; the validator recomputes the filter and verifies every expected selection, including the repeated false-positive omission of ID 525. Follow-up review remains required.
+
+CI run [34656577104](https://github.com/wickesjon/meshChat/actions/runs/34656577104) could not start any of its four jobs because account-level Actions runner availability is blocked. No CI steps executed. Local checks are not a substitute for the required CI gate; this ticket remains inreview and cannot merge until runner availability is restored and final CI passes.
 
 ## Review and merge
 
 - Branch: `ticket/MC-007-budgets-and-measurable-mesh-acceptance`.
-- Review/PR: pending.
+- Review/PR: [PR #9](https://github.com/wickesjon/meshChat/pull/9); actual separate Terra medium reviews are recorded there. This is not an independent cryptographic/security assessment.
 - Squash commit title: `MC-007: Budgets and measurable mesh acceptance`.
 - Completion becomes effective only when the reviewed squash commit lands on main.

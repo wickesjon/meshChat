@@ -79,7 +79,7 @@ jobs:
           distribution: temurin
           java-version: 17.0.15+6
           settings-path: ${{ github.workspace }}/.work/maven
-      - name: Start isolated security emulator
+      - name: Prepare isolated security emulator
         run: |
           mkdir -p .work/emulator-sdk/cmdline-tools/latest .work/android/avd .work/tmp .work/java-home
           export TMPDIR="$PWD/.work/tmp"
@@ -97,10 +97,6 @@ jobs:
             --package 'system-images;android-29;default;x86_64' --path "$PWD/.work/android/mc005.avd"
           "$ANDROID_HOME/emulator/emulator" -list-avds
           "$ANDROID_HOME/emulator/emulator" -accel-check || true
-          source tests/bench/security/emulator.sh
-          start_security_emulator
-          stop_security_emulator
-
       - name: Build Rust library and Kotlin bindings
         run: |
           mkdir -p "$CARGO_HOME" "$RUSTUP_HOME" .work/tmp

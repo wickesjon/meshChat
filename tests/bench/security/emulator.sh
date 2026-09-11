@@ -9,7 +9,7 @@ start_security_emulator() {
   export TMPDIR="$PWD/.work/tmp"
   security_acceleration=off
   if [ -r /dev/kvm ] && [ -w /dev/kvm ]; then security_acceleration=on; fi
-  "$ANDROID_HOME/emulator/emulator" -avd mc005 -port 5554 -no-window -no-audio \
+  "$ANDROID_HOME/emulator/emulator" -avd mc005 -port 5554 -wipe-data -no-window -no-audio \
     -no-boot-anim -no-snapshot -gpu swiftshader -accel "$security_acceleration" \
     > .work/emulator.log 2>&1 &
   security_emulator_pid=$!
@@ -17,21 +17,27 @@ start_security_emulator() {
   "$ANDROID_HOME/platform-tools/adb" start-server
   security_boot_deadline=$((SECONDS + 600))
   security_booted=false
+  security_ready_samples=0
   while [ "$SECONDS" -lt "$security_boot_deadline" ]; do
     if ! kill -0 "$security_emulator_pid" 2>/dev/null; then exit 1; fi
     security_boot_state=$(timeout 5 "$ANDROID_HOME/platform-tools/adb" -s emulator-5554 shell getprop sys.boot_completed 2>/dev/null | tr -d '\r' || true)
     security_package_state=$(timeout 5 "$ANDROID_HOME/platform-tools/adb" -s emulator-5554 shell service check package 2>/dev/null || true)
     security_activity_state=$(timeout 5 "$ANDROID_HOME/platform-tools/adb" -s emulator-5554 shell service check activity 2>/dev/null || true)
-    if [ "$security_boot_state" = 1 ] && [[ "$security_package_state" == *": found"* ]] && [[ "$security_activity_state" == *": found"* ]]; then
-      security_booted=true
-      break
+    if [ "$security_boot_state" = 1 ] && [[ "$security_package_state" == *": found"* ]] && [[ "$security_activity_state" == *": found"* ]] &&
+      timeout 15 "$ANDROID_HOME/platform-tools/adb" -s emulator-5554 shell input keyevent 224 &&
+      timeout 15 "$ANDROID_HOME/platform-tools/adb" -s emulator-5554 shell input keyevent 82; then
+      security_ready_samples=$((security_ready_samples + 1))
+      if [ "$security_ready_samples" -ge 2 ]; then
+        security_booted=true
+        break
+      fi
+    else
+      security_ready_samples=0
     fi
     sleep 2
   done
   if [ "$security_booted" != true ]; then exit 1; fi
-  "$ANDROID_HOME/platform-tools/adb" -s emulator-5554 shell input keyevent 224
-  "$ANDROID_HOME/platform-tools/adb" -s emulator-5554 shell input keyevent 82
-  echo "Security emulator booted with package/activity services; hardware acceptance remains separate"
+  echo "Security emulator ready after two service/wake checks; hardware acceptance remains separate"
   trap - EXIT
 }
 

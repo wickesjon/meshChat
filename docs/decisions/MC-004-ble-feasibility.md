@@ -1,12 +1,14 @@
-# MC-004 physical BLE measurement plan
+# MC-004 retained physical BLE measurement plan
 
 State: procedure and probe source prepared. Android Debug/Release assembly and strict lint, plus iOS Debug/Release simulator and device SDK compilation, passed in hosted CI at `8a148b1aa28ecdd95523b79607d7a0678c8f4b5d` ([run 34627732316](https://github.com/wickesjon/meshChat/actions/runs/34627732316), all four jobs passed). No device execution, measured capacity or supported-platform decision is claimed.
+
+The user replaced MC-004 physical acceptance with the [online feasibility decision](MC-004-online-feasibility.md) on 2026-09-11. This procedure is retained for MC-025/MC-027 physical validation and does not block MC-004 completion. Its measurement requirements remain applicable when those later gates run.
 
 ## Required access and inventory
 
 The required Android/Android, Android/iOS and iOS/iOS cases need two physical Android phones, two physical iPhones, and a Mac with Xcode and development signing access. Record model, OS/build, supported ABI, Android page size where applicable, app commit/build, and Xcode/SDK versions. Use anonymous bench labels A1/A2/I1/I2; do not commit serial numbers, Bluetooth addresses, private keys or signing material. Device availability and Mac access are awaiting user input.
 
-The baseline project targets Android API 29+ and iOS 15+, but those build settings are not evidence of supported physical devices. Missing minimum-OS coverage remains an explicit matrix gap. Simulators and hosted compilation do not close this ticket.
+The baseline project targets Android API 29+ and iOS 15+, but those build settings are not evidence of supported physical devices. Missing minimum-OS coverage remains an explicit matrix gap. Simulators and hosted compilation do not establish physical support; MC-004 now has the separately approved online acceptance criteria.
 
 ## Probe implementation contract
 
@@ -41,13 +43,13 @@ Android 12+ uses runtime scan, advertise and connect permissions. The `neverForL
 
 Apple documents different background scan/advertising behavior and limited wake time. Test discovery separately from an already-established connection, and record background modes and actual process state. Do not infer background Android discovery of an iOS advertiser from foreground success. Source: [Core Bluetooth background processing](https://developer.apple.com/library/archive/documentation/NetworkingInternetWeb/Conceptual/CoreBluetooth_concepts/CoreBluetoothBackgroundProcessingForIOSApps/PerformingTasksWhileYourAppIsInTheBackground.html).
 
-These are planning inputs, not the final permission ruling or proof of current hardware behavior.
+The [online decision](MC-004-online-feasibility.md) now selects the permission policy. These sources and the policy are not proof of current hardware behavior.
 
 ## Evidence and completion
 
 For each run retain: run ID, bench labels, device/OS/build inventory, source commit, role direction, start/end monotonic times, requested and observed lifecycle state, permissions, reported and measured capacities, sent/received/error counts, bounded trace path, reproduction steps and outcome. Separate API enqueue acceptance, transport callbacks and receiver observation.
 
-Commit reviewed sanitized reports alongside this decision under `docs/decisions/`; reserve `tests/bench/` for reproducible harnesses or synthetic inputs. Keep raw temporary captures inside ignored repository paths. Do not fill missing outcomes with zeros or simulation. MC-004 stays incomplete until real results establish the permission decision and supported matrix; MC-006/007 remain blocked until its reviewed squash merge.
+Commit reviewed sanitized reports alongside this decision under `docs/decisions/`; reserve `tests/bench/` for reproducible harnesses or synthetic inputs. Keep raw temporary captures inside ignored repository paths. Do not fill missing outcomes with zeros or simulation. MC-004 completion uses the approved online decision; MC-006/007 remain blocked until its reviewed squash merge. Later physical reports establish tested support and may require revising the development matrix.
 
 ## Build and run the prepared probes
 
@@ -77,4 +79,4 @@ On Android grant permissions, start the foreground service, and separately selec
 
 Enable two-second traffic before background/lock measurements. Inbound delivery is the evidence; API enqueue and callbacks alone do not prove reception. Record the source commit and device inventory alongside each copied sanitized report. A report with dropped rows or state restoration cannot be presented as a complete uninterrupted trace. Android revocation stops the engine: copy its report, stop the service, grant permission and start a fresh session to test recovery. iOS Stop removes services/advertising but its peer owns inbound disconnect.
 
-No supported matrix or final Android permission ruling is selected until the physical runs are reviewed.
+The online decision selects the development matrix and Android permission policy. Physical certification and measured performance remain deferred to the later radio gates.

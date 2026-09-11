@@ -48,7 +48,7 @@ Only populated documentation/test directories are created in MC-001. Implementat
 | Track | Tickets | Outcome |
 |---|---|---|
 | Governance | MC-001 | Rules, corrected design, complete ticket graph |
-| Foundations and evidence | MC-002–MC-005 | Reproducible builds, FFI, physical BLE and protected-storage evidence |
+| Foundations and evidence | MC-002–MC-005 | Reproducible builds, FFI, documented BLE feasibility and protected-storage evidence |
 | Blocking decisions | MC-006–MC-008 | Exact wire grammar, feasible budgets/metrics, reviewed crypto choice |
 | Base core | MC-009–MC-016 | Codec, reassembly, channels, simulator, ingress, relay and SYNC; base freeze |
 | Identity and security | MC-017–MC-022 | Protected identity/storage, friends, DMs, organizer trust; full-wire freeze |
@@ -66,7 +66,7 @@ No reliable calendar critical path can be claimed before feasibility evidence an
 
 Every ticket carries its implementation scope, exit criteria and conditional fallbacks. Tests are added alongside each implementation; MC-036 aggregates them rather than postponing security until release.
 
-- Base freeze requires real link evidence, exact vectors and the feasible workload defined by MC-007.
+- Base freeze requires the approved MC-004 online feasibility/permission evidence, explicit transport assumptions and refusal cases, exact vectors and the feasible workload defined by MC-007. The user replaced the early MC-004 physical gate on 2026-09-11; this is not physical certification. MC-025/MC-027 and release field gates still require actual devices. MC-005 protected-storage evidence is unchanged.
 - Full-wire freeze requires authenticated negative vectors, lifecycle checks and independent crypto review.
 - Radio gates require named physical devices/OS versions and retained measurement methods.
 - Release requires both applications, independent integrated assessment, predeclared scale targets and actual store outcomes.

@@ -31,6 +31,10 @@ These instructions apply to the entire meshChat repository.
 
 ## Review and squash merge to main
 
+- Publish PRs ready for review, not as drafts. After creating each PR, start a separate `gpt-5.6-terra` worker with `medium` reasoning effort to review its diff, ticket requirements and evidence.
+- Wait for the review worker to complete using completion notification/wait; do not poll its status. Address its findings and obtain a follow-up review when substantive fixes require it. Record the actual review outcome and reviewed revision in the ticket or PR; do not treat CI as review.
+- The user authorizes publishing ticket branches/PRs, addressing review findings, squash merging once all required gates and review pass, and continuing to the next dependency-ready ticket. This does not waive scope boundaries, physical-device evidence or separately required independent security assessments.
+
 - A ticket is ready for merge only when implementation details and measurable exit criteria are satisfied, all relevant checks pass, applicable security gates pass, dependencies are complete and required review is recorded.
 - Run `git diff --check` and ticketboard validation for documentation changes. For code, run the relevant component tests, formatting/lint/build checks and the active security gates. Do not invent passing hardware or external-review evidence.
 - The author/agent must not fabricate independent review. Use a review artifact or explicit user review; independently required security assessments remain separate gates.

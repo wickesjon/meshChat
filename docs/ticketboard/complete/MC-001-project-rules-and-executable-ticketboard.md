@@ -3,7 +3,7 @@ id: "MC-001"
 title: "Project rules and executable ticketboard"
 depends_on: []
 kind: "docs"
-branch: "ticket/MC-001-project-planning"
+branch: "ticket/MC-001-closeout"
 ---
 
 # MC-001 — Project rules and executable ticketboard
@@ -32,8 +32,8 @@ Also permitted: this ticket and generated ticketboard index/diagram changes requ
 
 - [x] Every approved review finding maps to a design correction or a blocking decision ticket.
 - [x] All ticket IDs, links, dependencies, workflow locations, and the generated diagram validate; the graph is acyclic.
-- [ ] git diff --check passes; review the documentation diff before squash merging.
-- [ ] Relevant checks pass, evidence is recorded, required review is complete, and the ticket is squash merged to main.
+- [x] git diff --check passes; the user accepted the planning change by merging PR #1.
+- [x] Relevant checks pass and implementation is merged to main via PR #1. The user used a regular merge; the exception is recorded below without rewriting history. Subsequent tickets retain the squash-merge requirement.
 
 ## Potential fallbacks
 
@@ -48,13 +48,17 @@ A triggered fallback must be recorded with evidence. It does not authorize weake
 - Branch confirmed: `ticket/MC-001-project-planning`.
 - `python -B tests/ticketboard/validate.py`: passed; 42 tickets, 99 dependencies, acyclic graph and current generated files.
 - `python -B -m unittest discover -s tests/ticketboard -v`: 12 tests passed (cycle/missing/self/duplicate dependencies, branch/metadata/section checks, edge direction, bounded paths and generation).
-- `git diff --check`: passed; final reviewer approval and squash merge remain pending.
+- `git diff --check`: passed before publication and at closeout.
 - Fallback used: sandbox Git metadata writes remained denied despite granted permissions; the user ran the baseline/branch setup in their own terminal before any planning edits.
-- User approved the proposed scope on 2026-09-11; final diff review remains pending.
+- User approved the proposed scope on 2026-09-11 and merged [PR #1](https://github.com/wickesjon/meshChat/pull/1) at 2026-09-11T13:53:19Z.
+- Published planning commit: `b225054c7d1d3e80b59bb3e36a50198694eb6402`.
+- Main merge commit: `024b9aaac73cc7b903472065efd5a711ce46121b`. Its two parents confirm a regular merge, not a squash. Preserve this user-created history as a recorded one-time deviation; this is not a change to the ongoing merge rule.
+- Local synchronization: all 54 working-file blob hashes matched merged origin/main after line-ending normalization; local main/index were aligned without changing working-file contents, and clean status was verified before the closeout branch.
 
 ## Review and merge
 
-- Branch: `ticket/MC-001-project-planning`.
-- Review/PR: pending.
+- Implementation branch: `ticket/MC-001-project-planning`.
+- Closeout branch: `ticket/MC-001-closeout`.
+- Review/PR: [PR #1, merged](https://github.com/wickesjon/meshChat/pull/1). The closeout branch only records the completed work and refreshes the board.
 - Squash commit title: `MC-001: Project rules and executable ticketboard`.
-- Completion becomes effective only when the reviewed squash commit lands on main.
+- Implementation completion is evidenced by PR #1 on main, with the merge-method deviation above. The board status change becomes visible on main when the closeout PR lands; future ticket completion requires squash merge.

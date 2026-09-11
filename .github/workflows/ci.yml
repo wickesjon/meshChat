@@ -99,6 +99,14 @@ jobs:
           cat "$ANDROID_HOME/build-tools/35.0.0/source.properties"
           bash gradlew --version
           bash gradlew --no-daemon :app:assembleDebug :app:assembleRelease :app:lintDebug :app:testDebugUnitTest
+      - name: Verify packaged native libraries
+        run: |
+          python3 -B tests/integration/ffi/check_android_apk.py \
+            src/android/app/build/outputs/apk/debug/app-debug.apk \
+            src/android/app/build/outputs/apk/release/app-release-unsigned.apk
+          for apk in src/android/app/build/outputs/apk/*/*.apk; do
+            "$ANDROID_HOME/build-tools/35.0.0/zipalign" -c -P 16 4 "$apk"
+          done
 
   ios:
     runs-on: macos-15

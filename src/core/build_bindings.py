@@ -47,6 +47,10 @@ def main():
             run('rustup', 'target', 'add', target)
             env = os.environ.copy()
             env['CARGO_TARGET_' + target.upper().replace('-', '_') + '_LINKER'] = str(compiler_dir / compiler)
+            env['CARGO_TARGET_' + target.upper().replace('-', '_') + '_RUSTFLAGS'] = (
+                '-C link-arg=-Wl,-z,max-page-size=16384 '
+                '-C link-arg=-Wl,-z,common-page-size=16384'
+            )
             run('cargo', 'build', '--locked', '--lib', '--release', '--target', target, env=env)
             destination = OUT / 'android' / abi
             destination.mkdir(parents=True, exist_ok=True)

@@ -22,7 +22,7 @@ After edits run `python tests/ticketboard/validate.py --write`; then run `python
 | [MC-003](complete/MC-003-sans-io-and-uniffi-foundation.md) | Sans-IO and UniFFI foundation | complete | MC-002 |
 | [MC-004](complete/MC-004-two-platform-ble-and-permission-feasibility.md) | Two-platform BLE and permission feasibility | complete | MC-003 |
 | [MC-005](complete/MC-005-platform-key-and-encrypted-store-feasibility.md) | Platform key and encrypted-store feasibility | complete | MC-003 |
-| [MC-006](backlog/MC-006-canonical-wire-and-discovery-contract.md) | Canonical wire and discovery contract | backlog | MC-004 |
+| [MC-006](inreview/MC-006-canonical-wire-and-discovery-contract.md) | Canonical wire and discovery contract | inreview | MC-004 |
 | [MC-007](backlog/MC-007-budgets-and-measurable-mesh-acceptance.md) | Budgets and measurable mesh acceptance | backlog | MC-004, MC-006 |
 | [MC-008](backlog/MC-008-reviewed-dm-and-trust-contract.md) | Reviewed DM and trust contract | backlog | MC-005 |
 | [MC-009](backlog/MC-009-logical-packet-codec-and-golden-vectors.md) | Logical packet codec and golden vectors | backlog | MC-003, MC-006 |

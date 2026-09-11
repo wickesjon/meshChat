@@ -30,9 +30,9 @@ Also permitted: this ticket and generated ticketboard index/diagram changes requ
 
 ## Exit criteria
 
-- [ ] Independent readers can determine exact bytes and parser behavior for every v1 packet, QR bundle and flag combination.
-- [ ] Every supported packet fits the selected capacity/fragment limits or has a documented explicit refusal case.
-- [ ] No pin/cosmetic field is described without a byte position and authentication rule; unresolved crypto choices remain blocked on MC-008 before MC-020.
+- [x] Independent readers can determine exact bytes and parser behavior for every v1 packet, QR bundle and flag combination.
+- [x] Every supported packet fits the selected capacity/fragment limits or has a documented explicit refusal case.
+- [x] No pin/cosmetic field is described without a byte position and authentication rule; unresolved crypto choices remain blocked on MC-008 before MC-020.
 - [ ] Relevant checks pass, evidence is recorded, required review is complete, and the ticket is squash merged to main.
 
 ## Potential fallbacks
@@ -44,7 +44,13 @@ A triggered fallback must be recorded with evidence. It does not authorize weake
 
 ## Evidence
 
-Not implemented. Record commands, versions, reproducible inputs and results here. For manual/hardware checks include device/OS, duration and report paths. No test or review is claimed yet.
+Started from main `05596059e779fe5db6f0c88b165f1c882627de9e`, with MC-004 complete and MC-005 squash-merged as PR #7. The [normative contract](../../decisions/MC-006-wire-contract.md), matching design updates and [vector conventions](../../../tests/vectors/README.md) specify the base formats and explicit MC-008 extension boundaries. The first criterion covers the base contract together with those declared crypto blockers; no encrypted-envelope, exact crypto-domain or fresh-proof decision is claimed complete here.
+
+Decisions: one frame per value, 146–512-byte directional admission, explicit type/flag and reserved-field matrix, bounded conflict-aborting reassembly, four production UUIDs and a 54-byte whole-only HELLO, proof-gated duplicate consolidation preserving asymmetric links, exact QR bundles/URI rules, four cosmetic bytes and five organizer pin bytes with authentication coverage. SYNC_REQ now carries a requester-owned session ID (520-byte payload, 546 logical) so delayed responses cannot bind to a later request; explicit zero-blob page/session markers resolve empty and budget-ended responses. The decision documents pre-freeze compatibility consequences. No product fallback, physical-evidence waiver or scope expansion was used.
+
+Evidence state is **specified**. Python 3.14 standard-library arithmetic checks pass for four structural frame lengths, reaction reassembly, all 17 size/fragment worksheet rows, the 146-byte floor and the three public-channel SHA-256 IDs. The vector README contains the reproducible structural/count check. These are document checks, not a working codec, cryptographic verification or measured device support. MC-008/MC-022 retain crypto extension/review gates; MC-007 retains budgets and measured acceptance.
+
+Validation: `python -B tests/ticketboard/validate.py --write`, default validator, all 12 ticketboard unit tests and `git diff --check` pass. Required separate Terra review and final CI remain pending before merge.
 
 ## Review and merge
 

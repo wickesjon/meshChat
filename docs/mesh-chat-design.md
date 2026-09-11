@@ -1,6 +1,6 @@
 # Detailed Design Document — Offline BLE Mesh Chat
 **Working name: "Meshfest" (placeholder)**
-Version 0.4 — Approved implementation review; decisions pending evidence
+Version 0.5 — Canonical base wire specified; crypto and budget decisions pending
 
 ---
 
@@ -25,12 +25,12 @@ This revision incorporates the approved review of the design and original implem
 
 | Owner | Required decision |
 |---|---|
-| MC-006 | Exact frame/type/flag matrix, concrete UUIDs, control-packet hop scope, supported capacity, duplicate-link handshake, fragment conflict rules, empty/session-complete SYNC encoding, event QR format, organizer pin fields and cosmetic layout |
+| MC-006 | Specified in the normative [canonical wire contract](decisions/MC-006-wire-contract.md): framing, capacity, discovery, reassembly, SYNC, QR, pin and cosmetic fields; crypto extension points remain owned by MC-008 |
 | MC-007 | Consistent budgets and memory ceilings; SYNC eligible-set selection and time target; cursor/session expiry; cache-age/TTL policy; topology/loss/traffic seeds and delivery/latency/battery acceptance |
 | MC-008 | Selected DM construction and library, exact encrypted plaintext/padding and authenticated header encoding, signature domain encodings, replay policy, friend presence freshness and key-change states |
 | MC-018 | Persistent versus transient data model, trust provenance, encrypted DB/key lifecycle, migration/reset and pruning |
 
-MC-006 defines base framing and identifies crypto extension points; MC-008 resolves the crypto construction. Both must be resolved before MC-020, and the final combined layouts must pass MC-022 before full-wire freeze. Missing organizer pin or cosmetic bytes must not be invented in UI implementation.
+The [MC-006 contract](decisions/MC-006-wire-contract.md) is normative for base framing, field offsets, type/flag validation and discovery. MC-008 resolves its explicitly blocked encrypted-envelope, signature-domain and fresh-proof extensions. Both decisions must be resolved before MC-020, and the final combined layouts must pass MC-022 before full-wire freeze. UI implementation must use the specified organizer pin and cosmetic bytes; a signature coverage requirement alone is not a passed cryptographic review.
 
 ### 0.3 Validation evidence and external prerequisites
 
@@ -86,37 +86,19 @@ There is no server, no account system, no internet dependency at any point in no
 
 ### 2.1 Design constraints & two-layer grammar
 
-The protocol has **two layers with distinct sizes and distinct headers** (round-two R2.2, round-three R2). The outer *frame* is what a link sends; the inner *logical packet* is what the mesh reasons about.
+The normative [MC-006 wire contract](decisions/MC-006-wire-contract.md) defines every base field offset, exact length, reserved-field rule and refusal case. All integers are big-endian; a GATT value is exactly one outer frame, without batching or trailing bytes.
 
-**Outer frame header (4 bytes, on every GATT write, at a stable offset — finding R2):**
-
-| Offset | Size | Field | Notes |
-|---|---|---|---|
-| 0 | 1 | `frame_kind` | `0x00` = whole logical packet · `0x01` = fragment of a logical packet · `0x02` = whole **transport object** (link-local, not mesh traffic) · `0x03` = fragment of a transport object. The **stable discriminator** — a receiver never inspects an inner header to classify a frame. |
-| 1 | 1 | `frame_flags` | reserved, 0 |
-| 2 | 2 | `frame_len` | Byte length of the frame body that follows (≤ link slice capacity) |
-
-- **Link slice capacity is derived at runtime, not assumed.** A sender computes usable bytes from the negotiated MTU: iOS via `maximumWriteValueLength(for: .withoutResponse)`, Android from negotiated MTU − ATT overhead. The max frame size is **per-link and per-direction**; notification limits are obtained independently. MC-006 defines the admission floor and refusal cases. The 182-byte value at MTU 185 is an arithmetic example, not a measured or guaranteed platform minimum.
-- **Logical-packet fragments** (`0x01`) use the 14-byte envelope of §2.4; slice capacity = `link_write_len − 4 − 14` ≈ **164 bytes at a 182-byte link**.
-- **`MAX_LOGICAL_PACKET_BYTES = 1024`, `MAX_FRAGMENTS = 8`.** At the 164-byte floor, 8 fragments carry 1312 bytes — above the cap with margin. A logical packet needing > 8 fragments at current capacity is refused at the sender.
-- **Transport objects** (`0x02`/`0x03`) are link-local constructs that are **never relayed and never enter the mesh pipeline** — currently only SYNC_ITEM (§2.6). They have their own envelope and their own size ceiling (`MAX_TRANSPORT_OBJECT_BYTES = 1200`, ≥ `MAX_LOGICAL_PACKET_BYTES` + container overhead, so any storable logical packet fits inside one), and they are **not** subject to `MAX_LOGICAL_PACKET_BYTES` or `MAX_FRAGMENTS` (finding R5.1 — the previous text told SYNC to borrow logical fragmentation, which was impossible because that envelope requires a logical `msg_id` and caps at 1024).
-
-**Transport-object fragment envelope (12 bytes, used with `frame_kind = 0x03`):**
-
-| Field | Size | Notes |
+| Offset | Size | Field |
 |---|---|---|
-| `obj_type` | 1B | `0x01` = SYNC_ITEM (§2.6). Own namespace, independent of the logical `type` table. |
-| `transfer_id` | 2B | Random per transport-object transfer on this link; the reassembly key (no `msg_id` involved) |
-| `frag_index` | 1B | 0-based |
-| `frag_count` | 1B | 1–16 (`MAX_TRANSPORT_FRAGMENTS`) |
-| `total_len` | 2B | Byte length of the complete reassembled transport object, ≤ `MAX_TRANSPORT_OBJECT_BYTES` |
-| `reserved` | 5B | 0 |
+| 0 | 1 | `frame_kind`: `0x00` whole logical, `0x01` logical fragment, `0x02` whole transport, `0x03` transport fragment |
+| 1 | 1 | `frame_flags`: zero; reject nonzero values |
+| 2 | 2 | `frame_len`: exactly the remaining body bytes |
 
-A whole transport object (`0x02`) carries `obj_type` (1B) then the object body. Reassembly key is **(arrival link, `obj_type`, `transfer_id`)**; incomplete transfers expire after 30s; per-link concurrency cap 4, global 32.
+Compute capacity independently per direction: `C = min(local native TX limit, peer HELLO RX limit, 512)`. Query write and notify limits separately. Both directions must admit **146 bytes**, giving `146 − 4 − 14 = 128` logical slice bytes and `8 × 128 = 1024`. A smaller or unknown capacity refuses ordinary traffic explicitly. No online or arithmetic result certifies a physical device. The prior 182-byte value remains only an example, with 164-byte logical slices.
 
-**Version byte encoding (finding R2 correction):** `version` is a **single integer**, currently `0x01`. There is *no* nibble split — the round-two "major high nibble / minor low nibble" text was self-contradictory (it would make v1 = `0x10`) and is withdrawn. Forward compatibility is handled by type/flag tolerance (§2.8); an incompatible revision takes the next integer (`0x02`).
+Logical packets are 26–1,024 bytes, with at most eight logical fragments. Transport object bodies have an absolute 1,200-byte ceiling and at most sixteen fragments, with tighter known-type limits. Whole transport is `object_type:u8 || body`; fragmented transport repeats the type in its 12-byte envelope, and `total_len` excludes that type byte. SYNC_ITEM is transport type `0x01`; HELLO is `0x02`, exactly 54 body bytes and whole-only. Other transport types reject until explicitly allocated; transport objects never become mesh traffic themselves.
 
-Big-endian throughout. Advertisements carry only the service UUID (§2.5.1). A CHAT packet (≤ 334 bytes) is 1 whole frame at high MTU or 3 logical fragments at the floor; a SYNC_REQ (~542-byte logical) is ~4 logical fragments; a SYNC_ITEM carrying a max-size stored packet is ~7 transport fragments.
+The [contract's envelopes and reassembly rules](decisions/MC-006-wire-contract.md#2-outer-frames-and-reassembly) define logical 14-byte and transport 12-byte envelopes, duplicate conflicts and bounded allocation. Admission/capacity changes clear stale transfers. A version is a single integer `0x01`, never a nibble split. The [size worksheet](decisions/MC-006-wire-contract.md#8-compatibility-size-proof-and-evidence) accounts for whole/fragment overhead and the new pin, cosmetic and request-session fields.
 
 ### 2.2 Packet header (26 bytes fixed)
 
@@ -125,43 +107,37 @@ Big-endian throughout. Advertisements carry only the service UUID (§2.5.1). A C
 | 0 | 1 | `version` | Protocol version (single integer), currently `0x01`. Compatibility per §2.8 — not a blind drop. |
 | 1 | 1 | `type` | `0x01` CHAT, `0x02` ANNOUNCE (§2.5), `0x03` SYNC_REQ (§2.6), `0x04` **reserved** (was SYNC_BATCH; SYNC responses are transport objects now, §2.1/§2.6 — finding R5.1), `0x05` EVENT_INFO (§17.2), `0x06` REACTION (§2.7), `0x07` CRED_REQ (§17.1), `0x08` CRED_OFFER (§17.1) |
 | 2 | 1 | `flags` | bit0: `encrypted` (payload is a DM authenticated-encryption envelope, §7.5) · bit1: `signed` · bit2: `sig_type` (0 = friend signature block §7.4; 1 = organizer credential chain §17.1) · bits 3–7 reserved. **Fragmentation is signaled by the outer `frame_kind` (§2.1), not a flag here.** |
-| 3 | 1 | `ttl` | Hops remaining. Sender sets 7. Decrement before relay; drop at 0. Nodes clamp any received TTL > 7 down to 7 (prevents TTL abuse). |
+| 3 | 1 | `ttl` | Flood origin 7, received flood values above 7 clamp to 7, decrement before relay; live 0 rejects. Direct controls require 1 and never relay. Eligible stored CHAT at 0 is local-only (§2.6). |
 | 4 | 8 | `msg_id` | Random 64-bit ID generated by sender. Dedup key. |
 | 12 | 8 | `sender_id` | First 8 bytes of SHA-256(device Ed25519 public key) — self-certifying fingerprint (see §7.1). |
-| 20 | 4 | `channel_id` | Truncated hash of channel name (see §4.2). |
+| 20 | 4 | `channel_id` | Channel hash (§4.2), except direct controls use 0 and encrypted tags remain MC-008. EVENT_INFO/CRED_OFFER and organizer CHAT use #Event Updates. |
 | 24 | 2 | `payload_len` | Byte length of payload. |
+
+The [type/flag matrix](decisions/MC-006-wire-contract.md#4-logical-envelope-and-type-matrix) is mandatory: masked low-three-bit values are CHAT `{0,1,2,6}`, ANNOUNCE `{0,2}`, REACTION `{0,1}`, and SYNC_REQ/EVENT_INFO/CRED_REQ/CRED_OFFER `{0}`. Reject other known combinations. High reserved bits never skip these checks. ANNOUNCE, SYNC_REQ and CRED_REQ are direct controls with TTL 1 and channel 0; they cannot be forwarded or embedded in history.
 
 ### 2.3 CHAT payload
 
 | Field | Size | Notes |
 |---|---|---|
-| `timestamp` | 4 bytes | Unix seconds, sender's clock. Display-only; never used for ordering logic (clocks drift). |
-| `avatar` | 1 byte | Packed: low nibble = animal index, high nibble = color theme (§10.6). Unknown animal indices render as the generic paw in the sender's color. |
-| `nick_len` | 1 byte | Nickname length **in bytes**, 1–20 (see byte-vs-char note §7.2) |
-| `nickname` | ≤20 bytes | UTF-8, sanitized (no control chars) |
-| `text_len` | 2 bytes | Length of `text` in bytes, ≤280 (finding R3: an explicit length so an appended signature block is unambiguously located; `text` is no longer "the remainder") |
-| `text` | `text_len` bytes | UTF-8, max 280 bytes |
-| *(optional)* signature block | 0 or var | Present iff `flags.signed`; friend block (§7.4) or organizer chain (§17.1) per `flags.sig_type`. Located immediately after `text` using `text_len`. |
+| `timestamp` | 4 | Unix seconds, display hint; never logical ordering |
+| `avatar` | 1 | Packed animal/theme; unknown animal renders generic paw |
+| `nick_len` + `nickname` | 1 + N | N = 1–20 UTF-8 bytes |
+| `cosmetic_flags` + `rgb` | 1 + 3 | Bit0 custom color, bit1 supporter hint; remaining bits sent zero/ignored. Absent custom color sends zero RGB and receivers ignore RGB. |
+| `text_len` + `text` | 2 + T | T = 1–280 UTF-8 bytes |
+| Friend tail, flags `0x02` | 73 or 105 | Friend signature block immediately after text (§7.4) |
+| Organizer tail, flags `0x06` | 5 + block | `pin_state:u8 || pin_expiry:u32` then organizer signature block (§17.1) |
 
-Worst case (unsigned): 26 + 4 + 1 + 1 + 20 + 2 + 280 = **334 bytes** → 3 fragments at the 164-byte floor, or 1 whole frame when the link write length exceeds it. Most real messages fit one frame.
+Unsigned CHAT has no tail. Pin state 0 requires expiry 0; state 1 requires positive expiry; other states reject. Only verified, adopted and unexpired staff/root authority can produce a displayed pin, and pin expiry cannot exceed either credential or root expiry. Pin, cosmetics, length fields and signature metadata must be authenticated as specified by MC-006/MC-008. Anonymous Confessions uses neutral avatar/zero cosmetics and no stable profile association. A supporter hint never proves entitlement or identity.
+
+Maximum unsigned CHAT is **338 bytes**; friend-signed with included key **443**; organizer-signed with included credential and pin fields **556**. Exact offsets and signature coverage are in the [clear-payload contract](decisions/MC-006-wire-contract.md#5-clear-payloads-cosmetics-and-signatures). Encrypted CHAT uses only the MC-008-selected envelope, not this clear layout.
 
 ### 2.4 Fragmentation (transport layer, only when needed)
 
-**Fragmentation is a per-link transport concern, distinct from logical-message identity and dedup.** A fragmented packet is reassembled into its complete logical packet *before* the mesh pipeline of §3.1 — dedup, TTL, signature/AEAD checks, and relay operate only on the reassembled logical packet. Fragments are never relayed as fragments; a node reassembles, then re-fragments per egress link's runtime capacity (§2.1).
+Fragmentation is per-link: reassemble before mesh validation, then re-fragment independently for each egress capacity. The outer kind is the stable discriminator. The [canonical envelope tables](decisions/MC-006-wire-contract.md#2-outer-frames-and-reassembly) are authoritative.
 
-**A receiver identifies a fragment by the outer `frame_kind == 0x01` (§2.1), never by any inner flag** (finding R2). When `frame_kind == 0x01`, the frame body is a 14-byte fragment envelope followed by a raw byte slice of the complete encoded logical packet (header + payload). The reassembler concatenates slices in `frag_index` order and parses the result as one logical packet:
+Logical groups use `(arrival link, frag_msg_id, group)`; transport groups use `(arrival link, object_type, transfer_id)`. Validate count, index, total length, type and nonempty slice bounds before allocation. Matching metadata is required. Identical duplicates have no effect; conflicting duplicates abort the group rather than overwriting bytes. The sum cannot exceed the declared total and must equal it at completion; verify the inner logical msg_id matches the envelope.
 
-| Field | Size | Notes |
-|---|---|---|
-| `frag_msg_id` | 8B | MUST equal the `msg_id` of the enclosed logical packet's header (validated post-reassembly; mismatch ⇒ drop). Reassembly key. |
-| `frag_group` | 2B | Random per fragmentation event; disambiguates concurrent re-fragmentations of the same `msg_id` on one link |
-| `frag_index` | 1B | 0-based |
-| `frag_count` | 1B | Total fragments, 1–8 (`MAX_FRAGMENTS`) |
-| `total_len` | 2B | Byte length of the **complete encoded logical packet** (all slices concatenated), 26–1024; used to pre-size the buffer and reject oversize before allocation |
-
-Reassembly key is **(arrival link, `frag_msg_id`, `frag_group`)** — scoped to the physical link, because fragmentation is hop-by-hop. This closes the spoofed-`frag_group`-collision vector: an attacker on a *different* link cannot collide, and an attacker on the *same* link is a connected peer under §8.1 controls. On completion the node checks `total_len` matches the concatenated length, parses the logical packet, verifies `frag_msg_id == inner.msg_id`, and only then applies §3.1 (including dedup). Fragments whose `frag_msg_id` is already a completed logical message in `seen_cache` are dropped without reassembly.
-
-**Hard resource bounds (see §18-M1):** max **8 concurrent incomplete groups per link** and **64 globally**; on overflow, evict the oldest incomplete group rather than allocating. Buffers pre-sized from validated `total_len`, never grown. Duplicate `frag_index` within a group overwrites. Incomplete groups expire after 30s.
+Logical limits are eight groups per link/64 globally; transport limits four/32. Overflow evicts the oldest incomplete group. Deadline is 30 seconds from the first admitted fragment, never extended by duplicates. Rejected group tracking is bounded separately from accepted-message dedup; an invalid claimed msg_id cannot suppress a later valid packet. MC-007 fixes aggregate bytes and rejected-attempt ceilings before implementation. Disconnect frees link state. Encoders prefer whole form when it fits; decoders also accept valid nonempty alternative partitions.
 
 ### 2.5 ANNOUNCE packet (type `0x02`)
 
@@ -172,20 +148,21 @@ Sent every 30s to each connected peer over the GATT link (never in BLE advertise
 | `timestamp` | 4B | Unix seconds, sender's clock. Present so the friend-signature transcript (§7.4) has a timestamp to bind, and to bound ANNOUNCE replay. |
 | `avatar` | 1B | Packed animal + color (§10.6) |
 | `peer_count` | 1B | Peers this node currently sees — a coarse density hint for §3.4c, **not** a claim about which peers are mutual |
-| `status` | 1B | bits 0–1 battery tier (0 critical <15%, 1 low <40%, 2 normal, 3 charging/full, §3.4d); bit 2 `infra` (fixed relay beacon, §15); bit 3 `supporter` (self-asserted cosmetic, §19.1); bits 4–7 reserved |
+| `status` | 1B | bits 0–1 battery tier (0 critical <15%, 1 low <40%, 2 normal, 3 charging/full); bit 2 `infra`; bits 3–7 sent zero/ignored. Supporter lives only in the cosmetic field. |
 | `nick_len` | 1B | Nickname length in bytes, 1–20 |
 | `nickname` | `nick_len` B | UTF-8, sanitized (§10.2) |
+| `cosmetic_flags` + `rgb` | 4B | Same fixed field as CHAT; covered by any friend signature |
 | `digest_len` | 2B | Length of `digest`, 0 or 256 |
 | `digest` | `digest_len` B | Recent-message Bloom (below); 0-length permitted when the node has nothing recent |
 | *(optional)* friend signature block | 0 or var | Present iff `flags.signed` with `sig_type=0` (§7.4); located after `digest` via `digest_len` |
 
 **Recent-digest Bloom (proposed parameters, MC-007):** covers msg_ids held from the **last 60 seconds** only (not the 15-min cache). `m = 2048` bits (256 bytes), `k = 6`, same double-hash construction and byte/bit order as §2.6 but with `bloom_salt = "meshfest-digest-v1"`. At ≤200 recent items this yields ~2% FPR. Advisory only: a false positive skips one relay to one peer (§3.4a), recovered by flooding or SYNC.
 
-**Signed ANNOUNCE:** authenticated friend presence (§7.4 "Friends nearby") requires ANNOUNCE to be signed; the transcript is the §7.4 canonical friend transcript, which binds `type`, `msg_id`, `sender_id`, `timestamp` (the field above), and `payload-before-signature-block`. ANNOUNCE is **never relayed** (it describes the immediate sender), so its `ttl` is set to 1 and receivers do not forward it.
+**Signed ANNOUNCE:** includes the full signer key on every signed ANNOUNCE and follows the complete MC-006 coverage requirement, with final domains/encoding blocked on MC-008. It authenticates historical content, not fresh direct presence without the MC-008 proof. ANNOUNCE uses TTL 1/channel 0 and is never relayed or stored for SYNC. Maximum unsigned/signed sizes are 316/421 bytes.
 
 ### 2.5.1 Advertisement vs. connection data
 
-BLE advertisements carry **only the service UUID** for discovery. All ANNOUNCE metadata travels over an established GATT connection, because (a) advertisement space is ~31 bytes and cannot hold a 256-byte digest, and (b) iOS strips almost all advertisement payload in the background (§8.4). Discovery is "see the service UUID → connect → exchange ANNOUNCE over GATT." This is a platform-portability requirement, not an optimization.
+BLE advertisements carry **only the service UUID** for discovery. All ANNOUNCE metadata travels over an established GATT connection, because (a) advertisement space is ~31 bytes and cannot hold a 256-byte digest, and (b) iOS strips almost all advertisement payload in the background (§8.4). Discovery is "see the service UUID → connect → subscribe and exchange HELLO → admit directional capacity → exchange ANNOUNCE over GATT." This is a platform-portability requirement, not an optimization.
 
 ### 2.5.2 EVENT_INFO packet (type `0x05`)
 
@@ -203,10 +180,11 @@ Unsigned in v1 (signing it would add no trust, since the root pubkey itself must
 
 When two nodes connect, each offers the other recent history it may be missing.
 
-**SYNC_REQ** (logical packet, type `0x03`, ~542 bytes, fragmented per §2.1/§2.4). Payload:
+**SYNC_REQ** (direct logical packet, type `0x03`, exactly 546 bytes including header). Payload:
 
 | Field | Size | Notes |
 |---|---|---|
+| `session_id` | 2B | Requester-owned, not reused within this link direction; responses echo it |
 | `item_count` | 2B | How many msg_ids the requester's filter represents |
 | `cursor` | 4B | **Pagination cursor (finding R5.2):** `0x00000000` starts a new walk; otherwise the `next_cursor` returned by the previous SYNC_ITEM, requesting continuation |
 | `bloom` | 512B | Filter over msg_ids the requester holds (see below) |
@@ -217,20 +195,22 @@ When two nodes connect, each offers the other recent history it may be missing.
 
 | Field | Size | Notes |
 |---|---|---|
-| `session_id` | 2B | Per SYNC session on this link |
+| `session_id` | 2B | Echoes the active request in this link direction |
 | `seq` | 2B | Item sequence within the session |
-| `flags` | 1B | bit0 `last_in_session`; bit1 `more_available` (walk truncated by budget — requester may continue with `next_cursor`) |
-| `next_cursor` | 4B | Cursor to resume from; meaningful when `more_available` is set |
-| `blob_len` | 2B | Length of `blob`, ≤ `MAX_LOGICAL_PACKET_BYTES` |
-| `blob` | `blob_len` B | The exact stored bytes of one logical packet |
+| `flags` | 1B | Data 0; page-end/more 3; complete 5; budget-end/more/complete 7. Other values reject; see marker rules below. |
+| `next_cursor` | 4B | Nonzero only for flags 3; opaque token bound to this link/session/filter/snapshot |
+| `blob_len` | 2B | Data 26–1024; terminal/page marker 0 |
+| `blob` | `blob_len` B | Exact stored eligible CHAT bytes, or no bytes for a marker |
 
-- **Ordering:** the responder walks its forward-cache **newest-first** (a late joiner wants recent context first, and a truncated walk should yield the most useful messages), skipping msg_ids the requester's Bloom claims present. The cursor encodes the walk position (cache sequence number), so continuation is exact and stable.
+- **Ordering:** the responder walks its forward-cache **newest-first** (a late joiner wants recent context first, and a truncated walk should yield the most useful messages), skipping msg_ids the requester's Bloom claims present. The responder binds opaque cursors to the snapshot position and original request; a cursor is not a trusted raw cache offset. New inserts belong to a later walk; evicted snapshot entries may be skipped.
 - **Dedup identity:** the **embedded `msg_id`** controls dedup — the requester feeds the extracted logical packet into its normal §3.1 pipeline as if received live. `session_id`/`seq` are transport-only and never touch the seen-cache.
 - **TTL:** the embedded packet's TTL is used **as-stored**, then decremented once if the requester relays it onward. SYNC never refreshes TTL (no laundering of expired traffic); stored TTL 0 ⇒ display/store locally, do not relay.
 
+**Explicit completion:** every page ends with one zero-blob marker: flags 3/nonzero cursor means continue this admitted session; flags 5/cursor 0 means complete; flags 7/cursor 0 means budget complete with more available for a later new session. Empty responses are markers at sequence 0, never empty logical packets. Sequence numbers increase across data and markers without wrapping; process all prior sequences before accepting a marker. Identical duplicates are ignored, conflicts abort, and missing sequences remain bounded pending until timeout. Only one walk per link direction is active; continuations repeat session_id, item_count and Bloom. Stale, reused or altered-filter cursors reject. The [SYNC contract](decisions/MC-006-wire-contract.md#6-sync-request-pages-and-completion) defines exact request/response bindings.
+
 **Provisional budgets — require MC-007 reconciliation (§0).** The old "25 items per session" could not deliver the "95% of a 500-message cache" gate (25/500 = 5%; repeating hourly-capped sessions outlived the 15-minute cache). Corrected:
 
-- **Within one session:** up to **100 items or 32 KB, whichever first**, delivered as a paginated walk; `more_available` + `next_cursor` let the requester continue **immediately within the same session** (no 60s wait) up to the session budget.
+- **Within one session:** up to **100 items or 32 KB, whichever first**, delivered as a paginated walk; a flags-3 page marker with `next_cursor` lets the requester continue **immediately within the same session** (no 60s wait) up to the session budget.
 - **Session admission:** 1 new session per peer per 60s per link (unchanged, prevents amplification); continuations inside an admitted session are free.
 - **Global:** 400 SYNC-served items/min per node, 128 KB/min, shared with the §11 relay budget.
 - **Acceptance decision pending MC-007:** SYNC provides bounded recent context. The previous ≥95%-of-newest-100-in-30s gate is withdrawn (§0.1): neither the frame budget nor signed-packet byte budget supports it. MC-007 must define the eligible set, subscription-selection mechanism (if any), overhead, concurrent traffic, and completion target before implementation. Older cache entries beyond that are best-effort and typically irrelevant to a person who just arrived.
@@ -259,7 +239,7 @@ Lets users react to a message with an emoji from a fixed palette. Total packet: 
 
 - **Same version, unknown type — relay with envelope-only validation.** A node relays such a packet after validating **only the fixed 26-byte header envelope** (`version` matches; `ttl` within 1–7; `payload_len` ≤ `MAX_LOGICAL_PACKET_BYTES` − 26; frame/fragment structure well-formed). It does **not** run type-specific structural validation, signature checks, or decryption on a type it doesn't know — it forwards the opaque payload. Unknown packets go to TTL/dedup/relay but **never to the UI**.
 - **Rate classification for unknown types:** an unknown `type` is charged to a dedicated **conservative unknown-type bucket per link** (capacity 5, refill 1/5s), *separate from* and stricter than known-type buckets, so a future or malicious type cannot bypass rate control by being unrecognized. It also draws from the per-link aggregate ingress bucket (§6.5) like everything else.
-- **Opaque payload size cap:** an unknown-type payload above `MAX_LOGICAL_PACKET_BYTES` is rejected, not relayed — bounds the amplification an unknown type can cause.
+- **Opaque payload size cap:** an unknown-type payload above 998 bytes is rejected; the entire logical packet is at most 1024. Reserved types 0x00/0x04 reject rather than using opaque forwarding.
 - **Reserved flag bits** do not bypass known-type validation, authentication or rate classification. Senders MUST set them 0; receivers apply the MC-006 type/flag matrix. Unsupported combinations of known semantic flags are rejected. Opaque forwarding applies only to unknown types, within the conservative unknown-type budget.
 - **Different `version` integer ⇒ do not relay, do not interpret.** A version bump is reserved for changes that cannot be additive; such packets circulate only among same-version peers. All planned v1 evolution (reaction codes, avatars, glyphs, word-list appends, new *types*) is additive and stays version `0x01`.
 - **Fragments** inherit the version of their enclosed logical packet.
@@ -362,7 +342,7 @@ Naive flooding makes every node retransmit every message — in a dense crowd th
 
 ### 3.5 Store-and-forward
 
-`forward_cache`: last 15 minutes of valid CHAT packets, cap 500 messages / ~256KB, LRU, indexed by a monotonic cache sequence number (which is what SYNC's `cursor` addresses, §2.6). On each new peer connection, run one SYNC session (§2.6) — newest-first, paginated, budgeted. Result: someone opening the app mid-set sees the recent minutes of their channels within seconds. Older cache entries are best-effort by design; SYNC targets *recent context*, not full-cache replication.
+`forward_cache`: last 15 minutes of valid CHAT packets, cap 500 messages / ~256KB, LRU, indexed by an internal monotonic cache sequence number. SYNC exposes only opaque tokens bound to a snapshot position, link, session and filter (§2.6). On each new peer connection, run one SYNC session (§2.6) — newest-first, paginated, budgeted. Result: someone opening the app mid-set sees the recent minutes of their channels within seconds. Older cache entries are best-effort by design; SYNC targets *recent context*, not full-cache replication.
 
 ### 3.6 What is deliberately NOT in the mesh layer
 
@@ -454,6 +434,8 @@ The "Share channel" button produces the HTTPS form (works everywhere: SMS, Whats
 
 ### 5.3 Validation
 
+The [canonical URI/QR grammar](decisions/MC-006-wire-contract.md#7-qr-and-link-grammar) governs exact routes, bundle lengths, unpadded base64url with zero pad bits, single-pass percent decoding, text bounds and rejection of extra URI components. Friend bundles are 65 bytes, event bundles 101, and staff provisioning carries a 114–130-byte credential plus a separate 32-byte Ed25519 seed. Staff private provisioning has no HTTPS route; all trust-changing actions retain explicit confirmation.
+
 On open, the app validates all three words against the known lists (case-insensitive). Unknown words → error state ("This link uses words from a newer version — update the app"), never a silent hash of arbitrary strings. This keeps the channel space confined to the legitimate combo space and makes links tamper-evident.
 
 ---
@@ -538,10 +520,10 @@ Pins are stored locally in the `friends` table: `friends(pubkey PK, petname, add
 |---|---|---|
 | `signer_key_id` | 8B | SHA-256(signer Ed25519 pubkey)[:8] = the signer's `sender_id` |
 | `pubkey_included` | 1B | 0 = pubkey already sent this session; 1 = full pubkey follows |
-| `signer_pubkey` | 0 or 32B | Present on first signed message per session (or on request) |
+| `signer_pubkey` | 0 or 32B | Present on first signed message sent per link and every signed ANNOUNCE |
 | `sig` | 64B | Ed25519 over the canonical transcript below |
 
-- **Canonical friend-sig transcript:** `protocol_domain("meshfest-friendsig-v1") ‖ version ‖ type ‖ msg_id ‖ sender_id ‖ channel_id ‖ timestamp ‖ payload-before-signature-block`. Because `sender_id` = fingerprint of `signer_pubkey`, a recipient checks the two match, then verifies `sig` — binding the message to its claimed identity, `msg_id`, channel, and time (no replay under a different id/channel).
+- **Signature coverage:** immutable header bytes 0–2 and 4–25 (TTL excluded) plus every payload byte before the final signature, including cosmetics, lengths and key-inclusion metadata. MC-008 must freeze domain bytes and exact encoding before signing implementation. Check signer_key_id and sender_id both match the resolved full public key. Omitted keys resolve only from pins/bounded cache; ambiguous or missing keys remain unverified/pending until an included-key message resolves them. There is no unspecified key-request opcode. Relays preserve original bytes, including reserved header bits.
 - **Scope (airtime discipline):** v1 signs (a) ANNOUNCE beacons and (b) messages in **private channels where the sender has ≥1 pinned friend**, plus an optional "sign all my messages" setting. Public channels stay unsigned-by-default at scale — a ~73-byte friend-sig block (or +32B with pubkey) roughly doubles a short packet, and public channels don't need per-sender identity. Verification is a friend-group guarantee, not a global one.
 
 **What the recipient sees:**
@@ -641,18 +623,20 @@ Every device runs **both** GATT roles simultaneously:
 
 Target: maintain **3–6 concurrent connections** per device (fewer burns coverage; more burns battery and hits platform connection caps). Peer selection is driven by **locally observable signals only** (finding R2.1): (a) prefer peers newly discovered or with weak recent traffic overlap — i.e. peers whose recent-digest (§2.5) shares few msg_ids with ours, a real signal that they bring *new* reachability rather than redundancy; (b) then strongest RSSI; (c) reserve slots for unseen peers (§18-M3). `peer_count` is a coarse advisory density hint; the §3.4c row uses locally known connected-peer count — it is **not** treated as evidence of which peers are mutual, because the protocol exchanges no adjacency data. Re-evaluate every 60s; drop the weakest link when a peer bringing more novel reachability appears.
 
-Connection bootstrap cannot use `sender_id` before a link exists: discovery advertisements expose only the service UUID. MC-006 specifies a post-exchange duplicate-link arbitration state machine. Retain an available asymmetric link instead of forcing an identity ordering that requires unsupported discovery.
+Connection bootstrap cannot use `sender_id` before a link exists: discovery advertisements expose only the service UUID. The MC-006 HELLO state machine exchanges roles, full public keys, fresh nonces and capacities after connection. Keep a sole asymmetric link. Consolidate duplicate links only after both have the MC-008 fresh identity proof, by the common initiator-key/nonce tuple; unproved HELLO claims cannot evict a verified link. Exact fields and UUIDs are in the [discovery contract](decisions/MC-006-wire-contract.md#3-discovery-and-duplicate-links).
 
 **Slot-exhaustion defense (see §18-M3):** an attacker opening links from many spoofed identities could fill every slot and isolate a phone. Therefore: (a) **at least 2 of 6 slots are reserved** for peers not yet seen in this session, rotated every 60s; (b) a peer that sends no valid CHAT/ANNOUNCE traffic within 20s of connecting is dropped and back-listed for 5 min; (c) peer scoring favors **RSSI diversity** — a cluster of links at near-identical RSSI (one physical attacker) cannot occupy more than 3 slots; (d) inbound connection rate per remote address is capped at 3/min.
 
 ### 8.2 GATT service definition
 
 ```
-Service UUID:            5F45xxxx-... (register one 128-bit UUID, e.g. 5F45C0DE-...)
-  Characteristic TX:     write-without-response   (peer → host packet ingress)
-  Characteristic RX:     notify                   (host → peer packet egress)
-  Characteristic INFO:   read                     (protocol version, MTU hint)
+Service UUID:            c11b1d76-75da-4ae0-b0fe-cb273609c526
+  TX (write without response): 78db2e71-ff31-46e0-8a8e-371f8199bcdc
+  RX (notify):                 87bbc0ab-e60a-4802-b45f-445ed492cf30
+  INFO (read):                 ac933506-2294-4d92-8a0c-58d9f23acfb3
 ```
+
+INFO is exactly `01 02 00`: version 1 and a 512-byte protocol ceiling, not a measured MTU. HELLO (whole transport type 2) is exactly 54 body bytes: version1, role1, TX limit2, RX limit2, nonce16, Ed25519 public key32. Admit ordinary traffic only after both HELLOs and the 146-byte directional floor pass. These production UUIDs are distinct from feasibility probes.
 
 Write-without-response + notify gives symmetric pipes matching the protocol's best-effort semantics. MTU: request 517 on connect (Android), then use the observed capacity; iOS limits are queried at runtime. No minimum iOS MTU is assumed. Fragmentation (§2.4) operates only when the value fits the approved capacity/fragment limits; otherwise refuse explicitly.
 
@@ -1079,11 +1063,11 @@ Restricts posting in #Event Updates to event staff — without any server — vi
 | `not_before` | 4B | Unix seconds |
 | `not_after` | 4B | Unix seconds (≤ event end + 24h recommended; staff shifts ≤ 12h) |
 | `label_len` + `label` | 1B + ≤16B | Display label, e.g. "MainStage Ops" |
-| `root_sig` | 64B | Ed25519 signature by the **root** over `cred_version ‖ event_root_id ‖ staff_pubkey ‖ not_before ‖ not_after ‖ label` |
+| `root_sig` | 64B | Ed25519 by the root covering all credential bytes before this signature, including label_len; exact domains/encoding remain MC-008 |
 
 Credential size ≈ 130 bytes.
 
-**Signed message block (organizer, `flags.signed` + `sig_type=1`).** Located immediately after `text` (via `text_len`, §2.3):
+**Signed message block (organizer, `flags.signed` + `sig_type=1`).** Located after the five pin bytes that follow `text` (§2.3):
 
 | Field | Size | Notes |
 |---|---|---|
@@ -1094,7 +1078,7 @@ Credential size ≈ 130 bytes.
 | `credential` | `cred_len` B | The ~130B credential when included |
 | `staff_sig` | 64B | Ed25519 by the staff key over the canonical transcript below |
 
-**Canonical signed transcript (staff_sig covers):** `protocol_domain("meshfest-orgsig-v1") ‖ version ‖ type ‖ msg_id ‖ sender_id ‖ channel_id ‖ timestamp ‖ event_root_id ‖ staff_key_id ‖ text`. Binding these means a captured staff message cannot be replayed under a different id/channel/time.
+**Signature coverage:** immutable header bytes 0–2 and 4–25 plus every payload byte before staff_sig, including pin state/expiry, cosmetics, all lengths and credential metadata/bytes. TTL alone is mutable. MC-008 freezes exact domain/transcript encoding and reviews the construction before MC-021. Staff verification proves credential authority; the signed header sender_id remains a separate device-identity claim, not proof of that device key or a friend pin.
 
 **Verification:** (a) resolve `event_root_id` → adopted root pubkey; if none, unverified (relayed per §17.3, not badged). (b) Resolve the staff key: if `cred_included`, verify `root_sig` and cache the credential **keyed by `(event_root_id, staff_key_id)`**; else look up that cache key. If neither yields a credential, mark **unverified-pending** and emit CRED_REQ (below). (c) **Binding checks (finding R5.6), all mandatory:** `staff_key_id == SHA-256(credential.staff_pubkey)[:8]`, and `credential.event_root_id == message.event_root_id` — without both, an attacker could pair a valid credential with an unrelated message or key id. (d) Check `not_before ≤ now ≤ not_after` (±§17.3 skew). (e) Verify `staff_sig` with `staff_pubkey`. All pass ⇒ Event Staff badge.
 
@@ -1105,11 +1089,11 @@ Credential size ≈ 130 bytes.
 - **CRED_REQ (type `0x07`)** remains as a fast path: payload `event_root_id ‖ staff_key_id`, unicast to the arrival peer, rate-limited 1/5s/link. **Any** node holding the credential in cache may answer with a CRED_OFFER — not only the staff device — so the request usually resolves locally. If the peer has neither the credential nor a route, it simply doesn't answer (no negative response needed); the requester relies on CRED_OFFER flooding and retries at most twice, 5s apart, then waits.
 - Net effect: a late joiner's unverified-pending window is bounded by CRED_OFFER flood latency (seconds), not by "until the staff device happens to resend." Required test: multi-hop recovery where the immediate peer lacks the credential (§13).
 
-**QR encodings (single canonical form each).** Adoption QR (public): `meshfest://event/<base64url(0x01 ‖ root_pubkey[32] ‖ root_not_after[4] ‖ root_self_sig[64])>/<url-encoded name>` — a 101-byte bundle: version, root public key, the root anchor's own expiry, and a self-signature by the root over `0x01 ‖ root_pubkey ‖ root_not_after` (so the expiry cannot be edited by whoever reprints the QR). The recipient derives `event_root_id = SHA-256(root_pubkey)[:8]` — the id is never a separate URL field, eliminating the two-layout contradiction. Staff-provisioning QR (private, shown once to staff): `meshfest://staff/<base64url(credential)>/<base64url(staff_privkey)>` — imports the device's staff key + root-signed credential. The **root private key is never in any QR or on any device**.
+**QR encodings (single canonical form each).** Adoption QR (public): `meshfest://event/<base64url(0x01 ‖ root_pubkey[32] ‖ root_not_after[4] ‖ root_self_sig[64])>/<url-encoded name>` — a 101-byte bundle. The root self-signature must cover its first 37 bytes (version, public key and expiry); MC-008 freezes exact domains/encoding. The recipient derives `event_root_id = SHA-256(root_pubkey)[:8]`; it is never a separate URL field. Staff provisioning is `meshfest://staff/<base64url(credential)>/<base64url(staff_seed[32])>`, with an exact 32-byte Ed25519 seed whose derived public key must match the credential. The canonical URI grammar (§5.3) governs decoding and confirmation. The **root private key is never in any QR or on any device**.
 
 **Wire types added:** `0x07` CRED_REQ (above). Verification ≈ two Ed25519 verifies, sub-millisecond.
 
-Worst-case signed packet with inline credential, itemised (corrected — finding R5 non-blocking): 26 (header) + CHAT payload 308 (`timestamp` 4 + `avatar` 1 + `nick_len` 1 + nickname 20 + `text_len` 2 + text 280) + org block 213 (`event_root_id` 8 + `staff_key_id` 8 + `cred_included` 1 + `cred_len` 2 + credential 130 + `staff_sig` 64) = **547 bytes logical**, ~5 fragments at the 164-byte floor — within `MAX_LOGICAL_PACKET_BYTES` (§2.1). With the credential omitted (`cred_len` 0): **417 bytes**. Since credentials now also flood independently as CRED_OFFER, the common case is the smaller form.
+Worst-case organizer CHAT is 26 header + 312 clear CHAT payload + 5 pin fields + 213 organizer block = **556 logical bytes**, five fragments at the 128-byte admission slice or four at the 164-byte example slice. Omitting the credential gives **426 bytes**. CRED_OFFER carries the exact 114–130-byte credential (140–156 logical bytes). These sizes include the explicit cosmetic and pin fields.
 
 ### 17.2 Trust bootstrap — how phones learn the real key
 
@@ -1129,7 +1113,7 @@ A phone can hold multiple event roots. **Root-adoption expiry is independent of 
 | Composer | Replaced with "Only event staff can post here" unless the device holds the private key (§17.4). |
 | Rate limit | Verified (valid-signature) #Event Updates messages are relayed under a **raised relay allowance on every node, key-holding or not** (finding 6): a node that can structurally see the signature block and a valid `event_root_id` format grants signed #Event-Updates traffic a 10/min relay budget rather than the 2/min unsigned cap — so an incident burst propagates across a mixed-adoption mesh instead of being throttled to death by intermediaries that never scanned the QR. Nodes still only *display* the Event Staff badge if they've adopted the key and the signature verifies; relay generosity does not imply display trust. Signature *validity* for the raised relay budget is checkable by any node that has adopted the key; nodes without it fall back to structural signal (well-formed signature block present) plus the global per-link ingress cap (§6.5), which bounds abuse. |
 | Replay guard | Signed messages older than 48h by payload timestamp are treated as unverified (generous window because offline clocks drift; short-window replay is already killed by the dedup cache). |
-| Pinning | Pin state and expiry must have an exact location in the canonical payload and be covered by the staff signature (MC-006). The previous prose-only one-byte field is not implementable until that decision closes. Only authenticated pins under an adopted valid root affect display. |
+| Pinning | Five bytes after CHAT text: pin_state:u8 then pin_expiry:u32, before the organizer block. State 0 requires expiry 0; state 1 requires positive expiry within both root and credential lifetimes. All bytes are signed; only authenticated, adopted, unexpired authority affects pin display. |
 | No key adopted | Legacy behavior: open channel, everything displays normally. EVENT_INFO sightings produce the §17.2 prompt. |
 
 ### 17.4 Posting side (staff)
@@ -1171,7 +1155,7 @@ The design reduces the application attack surface through the following measures
 ### 18.3 Major
 
 - **M1 — Fragment reassembly memory exhaustion.** Repeated fragment-0-of-4 packets with random `frag_group` allocate buffers held for 30s → OOM kill of nodes within radio range. *Fix:* per-peer and global concurrent-group caps with oldest-eviction (§2.4).
-- **M2 — SYNC amplification / battery-drain attack.** A small SYNC_REQ can elicit many batch packets; looping it drains victims' batteries and airtime. *Fix:* paginated SYNC with per-peer/per-link session admission, a per-session item+byte budget, and a global served-item ceiling (§2.6). (Current values live in §2.6; SYNC_REQ is a ~542-byte fragmented logical packet.)
+- **M2 — SYNC amplification / battery-drain attack.** A small SYNC_REQ can elicit many batch packets; looping it drains victims' batteries and airtime. *Fix:* paginated SYNC with per-peer/per-link session admission, a per-session item+byte budget, and a global served-item ceiling (§2.6). (Current values live in §2.6; SYNC_REQ is a 546-byte fragmented logical packet.)
 - **M3 — Connection-slot exhaustion isolates victims.** One attacker with spoofed identities fills all 6 GATT slots, cutting a phone out of the mesh. *Fix:* reserved rotating slots, idle-peer eviction, RSSI-diversity scoring, inbound connect rate cap (§8.1).
 - **M4 — Panics and integer overflow in the core = crash-loop DoS.** A malformed packet that trips a slice-index panic crashes the app repeatedly; a panic unwinding across the UniFFI boundary is undefined behavior. *Fix:* all length arithmetic uses `checked_*`/`saturating_*`; parsing returns `Result`, never indexes unchecked; `catch_unwind` at every FFI entry point converting panics to errors; `overflow-checks = true` in release; cargo-fuzz on the parser as a **CI gate** with a persisted corpus, not just a test-plan bullet.
 - **M5 — Event signing key compromise is unrevocable offline.** A leaked staff QR (photographed, shoulder-surfed) grants permanent staff authority with no CRL possible in a serverless mesh. *Fix:* keys carry a mandatory expiry ≤ event duration + 24h; staff QR is displayed once on a trusted screen and never persisted as an image; private keys never on beacons (§17.4); rotation procedure documented for ops. v2 adds daily subkeys signed by the event root.
@@ -1273,7 +1257,7 @@ A voluntary paid tier funding the small server/CI footprint and letting fans chi
 - **Color schemes / theming.** The "Afterhours" dark palette (§10.0) is the app default; a light theme ships free alongside it. Supporters unlock a theme pack modeled on well-known Linux terminal palettes — e.g. Solarized (Light/Dark), Gruvbox, Dracula, Nord, Tokyo Night, Catppuccin, Monokai, One Dark, Everforest. These are *inspired-by* palettes defined by our own hex tokens, not copied assets, to stay clear of any trademark/branding issues (see §19.4). Themes are pure design-token swaps (§10 / frontend-design), so they touch no protocol and no message data.
 - **Extra private-channel slots.** Free tier includes the 3 public defaults + a reasonable number of private channels (e.g. **5**); supporters raise the cap (e.g. **to 30**). This is a local subscription-list limit only (§4.1) — it changes nothing on the wire, doesn't affect who can join a channel, and someone you share a channel with never needs the tier to participate.
 - **Custom nickname color.** Supporters pick their own nickname color instead of the deterministic auto-color (§7.2). **Critical constraint:** the 4-char `sender_id` suffix and the verified-friend / organizer badges (§7.4, §17) are unaffected — a custom color is decoration, never an identity or trust signal, so it cannot be used to fake a verified look. The color travels only as an optional cosmetic hint in the sender's own packets; receivers may honor or ignore it, and it is never trusted for authentication.
-- **Supporter badge (self-asserted, spoofable — finding R7).** A supporter's *own* client sets a cosmetic `supporter` hint (one reserved bit in the ANNOUNCE `status` byte / a per-message cosmetic field), so receivers *can* render it — resolving the round-three gap where entitlement was never broadcast and thus unknowable. It is explicitly **self-asserted and trivially spoofable** (any modified client can set the bit), carries **zero trust weight**, and is styled distinct from the ✓ verified-friend and Event Staff badges (§19.4). It's a flair, exactly like a nickname color — never an identity or trust marker. A signed/authenticated supporter attribute is possible later but deliberately not built; a spoofable cosmetic is the honest v1 model (there is nothing to protect — it only changes an ornament).
+- **Supporter badge (self-asserted, spoofable — finding R7).** A supporter's *own* client sets bit1 of the fixed four-byte CHAT/ANNOUNCE cosmetic field (§2.3/§2.5), so receivers *can* render it — resolving the round-three gap where entitlement was never broadcast and thus unknowable. It is explicitly **self-asserted and trivially spoofable** (any modified client can set the bit), carries **zero trust weight**, and is styled distinct from the ✓ verified-friend and Event Staff badges (§19.4). It's a flair, exactly like a nickname color — never an identity or trust marker. A surrounding message signature authenticates authorship of this hint, never payment or entitlement; unsigned hints remain freely spoofable. Neither form has authority over identity or trust chrome.
 
 ### 19.2 How entitlement works (offline-safe)
 

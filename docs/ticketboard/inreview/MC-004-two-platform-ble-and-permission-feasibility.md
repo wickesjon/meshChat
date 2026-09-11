@@ -54,11 +54,11 @@ Device inventory and Mac/Xcode/development-signing access are awaiting user inpu
 - iOS uses CoreBluetooth main-queue delegates, separate write/notify readiness callbacks, state-restoration identifiers and bounded traffic. It reports oversized values refused by the probe before an API call distinctly from enqueue acceptance and receiver observation. iOS cannot forcibly disconnect an inbound central; this limitation is explicit in its report. Timers may pause under suspension and are not a keepalive guarantee.
 - Local `gradlew.bat -p src/android/ble --offline --no-daemon assembleDebug assembleRelease lintDebug` passed (87 tasks, 41 executed) with the pinned repository-local JDK/SDK/Gradle. Initial lint caught coarse/fine permission pairing, context typing and string resources; those were fixed without reducing the lint gate. No Android device execution is claimed.
 - The iOS Info.plist and shared scheme parse as XML. Swift/Xcode compilation is not yet verified on this Windows host. A request to add `.github/workflows/ci.yml` to MC-004 for probe build checks is pending user approval; the file has not been modified for MC-004. MC-003's scope approval does not automatically apply. A documented Mac build is an alternative; existing CI currently checks the parent apps/core, not these standalone probes.
-- Ticketboard validation and whitespace checks pass. Independent review is pending; all physical exit criteria remain unchecked.
+- Ticketboard validation and whitespace checks pass. Independent code review completed as recorded below; all physical exit criteria remain unchecked.
 
 ## Review and merge
 
 - Branch: `ticket/MC-004-two-platform-ble-and-permission-feasibility`.
-- Review/PR: pending.
+- Review/PR: [PR #6](https://github.com/wickesjon/meshChat/pull/6), published ready for review. A separate gpt-5.6-terra worker at medium effort reviewed `17e67720a725c1cc61d734cff31e5a43b910a4fb` against main `b3dc7fd05d45eb4fade01256449d34d54e1c7037` and returned no actionable findings. It reviewed source, scope and evidence without running builds or modifying files, and independently confirmed `git diff --check`. Its completion was awaited without polling. This review does not replace the pending iOS build or physical evidence, and no merge is authorized by missing gate results.
 - Squash commit title: `MC-004: Two-platform BLE and permission feasibility`.
 - Completion becomes effective only when the reviewed squash commit lands on main.

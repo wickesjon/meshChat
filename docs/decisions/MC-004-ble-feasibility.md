@@ -47,7 +47,7 @@ These are planning inputs, not the final permission ruling or proof of current h
 
 For each run retain: run ID, bench labels, device/OS/build inventory, source commit, role direction, start/end monotonic times, requested and observed lifecycle state, permissions, reported and measured capacities, sent/received/error counts, bounded trace path, reproduction steps and outcome. Separate API enqueue acceptance, transport callbacks and receiver observation.
 
-Commit only reviewed sanitized evidence under `tests/bench/` and the resulting decision under `docs/decisions/`. Keep raw temporary captures inside ignored repository paths. Do not fill missing outcomes with zeros or simulation. MC-004 stays incomplete until real results establish the permission decision and supported matrix; MC-006/007 remain blocked until its reviewed squash merge.
+Commit reviewed sanitized reports alongside this decision under `docs/decisions/`; reserve `tests/bench/` for reproducible harnesses or synthetic inputs. Keep raw temporary captures inside ignored repository paths. Do not fill missing outcomes with zeros or simulation. MC-004 stays incomplete until real results establish the permission decision and supported matrix; MC-006/007 remain blocked until its reviewed squash merge.
 
 ## Build and run the prepared probes
 

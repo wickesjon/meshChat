@@ -73,5 +73,6 @@ Implementation started from main `f5acefe4ea201cb7aa4ce6b0c71e1a202b234901`, whe
 - Branch: `ticket/MC-003-sans-io-and-uniffi-foundation`.
 - Review/PR: [PR #5](https://github.com/wickesjon/meshChat/pull/5), published ready for review. A separate gpt-5.6-terra worker at medium effort reviewed `8c46df19dca4596a1113ed81ec19096e6aba9bdd` against `f5acefe4ea201cb7aa4ce6b0c71e1a202b234901` and returned no actionable findings. It reviewed code, scope and evidence without running builds or modifying files. The AndroidX flag follow-up will receive a final review before merge.
 - Follow-up Terra medium review of `6bc3019347f0c1f90d76a939eae6b058d047054c` returned no actionable findings. The additional native page-alignment change remains subject to review and CI.
+- Review of `c0599fad947f6431701f44164f88ff027ebc93e1` identified a packaging-check gap: ELF architecture was inferred from the ZIP folder. Added explicit `e_machine` checks (AArch64 183 / x86_64 62). Both pinned JNA binaries pass; an actual x86_64 binary presented under an arm64 path is rejected. Follow-up review remains required before merge.
 - Squash commit title: `MC-003: Sans-IO and UniFFI foundation`.
 - Completion becomes effective only when the reviewed squash commit lands on main.

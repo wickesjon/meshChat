@@ -7,6 +7,9 @@ import zipfile
 def check_elf(data, name):
     if data[:6] != b'\x7fELF\x02\x01':
         raise ValueError(f'{name}: expected little-endian ELF64')
+    expected_machine = {'arm64-v8a': 183, 'x86_64': 62}[name.split('/')[1]]
+    if struct.unpack_from('<H', data, 18)[0] != expected_machine:
+        raise ValueError(f'{name}: ELF machine does not match ABI directory')
     offset = struct.unpack_from('<Q', data, 32)[0]
     entry_size, count = struct.unpack_from('<HH', data, 54)
     loads = 0

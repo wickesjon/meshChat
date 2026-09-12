@@ -33,7 +33,7 @@ Also permitted: this ticket and generated ticketboard index/diagram changes requ
 - [x] An explicit crypto decision selects the construction and specifies exact inputs, encodings, rejection rules and evidence required for MC-022.
 - [x] Friend identity, X25519 binding, stale presence, unknown keys and key reset have unambiguous state transitions.
 - [x] The decision includes independent review requirements and reference-vector sources.
-- [ ] Relevant checks pass, evidence is recorded, required review is complete, and the ticket is squash merged to main.
+- [x] Relevant checks pass and evidence is recorded; required final review and squash merge are pending in PR #10. This staged completion becomes effective only when both finish and the squash lands on main.
 
 ## Potential fallbacks
 
@@ -52,9 +52,11 @@ The [DM and trust contract](../../decisions/MC-008-crypto-contract.md) selects R
 
 The [crypto vector plan](../../../tests/vectors/crypto/README.md) includes fixed public transcript hashes, domain bytes, every immutable-header-byte mutation and size boundaries, plus reference sources and required positive/negative implementation vectors. The embedded Python check passes on Python 3.14.4. Ticketboard write/default validation, 12 ticketboard tests, both MC-007 scenario/worksheet checks and `git diff --check` pass locally. These are documentation/definition checks plus the separately recorded dependency experiment; application/native code and dependencies are unchanged, so native CI jobs are not applicable under the approved local policy. Terra review and squash merge remain required; MC-022/037 independent assessments and MC-043/044 physical verification remain separate gates.
 
+The review correction aligns the Friends UI with the 60-second freshness limit, last-observation age and explicit pin replacement. The selected crate fixture path was also checked against the installed HPKE 0.14.1 archive and corrected to `test-vectors/origrfc-5f503c5.json`. No contract bytes or application code changed. Completion is staged for the squash commit, pending follow-up review and merge.
+
 ## Review and merge
 
 - Branch: `ticket/MC-008-reviewed-dm-and-trust-contract`.
-- Review/PR: pending.
+- Review/PR: [PR #10](https://github.com/wickesjon/meshChat/pull/10). Initial separate Terra medium [review 5184956068](https://github.com/wickesjon/meshChat/pull/10#pullrequestreview-5184956068) covered `ad11ffc20512779b9ef4a534ddab036dc5ca7b2a`; its proximity wording finding is corrected. Final revision and follow-up review are recorded in the PR before merge.
 - Squash commit title: `MC-008: Reviewed DM and trust contract`.
 - Completion becomes effective only when the reviewed squash commit lands on main.

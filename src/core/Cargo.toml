@@ -11,14 +11,17 @@ crate-type = ["lib", "cdylib", "staticlib"]
 [dependencies]
 uniffi = { version = "=0.29.4", default-features = false }
 thiserror = "=2.0.12"
+sha2 = "=0.10.9"
+unicode-normalization = "=0.1.24"
+unicode-security = "=0.1.2"
 
 ed25519-dalek = { version = "=2.2.0", default-features = false, features = ["std", "zeroize"], optional = true }
 x25519-dalek = { version = "=2.0.1", default-features = false, features = ["static_secrets", "zeroize"], optional = true }
 getrandom = { version = "=0.4.3", optional = true }
-zeroize = { version = "=1.8.1", optional = true }
+zeroize = "=1.8.1"
 
 [features]
-security-probe = ["dep:ed25519-dalek", "dep:x25519-dalek", "dep:getrandom", "dep:zeroize"]
+security-probe = ["dep:ed25519-dalek", "dep:x25519-dalek", "dep:getrandom"]
 bindgen = ["uniffi/cli", "uniffi/cargo-metadata"]
 
 [[bin]]
@@ -50,6 +53,14 @@ path = "../../tests/fuzz/framing_smoke.rs"
 name = "security_probe"
 path = "../../tests/bench/security/curves.rs"
 required-features = ["security-probe"]
+
+[[test]]
+name = "links"
+path = "../../tests/integration/links/links.rs"
+
+[[test]]
+name = "links_fuzz"
+path = "../../tests/fuzz/links_smoke.rs"
 
 [lints]
 workspace = true

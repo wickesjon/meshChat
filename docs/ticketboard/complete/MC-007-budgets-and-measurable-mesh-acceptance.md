@@ -22,6 +22,8 @@ Permitted paths (relative to repository root): `docs/mesh-chat-design.md`, `docs
 
 Also permitted: this ticket and generated ticketboard index/diagram changes required by its workflow. No unrelated file changes or work outside the repository. Read the [design](../../mesh-chat-design.md), its §0 corrections, and the [active plan](../implementation-plan.md). A necessary change outside these paths needs an explicit scope decision.
 
+User-approved scope extension (2026-09-11): adopt local checks relevant to each change plus Terra review as the merge gate, including this PR. The policy is recorded in `docs/decisions/local-validation-policy.md` and `AGENTS.md`; native platform checks, physical acceptance and independent security requirements are retained.
+
 ## Implementation details
 
 - Specify frame/byte/token accounting units, burst windows, per-link and global crypto budgets, queue byte limits and priority fairness.
@@ -33,7 +35,7 @@ Also permitted: this ticket and generated ticketboard index/diagram changes requ
 - [x] A budget worksheet demonstrates that the chosen SYNC test workload fits all simultaneous budgets including overhead and control traffic.
 - [x] Each simulator gate names denominator, sample duration, seeds, loss/churn parameters and pass threshold.
 - [x] Bounded-memory tables cover credentials, senders, orphans, reassembly, caches and outbound queues.
-- [ ] Relevant checks pass, evidence is recorded, required review is complete, and the ticket is squash merged to main.
+- [x] Relevant checks pass and evidence is recorded; completion is staged pending final policy review and squash merge (effective only on main).
 
 ## Potential fallbacks
 
@@ -54,7 +56,7 @@ The approved correction already withdrew the unsupported 95-of-100-in-30-seconds
 
 Validation: both scenario/worksheet commands pass, ticketboard write/default validation, all 12 ticketboard unit tests and `git diff --check` pass. Separate Terra medium review [5184122599](https://github.com/wickesjon/meshChat/pull/9#pullrequestreview-5184122599) at `2bb55b97f874a6361465af39eba6baa95395eb00` requested concrete mixed-channel and deterministic-Bloom fixtures. Versioned inputs now fix subscriptions, held IDs, all Bloom bytes, selected/omitted IDs, pages and display outcomes; the validator recomputes the filter and verifies every expected selection, including the repeated false-positive omission of ID 525. Follow-up review remains required.
 
-CI run [34656577104](https://github.com/wickesjon/meshChat/actions/runs/34656577104) could not start any of its four jobs because account-level Actions runner availability is blocked. No CI steps executed. Local checks are not a substitute for the required CI gate; this ticket remains inreview and cannot merge until runner availability is restored and final CI passes.
+CI runs [34656577104](https://github.com/wickesjon/meshChat/actions/runs/34656577104) and [34657008852](https://github.com/wickesjon/meshChat/actions/runs/34657008852) could not start their jobs because account-level Actions runner availability is blocked. No CI steps executed and no hosted pass is claimed. The user subsequently approved the [local validation policy](../../decisions/local-validation-policy.md), replacing the hosted gate with applicable local checks and Terra review. This change affects documents, Python definition/arithmetic checks and JSON fixtures; application code, native packages and dependencies are unchanged, so Rust/Android/iOS jobs are not required for this PR. All five policy-listed commands pass locally on Windows with Python 3.14.4, including 12 ticketboard unit tests. Follow-up Terra review [5184144912](https://github.com/wickesjon/meshChat/pull/9#pullrequestreview-5184144912) accepted the fixture correction at `3c46eb31c32dfed31b0ba989a5f91e8ea53e343c`; final policy/completion review and exact final revision evidence will be recorded in PR #9 before squash merge.
 
 ## Review and merge
 

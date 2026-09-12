@@ -2,6 +2,8 @@
 
 Evidence state: specified; worksheet calculations are not simulator, radio or battery results. This decision refines the [MC-006 base wire contract](MC-006-wire-contract.md) without changing its bytes. [Scenario definitions and checks](../../tests/simulator/scenarios/README.md) make the arithmetic and future gates reproducible.
 
+The subsequent [MC-008 contract](MC-008-crypto-contract.md) specifies maximum387-byte encrypted CHAT, eight-unit cold receive work and one71-byte LINK_PROOF frame per direction (two proof work units per endpoint). These fit this worksheet's deliberately larger1024-byte/eight-unit item and initial eight-frame/eight-unit proof reservations. The reservations below remain conservative placeholders, not executed valid crypto/proof vectors; MC-020/022 must supply implementation evidence. No periodic proof-renewal traffic is assumed.
+
 ## Accounting and admission
 
 All byte limits use octets; KiB=1024 bytes and MiB=1024 KiB. Every native GATT value attempt counts as one frame and its complete value length, including the four-byte outer header and any fragment/type envelope. Count retries and origin sends separately, but charge them too. A logical multicast to three links consumes three separately framed transmissions. Do not call that one radio send. Count actual native attempts even if the native call fails; reserve tokens before calling, and do not refund attempted sends.

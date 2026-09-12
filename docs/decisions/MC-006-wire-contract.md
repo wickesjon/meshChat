@@ -2,7 +2,7 @@
 
 Evidence state: specified, with arithmetic and structural examples checked; no codec implementation or cryptographic review is claimed.
 
-This contract resolves the base-wire decisions delegated by design §0.2. MC-008 still owns encrypted payloads, exact cryptographic domain/transcript encoding and fresh direct-peer proof. Those extension points remain blocked before their dependent implementation and MC-022 full-wire freeze.
+This contract resolves the base-wire decisions delegated by design §0.2. The subsequent [MC-008 contract](MC-008-crypto-contract.md) specifies encrypted profile01, exact signature transcripts and whole-only transport03 LINK_PROOF. Read both contracts together; MC-022 independent review/full-wire freeze remains required. MC-008's extension rules supersede the earlier pending-allocation statements below without changing base field offsets or clear payloads.
 
 ## 1. Encoding and directional admission
 

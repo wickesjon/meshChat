@@ -30,9 +30,9 @@ Also permitted: this ticket and generated ticketboard index/diagram changes requ
 
 ## Exit criteria
 
-- [ ] An explicit crypto decision selects the construction and specifies exact inputs, encodings, rejection rules and evidence required for MC-022.
-- [ ] Friend identity, X25519 binding, stale presence, unknown keys and key reset have unambiguous state transitions.
-- [ ] The decision includes independent review requirements and reference-vector sources.
+- [x] An explicit crypto decision selects the construction and specifies exact inputs, encodings, rejection rules and evidence required for MC-022.
+- [x] Friend identity, X25519 binding, stale presence, unknown keys and key reset have unambiguous state transitions.
+- [x] The decision includes independent review requirements and reference-vector sources.
 - [ ] Relevant checks pass, evidence is recorded, required review is complete, and the ticket is squash merged to main.
 
 ## Potential fallbacks
@@ -46,7 +46,11 @@ A triggered fallback must be recorded with evidence. It does not authorize weake
 
 Started from main `edb3201b6f4b498ca521bcbe02b7406f875aa228`, with MC-005 complete. The [dependency compatibility proposal](../../decisions/MC-008-dependency-scope-proposal.md) compares HPKE 0.12.0, 0.13.0 and 0.14.1 against the existing pinned core graph in disposable repo-local experiments. All pass advisory/license/source checks but fail the repository's duplicate-version ban. The recommended 0.14.1 graph also passes host `cargo check` with pinned Rust 1.85.1; no native, crypto-vector or independent-security result is claimed.
 
-Blocked on an explicit scope decision for the proposal's nine exact duplicate-version pairs, to be applied only when integrating the selected dependency. Production manifests/lockfile/security configuration are unchanged. No construction selection is frozen yet, no acceptance checkbox is complete, and this ticket must not merge or unblock dependent implementation. Older versions also require exceptions; a coordinated existing-dependency upgrade is a separate alternative scope. The proposal records reproducible manifests, commands, retained logs, graph hash and tradeoffs. Ticketboard regeneration/default validation and documentation checks must pass before publishing the eventual ready PR; no PR or Terra review is claimed at this stage.
+The user approved the nine exact duplicate-version pairs for later integration, retaining other security gates. An isolated all-target/all-feature active graph check confirms exactly those pairs; a copied deny configuration with the approved exact skips passes advisories/bans/licenses/sources. Production manifests/lockfile/security configuration remain unchanged. This decision records selection and future integration requirements; it does not claim application crypto or platform builds.
+
+The [DM and trust contract](../../decisions/MC-008-crypto-contract.md) selects RFC 9180 Auth/X25519/HKDF-SHA256/ChaCha20Poly1305 via HPKE 0.14.1. It defines full tuple/pin binding, exact 41-byte envelope prefix, 64/144/304-byte minimal plaintext padding (147/227/387 logical bytes), all immutable-header AAD, signature domains, persistent replay and clock/overflow rules, provider-owned HPKE with entropy failure handling, one-use link proof, and full friend lifecycle transitions. A 71-byte proof and cold receive work of eight units fit MC-007's conservative reservations; no periodic renewal traffic is added. The 304-byte bucket resolves the old incomplete 280-byte bucket without reducing the 280-byte text allowance. Long-lived links use the ticket's conservative last-authenticated-observation fallback rather than asserting unproved current proximity; this does not weaken message authentication or change independent/physical gates.
+
+The [crypto vector plan](../../../tests/vectors/crypto/README.md) includes fixed public transcript hashes, domain bytes, every immutable-header-byte mutation and size boundaries, plus reference sources and required positive/negative implementation vectors. The embedded Python check passes on Python 3.14.4. Ticketboard write/default validation, 12 ticketboard tests, both MC-007 scenario/worksheet checks and `git diff --check` pass locally. These are documentation/definition checks plus the separately recorded dependency experiment; application/native code and dependencies are unchanged, so native CI jobs are not applicable under the approved local policy. Terra review and squash merge remain required; MC-022/037 independent assessments and MC-043/044 physical verification remain separate gates.
 
 ## Review and merge
 

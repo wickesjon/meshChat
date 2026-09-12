@@ -1,6 +1,6 @@
 # Detailed Design Document — Offline BLE Mesh Chat
 **Working name: "Meshfest" (placeholder)**
-Version 0.6 — Canonical base wire and budget gates specified; crypto decision pending
+Version 0.7 — Base wire, budgets and crypto contract specified; independent crypto freeze pending
 
 ---
 
@@ -18,7 +18,7 @@ This revision incorporates the approved review of the design and original implem
 4. **Early rejection and accepted-message dedup.** Over-budget frames are dropped before reassembly/display/crypto. Unknown reserved bits do not bypass known-type checks. Maintain bounded rejected-attempt tracking separately from accepted/authenticated message identity so an invalid first copy cannot suppress a valid later copy with the same msg_id. Budget actual verification work, including embedded SYNC packets, and separate pending/unverified state from trusted acceptance.
 5. **Connection bootstrap.** Advertisements contain only the service UUID. Identity-dependent duplicate-link arbitration therefore occurs after an established-link exchange, not before discovery. An asymmetric iOS-compatible connection can remain even when a nominal identity ordering would prefer an unavailable discovery direction.
 6. **Secure lifecycle first.** MC-005/MC-017 define platform-operated versus wrapped software keys explicitly; do not assume Rust can extract non-exportable platform keys. MC-018 owns migrations, DM conversation identity, event trust, verification provenance, reactions and retention. Encrypted persistence and key loss/reset behavior are required before real sensitive data is stored.
-7. **Honest authentication claims.** MC-008 evaluates a vetted RFC 9180 authenticated-mode implementation before retaining the bespoke two-DH analogue. Exact immutable-header bindings, encoding, replay and freshness rules must be reviewed; TTL is mutable transport metadata. Signed ANNOUNCE alone proves a historical signature, not that the friend is currently on the direct link. Do not infer identity continuity from nickname similarity.
+7. **Honest authentication claims.** The [MC-008 crypto contract](decisions/MC-008-crypto-contract.md) selects RFC 9180 Auth with HPKE 0.14.1, exact immutable-header bindings, encodings, replay and session-proof rules. TTL alone is mutable transport metadata. Signed ANNOUNCE proves historical content, not current presence. Recipient-key compromise permits impersonation to that recipient; no forward secrecy, distance proof or metadata privacy is promised. Independent construction review remains MC-022. Do not infer identity continuity from nickname similarity.
 8. **Evidence and sequencing.** MC-004 uses the explicitly approved online BLE feasibility gate below; the two-platform key-storage spike supplies a provisional development contract and automated evidence; deferred physical key/storage verification is owned by MC-043/044. Android beta depends explicitly on the full crypto gate. Phone Beacon Mode is v1; ESP32/backhaul are follow-on work. A design-stage fix is only specified until implemented, tested, and independently reviewed where required.
 
 ### 0.2 Decisions blocking implementation or freeze
@@ -27,10 +27,10 @@ This revision incorporates the approved review of the design and original implem
 |---|---|
 | MC-006 | Specified in the normative [canonical wire contract](decisions/MC-006-wire-contract.md): framing, capacity, discovery, reassembly, SYNC, QR, pin and cosmetic fields; crypto extension points remain owned by MC-008 |
 | MC-007 | Specified in the normative [budget and acceptance contract](decisions/MC-007-budgets-and-acceptance.md): token units, memory ceilings, SYNC selected set, deadlines, deterministic scenarios and physical measurement thresholds |
-| MC-008 | Selected DM construction and library, exact encrypted plaintext/padding and authenticated header encoding, signature domain encodings, replay policy, friend presence freshness and key-change states |
+| MC-008 | Specified in the [DM and trust contract](decisions/MC-008-crypto-contract.md): selected library/suite, exact encrypted envelope and transcripts, replay, session proof, key/pin transitions and independent-review requirements |
 | MC-018 | Persistent versus transient data model, trust provenance, encrypted DB/key lifecycle, migration/reset and pruning |
 
-The [MC-006 contract](decisions/MC-006-wire-contract.md) is normative for base framing, field offsets, type/flag validation and discovery. MC-008 resolves its explicitly blocked encrypted-envelope, signature-domain and fresh-proof extensions. Both decisions must be resolved before MC-020, and the final combined layouts must pass MC-022 before full-wire freeze. UI implementation must use the specified organizer pin and cosmetic bytes; a signature coverage requirement alone is not a passed cryptographic review.
+The [MC-006 contract](decisions/MC-006-wire-contract.md) is normative for base framing, field offsets, type/flag validation and discovery. The [MC-008 contract](decisions/MC-008-crypto-contract.md) resolves its delegated encrypted-envelope, signature-domain and fresh-proof extensions. Both decisions must be resolved before MC-020, and the final combined layouts must pass MC-022 before full-wire freeze. UI implementation must use the specified organizer pin and cosmetic bytes; a signature coverage requirement alone is not a passed cryptographic review.
 
 ### 0.3 Validation evidence and external prerequisites
 
@@ -96,7 +96,7 @@ The normative [MC-006 wire contract](decisions/MC-006-wire-contract.md) defines 
 
 Compute capacity independently per direction: `C = min(local native TX limit, peer HELLO RX limit, 512)`. Query write and notify limits separately. Both directions must admit **146 bytes**, giving `146 − 4 − 14 = 128` logical slice bytes and `8 × 128 = 1024`. A smaller or unknown capacity refuses ordinary traffic explicitly. No online or arithmetic result certifies a physical device. The prior 182-byte value remains only an example, with 164-byte logical slices.
 
-Logical packets are 26–1,024 bytes, with at most eight logical fragments. Transport object bodies have an absolute 1,200-byte ceiling and at most sixteen fragments, with tighter known-type limits. Whole transport is `object_type:u8 || body`; fragmented transport repeats the type in its 12-byte envelope, and `total_len` excludes that type byte. SYNC_ITEM is transport type `0x01`; HELLO is `0x02`, exactly 54 body bytes and whole-only. Other transport types reject until explicitly allocated; transport objects never become mesh traffic themselves.
+Logical packets are 26–1,024 bytes, with at most eight logical fragments. Transport object bodies have an absolute 1,200-byte ceiling and at most sixteen fragments, with tighter known-type limits. Whole transport is `object_type:u8 || body`; fragmented transport repeats the type in its 12-byte envelope, and `total_len` excludes that type byte. SYNC_ITEM is transport type `0x01`; HELLO is `0x02`, exactly 54 body bytes and whole-only. MC-008 allocates whole-only transport type `0x03` LINK_PROOF with a 66-byte body; other transport types reject. Transport objects never become mesh traffic themselves.
 
 The [contract's envelopes and reassembly rules](decisions/MC-006-wire-contract.md#2-outer-frames-and-reassembly) define logical 14-byte and transport 12-byte envelopes, duplicate conflicts and bounded allocation. Admission/capacity changes clear stale transfers. A version is a single integer `0x01`, never a nibble split. The [size worksheet](decisions/MC-006-wire-contract.md#8-compatibility-size-proof-and-evidence) accounts for whole/fragment overhead and the new pin, cosmetic and request-session fields.
 
@@ -158,7 +158,7 @@ Sent every 30s to each connected peer over the GATT link (never in BLE advertise
 
 **Recent-digest Bloom:** at most 200 msg_ids held from the last 60 seconds; evict oldest at capacity. `m = 2048` bits (256 bytes), `k = 6`, same double-hash/bit order as §2.6 with salt `meshfest-digest-v1`. Expire a received digest 60 seconds after reception. Advisory only: false positives can skip useful relays and neither flooding nor a fixed-filter SYNC retry guarantees repair. MC-007 defines reproducible omission cases; never treat a digest match as authentication or delivery proof.
 
-**Signed ANNOUNCE:** includes the full signer key on every signed ANNOUNCE and follows the complete MC-006 coverage requirement, with final domains/encoding blocked on MC-008. It authenticates historical content, not fresh direct presence without the MC-008 proof. ANNOUNCE uses TTL 1/channel 0 and is never relayed or stored for SYNC. Maximum unsigned/signed sizes are 316/421 bytes.
+**Signed ANNOUNCE:** includes the full signer key on every signed ANNOUNCE and follows the complete MC-006 coverage requirement, with exact domains/encoding in MC-008 §5. It authenticates historical content, not fresh direct presence without the MC-008 proof. ANNOUNCE uses TTL 1/channel 0 and is never relayed or stored for SYNC. Maximum unsigned/signed sizes are 316/421 bytes.
 
 ### 2.5.1 Advertisement vs. connection data
 
@@ -518,7 +518,7 @@ Pins are stored locally in the `friends` table: `friends(pubkey PK, petname, add
 | `signer_pubkey` | 0 or 32B | Present on first signed message sent per link and every signed ANNOUNCE |
 | `sig` | 64B | Ed25519 over the canonical transcript below |
 
-- **Signature coverage:** immutable header bytes 0–2 and 4–25 (TTL excluded) plus every payload byte before the final signature, including cosmetics, lengths and key-inclusion metadata. MC-008 must freeze domain bytes and exact encoding before signing implementation. Check signer_key_id and sender_id both match the resolved full public key. Omitted keys resolve only from pins/bounded cache; ambiguous or missing keys remain unverified/pending until an included-key message resolves them. There is no unspecified key-request opcode. Relays preserve original bytes, including reserved header bits.
+- **Signature coverage:** immutable header bytes 0–2 and 4–25 (TTL excluded) plus every payload byte before the final signature, including cosmetics, lengths and key-inclusion metadata. Use the exact MC-008 §5 domain and length-prefixed transcript. Check signer_key_id and sender_id both match the resolved full public key. Omitted keys resolve only from pins/bounded cache; ambiguous or missing keys remain unverified/pending until an included-key message resolves them. There is no unspecified key-request opcode. Relays preserve original bytes, including reserved header bits.
 - **Scope (airtime discipline):** v1 signs (a) ANNOUNCE beacons and (b) messages in **private channels where the sender has ≥1 pinned friend**, plus an optional "sign all my messages" setting. Public channels stay unsigned-by-default at scale — a ~73-byte friend-sig block (or +32B with pubkey) roughly doubles a short packet, and public channels don't need per-sender identity. Verification is a friend-group guarantee, not a global one.
 
 **What the recipient sees:**
@@ -530,80 +530,25 @@ Pins are stored locally in the `friends` table: `friends(pubkey PK, petname, add
 | `sender_id`/nickname resembles a pinned friend but is **unsigned or fails verification** | **Warning chip: "claims to be Sarah · not verified"** — this is the impersonation catch |
 | Ordinary unsigned traffic | Plain nickname + color/suffix (§7.2), no trust marker |
 
-**Presence freshness (MC-008/MC-019):** a signed ANNOUNCE authenticates its contents but may be replayed by another device. Current direct-peer presence requires the approved fresh link/session proof; otherwise show only the last authenticated observation and its age. RSSI proximity, if approved by MC-004, is advisory and cannot establish identity or precise location.
+**Presence freshness (MC-008/MC-019):** the whole-only LINK_PROOF signs both exact HELLOs and the signer role. A valid proof authenticates a recent response bound to that session; freshness expires 60 seconds after local HELLO nonce creation or earlier on disconnect/discontinuity. Replayed proof or signed ANNOUNCE cannot refresh it. Long-lived links retain session identity but show last-response age, not current proximity. No periodic renewal/reconnect is required. Real-time relays remain possible; RSSI is advisory and cannot establish identity or distance. Exact deadlines, input bytes and state transitions are in MC-008 §6.
 
-**Key-change handling (must be explicit, not silent):** if a friend reinstalls or changes devices, their pubkey changes and the pin stops verifying. The app shows **"Sarah's device changed — re-scan to verify"** and treats her as unverified until re-paired. It never auto-trusts a new key for an existing petname (that would reintroduce the impersonation hole) and never silently downgrades her without telling you (Signal's "safety number changed" model). Replay of a friend's genuinely-signed message is bounded by the dedup cache + 48h timestamp window (§17.3) and merely re-shows a real message — not a forgery.
+**Key-change handling:** pin the full Ed25519/X25519 tuple and a local generation. A network claim with a new key or matching nickname cannot identify a reinstall, replace a pin or disable the existing friend. In an explicit user-selected replacement flow, show old/new tuple confirmation and require a fresh QR scan before enabling sends to the new tuple. Retain old history as that old identity; never merge it silently. MC-008 specifies persistent replay tombstones and a 48h-past/300s-future signed-content window; a bounded relay dedup cache alone is not replay protection.
 
 **Metadata note:** the identity pubkey/`key_id` is a stable identifier with the same tracking properties as the stable `sender_id` already accepted in §18-B1 — no new exposure. Anonymous #Confessions posts use throwaway keys and are never signed, so they carry no friend-linkable identity.
 
 ### 7.5 Direct Messages (encrypted, friends only)
 
-The friend pairing in §7.4 already performs an in-person public-key exchange — the hard part of secure messaging — so 1:1 DMs fall out of it almost for free. **One rule is absolute: DMs are end-to-end encrypted or they do not exist.**
+DMs are end-to-end encrypted or they do not exist. The normative [MC-008 DM and trust contract](decisions/MC-008-crypto-contract.md) selects RFC 9180 Auth with DHKEM(X25519, HKDF-SHA256), HKDF-SHA256 and ChaCha20Poly1305, using pinned HPKE 0.14.1. It supersedes the historical bespoke HKDF/AES-GCM analogue. The [approved dependency exceptions](decisions/MC-008-dependency-scope-proposal.md) apply only to their listed exact version pairs at integration. MC-020 implements; MC-022 independently reviews the construction and full wire before freeze.
 
-**Why encryption is non-negotiable here.** The mesh relays everything (§3) and is plaintext on the air (§18-B1). A "DM" built as a plain two-person channel would be readable by every relay and every sniffer at the venue — while the word "direct" makes users assume privacy. That mismatch is a privacy trap, so DM and E2E encryption are the same feature, never separable.
+Encrypted CHAT/REACTION use the ordinary 26-byte header with low flag bits `01`, followed by `profile:01 || sender_key_id[8] || enc[32] || ciphertext_and_tag`. Profile01 fixes the suite, so no negotiation or transmitted AEAD nonce exists. A fresh HPKE context handles exactly one message. Its `info` binds both full Ed/X tuples in sender/recipient order; its AAD binds the exact immutable header (all bytes except TTL) and 41-byte envelope prefix. Resolve the sender against one explicitly pinned tuple matching both sender_id and sender_key_id; ambiguous/missing pins cannot acquire trust by trial or nickname. The protected provider runs HPKE internally without exporting private keys to the application.
 
-**Crypto decision pending MC-008.** The two-DH analogue below records the previous proposal, not a frozen implementation contract. Evaluate a vetted RFC 9180 authenticated-mode implementation and explicitly bind immutable header fields (including sender identity and semantic flags). Exact plaintext/padding encoding, replay rules and final transcripts must be resolved before MC-020 and independently reviewed before MC-022. No confidentiality or authentication fallback to plaintext is permitted.
+DM CHAT plaintext is `timestamp:u32 || text_len:u16 || UTF-8 text || zero_padding`, with 1–280 text bytes, minimally padded to 64/144/304 bytes. The larger bucket preserves the full text allowance plus metadata. Logical sizes are147/227/387 bytes. DM REACTION uses timestamp plus the ordinary ten-byte target/action/code payload and zero-pads to64 bytes. It affects only an unambiguous authenticated target in the same full-key conversation. The exact profile, domains, boundary fixtures and rejection rules are in MC-008 and its [vector plan](../tests/vectors/crypto/README.md).
 
-**Previous proposed transcript (finding R4).** Alongside the Ed25519 signing key (§7.1), each device publishes an **X25519** key (in the friend-code QR). The DM packet layout, all fields outside the ciphertext being authenticated as AEAD associated data:
+The keyed recipient tag remains `HMAC-SHA256(X25519(own_private, peer_public), ASCII("meshfest-dmtag-v1") || u64_be(epoch))[0:4]`, where epoch is the local Unix hour. Reject all-zero DH. Origins use the current hour; recipients compare previous/current/next hour for the uniquely resolved pin. Tags are hints, never authentication. No all-friend trial-decryption search is allowed. Relays carry valid-shaped encrypted traffic opaquely under the existing budgets; loss, mixed-channel SYNC selection, clock skew and expired tag windows may prevent catch-up.
 
-DM logical packet = standard 26-byte header (with `flags.encrypted` set, `channel_id` = recipient tag below) followed by the encrypted body:
+New authenticated effects require valid timestamps and atomic encrypted-store replay tombstones, retained through their acceptance window even when visible history is pruned. MC-008 specifies conflicts, clock uncertainty, overflow refusal and reset; MC-018 implements those transactions and bounded storage. Decrypted text is stored only in the encrypted database. An unavailable/locked provider, bad tag or key change never permits plaintext or silent key replacement.
 
-| Field | Size | Notes |
-|---|---|---|
-| `sender_key_id` | 8B | SHA-256(sender static X25519 pubkey)[:8] — tells the recipient which pinned friend's key to use in the authenticated DH (a *hint*, not a trust claim; the DH itself is the proof) |
-| `eph_pubkey` | 32B | Sender's ephemeral X25519 public key (fresh per message) |
-| `nonce` | 12B | AES-GCM nonce, random per message |
-| `ciphertext` | var | Encrypted plaintext (see below) |
-| `gcm_tag` | 16B | AES-256-GCM authentication tag |
-
-- **Sender-authenticated key derivation (finding R1 blocker fix).** The previous construction encrypted *to* the recipient and treated an enclosed pubkey as sender proof — which is forgeable, because anyone can encrypt to a public key (RFC 9180 base mode). v1 uses an **authenticated construction** proving the sender holds their static private key, combining two Diffie-Hellman results:
-  - `dh_ephemeral = X25519(eph_priv, recipient_static_pub)` — confidentiality (only the recipient can compute it).
-  - `dh_static = X25519(sender_static_priv, recipient_static_pub)` — **authentication**: only the holder of the *sender's* static private key can produce this value for this recipient. Mallory, lacking Alice's private key, cannot.
-  - `key = HKDF-SHA256(ikm = dh_ephemeral ‖ dh_static, salt = "meshfest-dm-v1", info = sender_static_pub ‖ recipient_static_pub ‖ eph_pubkey)`.
-  This is the X25519 analogue of RFC 9180 HPKE **auth mode** (`AuthEncap`/`AuthDecap`). A message that decrypts and authenticates under this key could only have been produced by someone holding *both* the ephemeral private key *and* Alice's static private key — so a valid DM is proof of sender identity without a separate signature. (If we later prefer an explicit signature instead, the equivalent is an Ed25519 signature by the sender over the AAD+ciphertext; the auth-DH form is chosen to avoid a second primitive and second key.)
-- **AEAD:** `AES-256-GCM(key, nonce, plaintext, aad)`, `aad = protocol_domain("meshfest-dm-v1") ‖ version ‖ type ‖ msg_id ‖ channel_id(recipient tag) ‖ sender_key_id ‖ eph_pubkey ‖ nonce`. Binding `msg_id` + recipient tag closes replay-under-modified-header (round-two R4); the authenticated DH closes sender-forgery (round-three R1).
-- **Plaintext (inside ciphertext):** the message `text` and the sender's `timestamp`. The sender's identity is *not* an enclosed claim — it is established by which pinned friend's static key successfully produces `dh_static` (the recipient tries the key indicated by `sender_key_id`; if that key yields a valid tag, the sender is authenticated as that friend). Nickname/avatar are not sent; the recipient renders the pinned petname/avatar.
-- **Recipient processing:** resolve `sender_key_id` to a pinned friend's static X25519 pubkey (if none, "encrypted message from unknown key" — no petname); compute `dh_ephemeral` and `dh_static` using *that friend's* pubkey and own static priv; derive `key`; verify GCM over the exact AAD. **Success authenticates the sender as that specific friend** (only they could have contributed `dh_static`). Any mismatch ⇒ reject, never fall back to plaintext. Dedup on `msg_id`.
-- **Required negative test (finding R1):** an attacker who knows every public value (both static pubkeys, a current recipient tag, the ephemeral pubkey format) but *not* Alice's static private key must be unable to produce a message that Bob authenticates as Alice. This is a mandatory crypto-suite vector (§13).
-
-**Reactions to DMs** use the identical envelope over the reaction payload, same AAD construction (§2.7).
-
-**Addressing — exact recipient-tag derivation (finding R5.4).** The DM's `channel_id` is a keyed, rotating tag computed identically by both parties:
-
-```
-pair_secret = X25519(own_static_x_priv, peer_static_x_pub)      // symmetric: both sides get the same value
-                                                                 // reject if all-zero (see validation below)
-epoch       = floor(unix_seconds / 3600)                         // 1-hour buckets
-tag_input   = "meshfest-dmtag-v1" || u64_be(epoch)
-tag_full    = HMAC-SHA256(key = pair_secret, message = tag_input)
-channel_id  = tag_full[0..4]                                     // FIRST 4 bytes, big-endian order preserved
-```
-
-- **Key/message ordering is fixed:** the *pair secret* is the HMAC key, the domain-string ‖ epoch is the message. No peer-identity ordering ambiguity arises because `pair_secret` is symmetric by construction (X25519 DH).
-- **Truncation:** the leading 4 bytes of the 32-byte HMAC output, in wire order.
-- **Rollover tolerance:** a receiver matches against the tags for `epoch − 1`, `epoch`, and `epoch + 1` (covering clock skew up to an hour in either direction plus messages in flight across a boundary). Senders always use the current epoch.
-- Each device precomputes 3 tags per pinned friend and matches incoming `channel_id` in O(1). A sniffer sees only an opaque 4-byte value that rotates hourly.
-
-Relays treat the tag as any other `channel_id` and flood it blindly.
-
-**X25519 key lifecycle and validation (finding R5.4).**
-- Each device generates **two** keypairs at first launch: Ed25519 (signing, §7.1) and **X25519 (DM encryption)**. Both private keys live in the OS keystore/Keychain; both are regenerated only by "Reset identity" (which also clears friend pins, since peers' cached keys become stale).
-- **Friend-code QR byte framing:** the QR encodes `base64url(0x01 ‖ ed25519_pub[32] ‖ x25519_pub[32])` = a fixed 65-byte payload (1-byte key-bundle version + both keys, in that order), then the nickname as a separate URL path segment: `meshfest://friend/<base64url(bundle)>/<url-encoded nick>`. A bundle of any other length or version is rejected.
-- **Input validation (RFC 7748 / RFC 9180):** reject any X25519 output that is **all zero** (indicates a low-order/degenerate peer key) — this applies to `pair_secret`, `dh_ephemeral`, and `dh_static`; on rejection the message is dropped and the peer key treated as invalid. Reject peer keys that are not exactly 32 bytes.
-- **Known limitation — key-compromise impersonation (KCI):** in authenticated DH constructions of this shape, an attacker who compromises *Bob's* static private key can forge messages that appear to come from Alice *to Bob*. This is an accepted, disclosed property (RFC 9180 notes it for authenticated DHKEM); it does not affect confidentiality against third parties and does not let an attacker forge Alice's messages to anyone else. The v2 ratchet work (§20) reduces the exposure window.
-
-**Routing and delivery are free.** An encrypted DM floods the mesh exactly like a channel message: it reaches the friend venue-wide through relays that carry it blind, and store-and-forward (§3.5) delivers it when they return to range. No routing table, no unicast path — the same best-effort semantics as everything else, now confidential.
-
-**Honest security scoping (ships in v1; strengthened in v2):**
-- **v1 — authenticated two-DH construction as above.** Protects fully against passive sniffing and relay reading. Limitation stated plainly in-product: **no forward secrecy** — if a friend's device is later compromised and an attacker also captured the ciphertext, past messages to that static key can be decrypted. Good enough for "keep the festival crowd from reading my texts," not pitched as Signal-grade. This limitation, and its v2 fix, are surfaced in the DM screen's security info, not buried.
-- **v2 — Double Ratchet** (§20) for forward secrecy and post-compromise recovery, plus **group DMs** (small friend clusters via sender-keys or per-recipient encryption). Deliberately deferred; the ratchet is real crypto-engineering and shouldn't be rushed, and shipping the authenticated two-DH form first gives users real confidentiality and sender authenticity now, without gating DMs on a ratchet.
-
-**Boundaries.**
-- **Friends only.** You can encrypt only to a held key, so strong DMs require an in-person friend add (§7.4). DMing a not-yet-friend would need a trust-on-first-use key swap over the mesh, which is MITM-able; offered only if clearly labeled weaker than an in-person add, and never the default.
-- **Residual metadata — what a sniffer learns (finding R5.7, stated precisely).** The rotating recipient tag hides *who a DM is addressed to*, but it does **not** hide the sender: a DM carries the standard stable `sender_id` in its header plus a stable `sender_key_id` in the envelope, both outside the ciphertext. So a passive observer can see **"this specific device sent an encrypted DM, at this time, of roughly this size"** and link all DMs from that device together — and, because `sender_id` is stable by design (§18-B1), tie them to that device's public channel activity. What is hidden: the recipient's identity, the conversation pairing, and the content. Padding to fixed length buckets (64/144/280B) blunts the size signal. If sender unlinkability is ever required, the fix is to move `sender_key_id` inside the encrypted envelope and have recipients trial-decrypt against candidate friend keys after tag matching (a CPU/privacy trade) — deliberately not done in v1, and disclosed here rather than glossed. "Metadata-private" is not claimed.
-- **Local storage.** Decrypted DM text lives only in the already-encrypted-at-rest DB (§9, SQLCipher); the message keys are ephemeral and never stored.
-
-**UI.** DMs live in the dedicated **Messages tab** (§10.1), structurally separate from channels: the tab contains only end-to-end encrypted conversations, so the plaintext/encrypted boundary is a place in the UI, not a per-thread footnote. Threads are petname-titled with a closed-lock indicator and a one-line "Encrypted for Sarah's verified device" affordance. A DM to someone whose key changed is blocked with the §7.4 re-scan prompt rather than silently sent to a key you can no longer trust.
+The Messages tab contains only encrypted friend conversations with petname titles. Sending requires a confirmed recipient tuple; mutual pairing is needed for both endpoints to accept DMs as friends. Security information discloses no forward secrecy/post-compromise recovery, recipient-compromise impersonation, and stable sender/time/size metadata. A recipient can fabricate transcripts addressed to itself, so a DM is not a third-party-verifiable signature. Rotating tags do not guarantee conversation anonymity. Ratchets and group DMs remain v2 work. Device verification and independent security gates are unchanged.
 
 ---
 
@@ -1039,7 +984,7 @@ Restricts posting in #Event Updates to event staff — without any server — vi
 | `not_before` | 4B | Unix seconds |
 | `not_after` | 4B | Unix seconds (≤ event end + 24h recommended; staff shifts ≤ 12h) |
 | `label_len` + `label` | 1B + ≤16B | Display label, e.g. "MainStage Ops" |
-| `root_sig` | 64B | Ed25519 by the root covering all credential bytes before this signature, including label_len; exact domains/encoding remain MC-008 |
+| `root_sig` | 64B | Ed25519 by the root covering all credential bytes before this signature, including label_len; exact domains/encoding are MC-008 §5 |
 
 Credential size ≈ 130 bytes.
 
@@ -1054,9 +999,9 @@ Credential size ≈ 130 bytes.
 | `credential` | `cred_len` B | The ~130B credential when included |
 | `staff_sig` | 64B | Ed25519 by the staff key over the canonical transcript below |
 
-**Signature coverage:** immutable header bytes 0–2 and 4–25 plus every payload byte before staff_sig, including pin state/expiry, cosmetics, all lengths and credential metadata/bytes. TTL alone is mutable. MC-008 freezes exact domain/transcript encoding and reviews the construction before MC-021. Staff verification proves credential authority; the signed header sender_id remains a separate device-identity claim, not proof of that device key or a friend pin.
+**Signature coverage:** immutable header bytes 0–2 and 4–25 plus every payload byte before staff_sig, including pin state/expiry, cosmetics, all lengths and credential metadata/bytes. TTL alone is mutable. Use MC-008 §5 exact domain/transcript encoding; independent full-construction review remains MC-022. Staff verification proves credential authority; the signed header sender_id remains a separate device-identity claim, not proof of that device key or a friend pin.
 
-**Verification:** (a) resolve `event_root_id` → adopted root pubkey; if none, unverified (relayed per §17.3, not badged). (b) Resolve the staff key: if `cred_included`, verify `root_sig` and cache the credential **keyed by `(event_root_id, staff_key_id)`**; else look up that cache key. If neither yields a credential, mark **unverified-pending** and emit CRED_REQ (below). (c) **Binding checks (finding R5.6), all mandatory:** `staff_key_id == SHA-256(credential.staff_pubkey)[:8]`, and `credential.event_root_id == message.event_root_id` — without both, an attacker could pair a valid credential with an unrelated message or key id. (d) Check `not_before ≤ now ≤ not_after` (±§17.3 skew). (e) Verify `staff_sig` with `staff_pubkey`. All pass ⇒ Event Staff badge.
+**Verification:** (a) resolve `event_root_id` → adopted root pubkey; if none, unverified (relayed per §17.3, not badged). (b) Resolve the staff key: if `cred_included`, verify `root_sig` and cache the credential **keyed by `(event_root_id, staff_key_id)`**; else look up that cache key. If neither yields a credential, mark **unverified-pending** and emit CRED_REQ (below). (c) **Binding checks (finding R5.6), all mandatory:** `staff_key_id == SHA-256(credential.staff_pubkey)[:8]`, and `credential.event_root_id == message.event_root_id` — without both, an attacker could pair a valid credential with an unrelated message or key id. (d) Check `not_before ≤ now ≤ not_after ≤ root expiry` (no implicit lifetime extension). (e) Verify `staff_sig` with `staff_pubkey`. All pass ⇒ Event Staff badge.
 
 **Credential distribution — multi-hop safe (finding R5.6).** One-hop CRED_REQ was insufficient: the immediate peer is often an ordinary relay that never adopted the root and holds no credential. So credentials are a **floodable, cacheable object**:
 
@@ -1065,7 +1010,7 @@ Credential size ≈ 130 bytes.
 - **CRED_REQ (type `0x07`)** remains as a fast path: payload `event_root_id ‖ staff_key_id`, unicast to the arrival peer, rate-limited 1/5s/link. **Any** node holding the credential in cache may answer with a CRED_OFFER — not only the staff device — so the request usually resolves locally. If the peer has neither the credential nor a route, it simply doesn't answer (no negative response needed); the requester relies on CRED_OFFER flooding and retries at most twice, 5s apart, then waits.
 - Pending credential recovery expires after 30 seconds under MC-007; loss, missing offers or budget exhaustion may leave the message unverified. Multi-hop recovery where the immediate peer lacks the credential remains a required test; no seconds-level recovery guarantee is assumed.
 
-**QR encodings (single canonical form each).** Adoption QR (public): `meshfest://event/<base64url(0x01 ‖ root_pubkey[32] ‖ root_not_after[4] ‖ root_self_sig[64])>/<url-encoded name>` — a 101-byte bundle. The root self-signature must cover its first 37 bytes (version, public key and expiry); MC-008 freezes exact domains/encoding. The recipient derives `event_root_id = SHA-256(root_pubkey)[:8]`; it is never a separate URL field. Staff provisioning is `meshfest://staff/<base64url(credential)>/<base64url(staff_seed[32])>`, with an exact 32-byte Ed25519 seed whose derived public key must match the credential. The canonical URI grammar (§5.3) governs decoding and confirmation. The **root private key is never in any QR or on any device**.
+**QR encodings (single canonical form each).** Adoption QR (public): `meshfest://event/<base64url(0x01 ‖ root_pubkey[32] ‖ root_not_after[4] ‖ root_self_sig[64])>/<url-encoded name>` — a 101-byte bundle. The root self-signature must cover its first 37 bytes (version, public key and expiry); Use the exact MC-008 §5 domain prefix. The recipient derives `event_root_id = SHA-256(root_pubkey)[:8]`; it is never a separate URL field. Staff provisioning is `meshfest://staff/<base64url(credential)>/<base64url(staff_seed[32])>`, with an exact 32-byte Ed25519 seed whose derived public key must match the credential. The canonical URI grammar (§5.3) governs decoding and confirmation. The **root private key is never in any QR or on any device**.
 
 **Wire types added:** `0x07` CRED_REQ (above). Verification ≈ two Ed25519 verifies, sub-millisecond.
 
@@ -1088,7 +1033,7 @@ A phone can hold multiple event roots. **Root-adoption expiry is independent of 
 | Display | Valid-signature messages show a ✓ "Event Staff" badge. Unsigned/invalid messages in #Event Updates are **hidden behind a collapsed "unverified messages" drawer** (viewable, never silently deleted — the mesh shouldn't memory-hole content, and false-positive hiding must be recoverable). |
 | Composer | Replaced with "Only event staff can post here" unless the device holds the private key (§17.4). |
 | Rate limit | Structurally organizer-signed Event Updates use the sender bucket capacity 10/refill 1 per 6s instead of ordinary capacity 2/refill 1 per 30s, preserving the mixed-adoption allowance. All sender-wide, link/node, crypto, queue and forwarding limits still apply. This structural rate classification grants no badge: only an adopted root and valid signature establish staff authority. Invalid signatures remain untrusted. |
-| Replay guard | Signed messages older than 48h by payload timestamp are treated as unverified (generous window because offline clocks drift; short-window replay is already killed by the dedup cache). |
+| Replay guard | MC-008 §4/5: 48h-past/300s-future signed-content window, persistent atomic accepted-effect tombstones, conflict handling and clock-uncertainty refusal. Stale content grants no current authority; relay dedup alone cannot supply this protection. |
 | Pinning | Five bytes after CHAT text: pin_state:u8 then pin_expiry:u32, before the organizer block. State 0 requires expiry 0; state 1 requires positive expiry within both root and credential lifetimes. All bytes are signed; only authenticated, adopted, unexpired authority affects pin display. |
 | No key adopted | Legacy behavior: open channel, everything displays normally. EVENT_INFO sightings produce the §17.2 prompt. |
 
@@ -1259,6 +1204,6 @@ Consumer revenue here is a tip jar, not the engine — festival/venue licensing 
 - **Encryption**: `flags.encrypted` + HKDF(three words) → AES-256-GCM; nickname moves inside ciphertext
 - **Global signing / Sybil resistance**: v1 already ships per-device keypairs, `sender_id = hash(pubkey)`, and signed friend/organizer messages (§7.4, §17). v2 extends signing to *all* traffic by default (airtime permitting) and uses key-fingerprint identity for Sybil-resistant rate limiting — closing the residual spoofability of public unsigned messages (§18-M6)
 - **Daily organizer subkeys** signed by the event root, limiting the blast radius of a leaked staff key (§18-M5)
-- **DM forward secrecy & encrypted group chats**: upgrade §7.5 DMs from the authenticated two-DH construction to a Double Ratchet (forward secrecy + post-compromise recovery); add small-group encrypted chats (closed roster of verified friends, roster changes trigger rekey) landing in the Messages tab (§10.1), whose everything-encrypted contract and list layout already anticipate them
+- **DM forward secrecy & encrypted group chats**: upgrade §7.5 DMs from RFC 9180 Auth to a Double Ratchet (forward secrecy + post-compromise recovery); add small-group encrypted chats (closed roster of verified friends, roster changes trigger rekey) landing in the Messages tab (§10.1), whose everything-encrypted contract and list layout already anticipate them
 - **Pre-distributed event keys**: app fetches known events' public keys (§17) while online, removing the QR-scan requirement for major partnered festivals
 - **Wi-Fi Aware / Wi-Fi Direct transport** as a second, higher-bandwidth rail on Android

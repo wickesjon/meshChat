@@ -66,7 +66,7 @@ The disposable workspace used the current core with security-probe/bindgen featu
 
 Dependency changes are covered by the native-consumer row of the approved local-validation policy. This scope approval alone would not waive those checks. The current Windows environment has no Mac/Xcode for required iOS validation; hosted Actions provisioning is unavailable under the previously recorded account limitation. That remains a separate merge prerequisite to resolve through available native runners or an explicit validation-policy decision. No host probe is described as native evidence, and no hardware/independent-security gates are waived.
 
-The user approved adding root `Cargo.lock` to MC-011 scope on 2026-09-11. The exact dependency integration above is authorized; native validation remains required. Ticket remains inprogress and incomplete; no PR/review/merge is claimed.
+The user approved adding root `Cargo.lock` to MC-011 scope on 2026-09-11. The exact dependency integration above is authorized; native validation remains required. Implementation and review subsequently completed as recorded below; the ticket remains inreview and unmerged.
 
 ### Implementation and host validation
 
@@ -85,6 +85,10 @@ The Android/iOS native-consumer checks are still required by the approved policy
 ## Review and merge
 
 - Branch: `ticket/MC-011-channels-text-and-deep-link-parsing`.
-- Review/PR: pending.
+- PR: [#13](https://github.com/wickesjon/meshChat/pull/13), ready for review, unmerged.
+- Separate `gpt-5.6-terra` / medium worker completed review of `fd1031fe698227a62435f554bac6e0db5e45e585` and posted [review 5185120908](https://github.com/wickesjon/meshChat/pull/13#pullrequestreview-5185120908): no actionable source findings. Completion notification was awaited without polling. This is an actual worker COMMENT review, not formal author self-approval or an independent security assessment.
+- Reviewer reproduced formatting, clippy, debug/release tests (34 each), release build, independent vectors, ticketboard validation and 12 tests, diff check, and host binding generation. Cached offline cargo-deny checks passed; the reviewer's fresh advisory fetch was unavailable because GitHub could not be reached. The earlier fresh author run remains the recorded fresh-advisory evidence.
+- [Hosted run 34671735191](https://github.com/wickesjon/meshChat/actions/runs/34671735191) for that revision completed with all four jobs marked failure and no job steps or logs returned. Android/iOS checks therefore provide no passing native evidence. The connector rejects the annotation endpoints, so the exact cause of this run is unverified; the previous account provisioning limitation is historical context only.
+- Merge remains blocked by the required Android/iOS native-consumer checks. No code changes followed the reviewed implementation; subsequent ticket updates record review and blocker evidence only.
 - Squash commit title: `MC-011: Channels, text and deep-link parsing`.
 - Completion becomes effective only when the reviewed squash commit lands on main.

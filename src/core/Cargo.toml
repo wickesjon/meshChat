@@ -39,6 +39,14 @@ name = "codec_fuzz"
 path = "../../tests/fuzz/codec_smoke.rs"
 
 [[test]]
+name = "transport"
+path = "../../tests/integration/transport/framing.rs"
+
+[[test]]
+name = "framing_fuzz"
+path = "../../tests/fuzz/framing_smoke.rs"
+
+[[test]]
 name = "security_probe"
 path = "../../tests/bench/security/curves.rs"
 required-features = ["security-probe"]

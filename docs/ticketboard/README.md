@@ -26,7 +26,7 @@ After edits run `python tests/ticketboard/validate.py --write`; then run `python
 | [MC-007](complete/MC-007-budgets-and-measurable-mesh-acceptance.md) | Budgets and measurable mesh acceptance | complete | MC-004, MC-006 |
 | [MC-008](complete/MC-008-reviewed-dm-and-trust-contract.md) | Reviewed DM and trust contract | complete | MC-005 |
 | [MC-009](complete/MC-009-logical-packet-codec-and-golden-vectors.md) | Logical packet codec and golden vectors | complete | MC-003, MC-006 |
-| [MC-010](backlog/MC-010-bounded-framing-and-reassembly.md) | Bounded framing and reassembly | backlog | MC-009, MC-007 |
+| [MC-010](complete/MC-010-bounded-framing-and-reassembly.md) | Bounded framing and reassembly | complete | MC-009, MC-007 |
 | [MC-011](backlog/MC-011-channels-text-and-deep-link-parsing.md) | Channels, text and deep-link parsing | backlog | MC-009 |
 | [MC-012](backlog/MC-012-deterministic-gatt-overlay-simulator.md) | Deterministic GATT-overlay simulator | backlog | MC-003, MC-007 |
 | [MC-013](backlog/MC-013-ingress-budgets-authentication-states-and-dedup.md) | Ingress budgets, authentication states and dedup | backlog | MC-010, MC-007, MC-012 |

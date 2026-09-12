@@ -1,0 +1,286 @@
+{
+  "fixture_version": 1,
+  "evidence_state": "specified",
+  "id_encoding": "16 lowercase hex digits encoding an unsigned big-endian u64",
+  "packet_recipe": "338-byte unsigned CHAT: version1,type1,flags0,TTL0 stored local-only; header msg_id from record; sender_id same as msg_id for synthetic unsigned identity; record channel; timestamp0,avatar0,nick n*20,cosmetics00000000,text x*280. Source arrival age60s, distinct descending cache sequence in listed order. No authenticated claims.",
+  "bloom": {
+    "bits": 4096,
+    "hashes": 6,
+    "salt_ascii": "meshfest-bloom-v1",
+    "bit_order": "MSB-first",
+    "hash": "SHA-256 double hashing: (u64be(h[0:8])+i*u64be(h[8:16])) mod4096, i=0..5"
+  },
+  "channels": {
+    "general": "bcf0eae3",
+    "confessions": "0e9d0974",
+    "event_updates": "d91ae76a",
+    "joined_private": {
+      "name": "melodic|techno|valley",
+      "id": "de3fcd5f"
+    },
+    "absent_private": {
+      "name": "filthy|riddim|swamp",
+      "id": "a5f35e80"
+    }
+  },
+  "common": {
+    "duration_seconds": 120,
+    "seed": 7,
+    "capacity_bytes": 146,
+    "page_items": 4,
+    "session_items": 8,
+    "session_encoded_bytes": 8192,
+    "loss": 0,
+    "churn": [],
+    "native_ready": true,
+    "payload_kind": "unsigned structural fixtures; no root adopted"
+  },
+  "cases": [
+    {
+      "id": "mixed-channels-v1",
+      "requester_subscriptions": [
+        "bcf0eae3",
+        "0e9d0974",
+        "d91ae76a",
+        "de3fcd5f"
+      ],
+      "requester_held_ids": [
+        "0000000000000001",
+        "0000000000000002"
+      ],
+      "request_item_count": 2,
+      "request_bloom_hex": "0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000010000000400000000000000000000000000000000000000000000000000000000000000000000000000000000000000000100000000000000000000000400000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001000000000000000000000000000000000000000000000400000000000000000000000000000000000000000000000000000000000000000001000000000000000000000000000004000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000010000000000000004000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000400000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+      "responder_newest_first": [
+        {
+          "msg_id": "0000000000000065",
+          "type": "CHAT",
+          "channel_id": "bcf0eae3",
+          "logical_size_bytes": 338,
+          "ttl": 0
+        },
+        {
+          "msg_id": "0000000000000066",
+          "type": "CHAT",
+          "channel_id": "a5f35e80",
+          "logical_size_bytes": 338,
+          "ttl": 0
+        },
+        {
+          "msg_id": "0000000000000001",
+          "type": "CHAT",
+          "channel_id": "bcf0eae3",
+          "logical_size_bytes": 338,
+          "ttl": 0
+        },
+        {
+          "msg_id": "0000000000000067",
+          "type": "CHAT",
+          "channel_id": "de3fcd5f",
+          "logical_size_bytes": 338,
+          "ttl": 0
+        },
+        {
+          "msg_id": "0000000000000068",
+          "type": "CHAT",
+          "channel_id": "0e9d0974",
+          "logical_size_bytes": 338,
+          "ttl": 0
+        },
+        {
+          "msg_id": "0000000000000069",
+          "type": "CHAT",
+          "channel_id": "d91ae76a",
+          "logical_size_bytes": 338,
+          "ttl": 0
+        },
+        {
+          "msg_id": "000000000000006a",
+          "type": "CHAT",
+          "channel_id": "a5f35e80",
+          "logical_size_bytes": 338,
+          "ttl": 0
+        },
+        {
+          "msg_id": "000000000000006b",
+          "type": "CHAT",
+          "channel_id": "bcf0eae3",
+          "logical_size_bytes": 338,
+          "ttl": 0
+        },
+        {
+          "msg_id": "000000000000006c",
+          "type": "CHAT",
+          "channel_id": "de3fcd5f",
+          "logical_size_bytes": 338,
+          "ttl": 0
+        },
+        {
+          "msg_id": "000000000000006d",
+          "type": "CHAT",
+          "channel_id": "bcf0eae3",
+          "logical_size_bytes": 338,
+          "ttl": 0
+        }
+      ],
+      "expected_selected_ids": [
+        "0000000000000065",
+        "0000000000000066",
+        "0000000000000067",
+        "0000000000000068",
+        "0000000000000069",
+        "000000000000006a",
+        "000000000000006b",
+        "000000000000006c"
+      ],
+      "expected_selected_encoded_bytes": 2704,
+      "expected_bloom_known_omissions": [
+        "0000000000000001"
+      ],
+      "expected_bloom_false_positive_omissions": [],
+      "expected_budget_omissions": [
+        "000000000000006d"
+      ],
+      "expected_subscription_display_ids": [
+        "0000000000000065",
+        "0000000000000067",
+        "0000000000000068",
+        "0000000000000069",
+        "000000000000006b",
+        "000000000000006c"
+      ],
+      "expected_unsubscribed_but_received_ids": [
+        "0000000000000066",
+        "000000000000006a"
+      ],
+      "expected_page_data_ids": [
+        [
+          "0000000000000065",
+          "0000000000000066",
+          "0000000000000067",
+          "0000000000000068"
+        ],
+        [
+          "0000000000000069",
+          "000000000000006a",
+          "000000000000006b",
+          "000000000000006c"
+        ]
+      ],
+      "expected_page_marker_flags": [
+        3,
+        7
+      ],
+      "expected_forwarded_ids": []
+    },
+    {
+      "id": "fixed-bloom-false-positive-repeat-v1",
+      "requester_subscriptions": [
+        "bcf0eae3",
+        "0e9d0974",
+        "d91ae76a"
+      ],
+      "requester_held_u64_range_inclusive": [
+        1,
+        500
+      ],
+      "request_item_count": 500,
+      "request_bloom_hex": "fc716555fee457805adb1398c70e7c62b4148d2e0a0b59064f5c3531295444177505cf59715898c81ec3e465889838c686506497ee42ad5bf7dd5dfb7bd7993f31bc74417f2aeacd9f7256764accf2f05c4aa7b43bbd93b545905fc08941075fe036b26384a76eacdea3ad31686fccc6ef7ded9af06bf8f7e85b82f6a9c41ef89f7820b7d68be34a5f14ecdbd7cf6163dec40f5e13643496efde35f1c4c1d0b909cc7350bccacd6b5db37463cba39d6f1f872f69bed8f632eaaa794391df5274d2239dbe13352769b360355c4db598f5123268bdd38f5f2ea5955c92d7bae24b38e0cb6e1f4d4a63c5eb25cb2d1064fdf9514d45413db9e76f281ce7f40465b1e6752e87f7bd80856595f2f9c8fe515f70c2fbe0f4a7faa4f79357b788a35d818632e9222c1763a92cb3e47a651805fc0149145c1b482c8f0e7e4d47699b94449f8578a33b68e056f59f8463f248e0167a8d0bf3c616a22c60fcd54babcaf2766e0d03484dbcae7297f52603dba4374bf3a590311653fe99caf0e4bc563145476cc1aaaf128a5eb59aaf3d229798d4ee4c32c736bbd76beca565d7c5337cb96c0eb312a94993a3f7e1c4cc5ce00c6510f9aec9e541b705e65c55ba9d71c66ad41e738374fc853f4eac44de84815f0bc16d8844f7cc636dddd0d852eb7610e88ec37bf51a6c7a233aefc811cd4c6d4f2428f28f7b74cc76392c7754716ea6f46d",
+      "responder_newest_first": [
+        {
+          "msg_id": "000000000000020d",
+          "type": "CHAT",
+          "channel_id": "bcf0eae3",
+          "logical_size_bytes": 338,
+          "ttl": 0
+        },
+        {
+          "msg_id": "00000000000001f5",
+          "type": "CHAT",
+          "channel_id": "bcf0eae3",
+          "logical_size_bytes": 338,
+          "ttl": 0
+        },
+        {
+          "msg_id": "000000000000000a",
+          "type": "CHAT",
+          "channel_id": "bcf0eae3",
+          "logical_size_bytes": 338,
+          "ttl": 0
+        },
+        {
+          "msg_id": "00000000000001f6",
+          "type": "CHAT",
+          "channel_id": "bcf0eae3",
+          "logical_size_bytes": 338,
+          "ttl": 0
+        }
+      ],
+      "expected_selected_ids": [
+        "00000000000001f5",
+        "00000000000001f6"
+      ],
+      "expected_selected_encoded_bytes": 676,
+      "expected_bloom_known_omissions": [
+        "000000000000000a"
+      ],
+      "expected_bloom_false_positive_omissions": [
+        "000000000000020d"
+      ],
+      "expected_budget_omissions": [],
+      "expected_subscription_display_ids": [
+        "00000000000001f5",
+        "00000000000001f6"
+      ],
+      "expected_unsubscribed_but_received_ids": [],
+      "expected_page_data_ids": [
+        [
+          "00000000000001f5",
+          "00000000000001f6"
+        ]
+      ],
+      "expected_page_marker_flags": [
+        5
+      ],
+      "expected_forwarded_ids": [],
+      "repeat": {
+        "session_ids": [
+          1,
+          2
+        ],
+        "request_start_seconds": [
+          0,
+          60
+        ],
+        "filter_input": "inject the same fixed item_count/Bloom in two separately admitted walks; this does not assert that normal live cache recomputation is unchanged",
+        "expected_selected_ids_each_walk": [
+          [
+            "00000000000001f5",
+            "00000000000001f6"
+          ],
+          [
+            "00000000000001f5",
+            "00000000000001f6"
+          ]
+        ],
+        "expected_false_positive_omissions_each_walk": [
+          [
+            "000000000000020d"
+          ],
+          [
+            "000000000000020d"
+          ]
+        ],
+        "expected_new_display_ids_each_walk": [
+          [
+            "00000000000001f5",
+            "00000000000001f6"
+          ],
+          []
+        ],
+        "missing_before_first_walk": 3,
+        "recovered_distinct_after_both_walks": 2,
+        "selected_set_denominator_each_walk": 2
+      }
+    }
+  ]
+}

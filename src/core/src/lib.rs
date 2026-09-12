@@ -7,6 +7,7 @@ use std::sync::Mutex;
 uniffi::setup_scaffolding!();
 
 pub mod codec;
+pub mod framing;
 
 // Temporary MC-005 feasibility surface; absent from normal application builds.
 #[cfg(feature = "security-probe")]

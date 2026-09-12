@@ -1,10 +1,12 @@
-//! Deterministic link boundary. No radio, clock, RNG, wire codec or persistent state.
+//! Deterministic link boundary and bounded logical codec. No radio or persistent state.
 #![forbid(unsafe_code)]
 
 use std::collections::BTreeMap;
 use std::sync::Mutex;
 
 uniffi::setup_scaffolding!();
+
+pub mod codec;
 
 // Temporary MC-005 feasibility surface; absent from normal application builds.
 #[cfg(feature = "security-probe")]

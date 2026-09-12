@@ -31,6 +31,14 @@ name = "foundation"
 path = "../../tests/integration/ffi/foundation.rs"
 
 [[test]]
+name = "codec"
+path = "../../tests/integration/codec/codec.rs"
+
+[[test]]
+name = "codec_fuzz"
+path = "../../tests/fuzz/codec_smoke.rs"
+
+[[test]]
 name = "security_probe"
 path = "../../tests/bench/security/curves.rs"
 required-features = ["security-probe"]

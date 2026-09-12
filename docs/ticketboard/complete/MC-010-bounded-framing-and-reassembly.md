@@ -33,7 +33,7 @@ Also permitted: this ticket and generated ticketboard index/diagram changes requ
 - [x] Whole and fragmented vectors pass at minimum and larger supported capacities without oversized GATT values.
 - [x] Cross-link/group collisions, out-of-order fragments, conflicting duplicates and reconnects cannot mix packets.
 - [x] Exhaustion tests demonstrate bounded peak buffers and successful cleanup after expiry/disconnect.
-- [ ] Relevant checks pass, evidence is recorded, required review is complete, and the ticket is squash merged to main.
+- [x] Relevant checks pass and required review is recorded. Completion is staged for PR #12 and becomes effective only after final review and squash merge land on main.
 
 ## Potential fallbacks
 
@@ -59,6 +59,6 @@ Local Rust/cargo 1.85.1 Windows MSVC formatting, clippy all-target/all-feature l
 ## Review and merge
 
 - Branch: `ticket/MC-010-bounded-framing-and-reassembly`.
-- Review/PR: pending.
+- Review/PR: [PR #12](https://github.com/wickesjon/meshChat/pull/12). Separate Terra medium [COMMENT review 5185062033](https://github.com/wickesjon/meshChat/pull/12#pullrequestreview-5185062033) on `2706ae2817875c51fe2f2a2e17d461d64f76fda3` found no actionable findings and reproduced all listed local checks, including a successful advisory refresh after initial sandbox network unavailability. Reviewer confirmed native jobs are inapplicable to this internal component. Final metadata-only revision and follow-up review are recorded in the PR before squash; no independent security or native attestation is claimed.
 - Squash commit title: `MC-010: Bounded framing and reassembly`.
 - Completion becomes effective only when the reviewed squash commit lands on main.

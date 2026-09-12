@@ -33,7 +33,7 @@ Also permitted: this ticket and generated ticketboard index/diagram changes requ
 - [x] All supported types round-trip and match golden vectors; malformed lengths and flag combinations return errors.
 - [x] Unknown-type forwarding preserves opaque bytes within conservative budgets; unknown flags never bypass known-type validation.
 - [x] Fuzz smoke runs complete without panic or unbounded allocation and persist useful regression inputs.
-- [ ] Relevant checks pass, evidence is recorded, required review is complete, and the ticket is squash merged to main.
+- [x] Relevant checks pass and review is recorded. Final completion is staged for PR #11 and becomes effective only after the final review and squash land on main.
 
 ## Potential fallbacks
 
@@ -50,13 +50,13 @@ Implemented `src/core/src/codec.rs` as a borrowed, allocation-free structural pa
 
 The [base vectors](../../../tests/vectors/base/README.md) persist 170 positive/negative cases with a separate Python grammar assembler, literal MC-006 reaction comparison, all layouts/maxima, every known-type disallowed flag pair, every truncation, strict UTF-8 and field boundaries, every unknown type/flag pair and byte-preserving forward checks. The [fuzz target](../../../tests/fuzz/README.md) exercises both parse contexts and standalone credentials with seed truncations/inversions, 100,000 reproducible mutations and random sizes 0–1,100. This is mutation fuzzing, not a coverage-guided campaign. Parser code has no allocation sites; harness buffers and serialization outputs are explicitly bounded. Persisted malformed cases serve as regression seeds.
 
-Local Windows x86_64 MSVC checks use Rust/cargo 1.85.1, Python 3.14.4 and cargo-deny 0.20.2. Required commands: `cargo fmt --all -- --check`; `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`; debug and release `cargo test --workspace --all-features --locked`; `cargo build --workspace --all-features --locked --release`; `git diff --exit-code -- Cargo.lock`; `cargo-deny --all-features --locked --config src/core/deny.toml check`; `python -B tests/vectors/base/generate.py`; ticketboard write/default and 12 unit tests; `git diff --check`. Outcomes and final revision are recorded in the PR after the final run.
+Local Windows x86_64 MSVC checks use Rust/cargo 1.85.1, Python 3.14.4 and cargo-deny 0.20.2. Required commands: `cargo fmt --all -- --check`; `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`; debug and release `cargo test --workspace --all-features --locked`; `cargo build --workspace --all-features --locked --release`; `git diff --exit-code -- Cargo.lock`; `cargo-deny --all-features --locked --config src/core/deny.toml check`; `python -B tests/vectors/base/generate.py`; ticketboard write/default and 12 unit tests; `git diff --check`. All commands pass: 14 Rust tests each in debug/release, 170 vectors, 12 board tests and all four deny gates. The final reviewed revision is recorded in the PR.
 
 Only an internal Rust module and source-external Cargo test targets were added. No dependency, lockfile, build script, UniFFI export or native interface changed. The module is not connected to native ingress yet. Under the approved local policy, host Rust/vector/fuzz/security checks apply; Android/iOS jobs have no affected interface or packaging behavior and are omitted subject to required Terra confirmation. No native, physical, independent security or authenticated-message result is claimed.
 
 ## Review and merge
 
 - Branch: `ticket/MC-009-logical-packet-codec-and-golden-vectors`.
-- Review/PR: pending.
+- Review/PR: [PR #11](https://github.com/wickesjon/meshChat/pull/11). Separate Terra medium [COMMENT review 5185002804](https://github.com/wickesjon/meshChat/pull/11#pullrequestreview-5185002804) on `7b24a81797cbe8711d03ffa98e3ee94e5056f58a` found no actionable issues and reproduced all listed checks, using cached offline advisory data after a restricted-network refresh failed. Root refreshed the advisory data successfully for its passing run. Reviewer confirmed omitted native jobs are inapplicable; no independent security/native attestation is claimed. Final metadata-only revision and follow-up review are recorded in the PR before squash.
 - Squash commit title: `MC-009: Logical packet codec and golden vectors`.
 - Completion becomes effective only when the reviewed squash commit lands on main.

@@ -44,7 +44,9 @@ A triggered fallback must be recorded with evidence. It does not authorize weake
 
 ## Evidence
 
-Not implemented. Record commands, versions, reproducible inputs and results here. For manual/hardware checks include device/OS, duration and report paths. No test or review is claimed yet.
+Started from main `edb3201b6f4b498ca521bcbe02b7406f875aa228`, with MC-005 complete. The [dependency compatibility proposal](../../decisions/MC-008-dependency-scope-proposal.md) compares HPKE 0.12.0, 0.13.0 and 0.14.1 against the existing pinned core graph in disposable repo-local experiments. All pass advisory/license/source checks but fail the repository's duplicate-version ban. The recommended 0.14.1 graph also passes host `cargo check` with pinned Rust 1.85.1; no native, crypto-vector or independent-security result is claimed.
+
+Blocked on an explicit scope decision for the proposal's nine exact duplicate-version pairs, to be applied only when integrating the selected dependency. Production manifests/lockfile/security configuration are unchanged. No construction selection is frozen yet, no acceptance checkbox is complete, and this ticket must not merge or unblock dependent implementation. Older versions also require exceptions; a coordinated existing-dependency upgrade is a separate alternative scope. The proposal records reproducible manifests, commands, retained logs, graph hash and tradeoffs. Ticketboard regeneration/default validation and documentation checks must pass before publishing the eventual ready PR; no PR or Terra review is claimed at this stage.
 
 ## Review and merge
 

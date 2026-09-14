@@ -61,7 +61,7 @@ After edits run `python tests/ticketboard/validate.py --write`; then run `python
 | [MC-042](backlog/MC-042-honest-contribution-and-power-feedback.md) | Honest contribution and power feedback | backlog | MC-028, MC-024 |
 | [MC-043](backlog/MC-043-android-physical-key-and-storage-verification.md) | Android physical key and storage verification | backlog | MC-017, MC-018, MC-029, MC-030, MC-031, MC-032, MC-033, MC-042 |
 | [MC-044](backlog/MC-044-ios-physical-key-and-storage-verification.md) | iOS physical key and storage verification | backlog | MC-017, MC-018, MC-035 |
-| [MC-045](inreview/MC-045-defer-physical-acceptance.md) | Defer physical acceptance until integrated candidates | inreview | MC-001, MC-007 |
+| [MC-045](complete/MC-045-defer-physical-acceptance.md) | Defer physical acceptance until integrated candidates | complete | MC-001, MC-007 |
 <!-- INDEX:END -->
 
 ## Status interpretation

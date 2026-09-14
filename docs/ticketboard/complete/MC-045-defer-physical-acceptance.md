@@ -32,7 +32,7 @@ User-authorized documentation changes only: `AGENTS.md`, `docs/decisions/local-v
 - [x] Every transferred physical scenario has a named later owner, with beta/release blocked on that owner.
 - [x] Feature implementation no longer depends on the deferred physical gates; the graph is acyclic and regenerated consistently.
 - [x] Policy, design and plan agree on synthetic evidence, native builds, physical certification and release prerequisites; MC-011's separate native blocker is not waived.
-- [ ] Documentation checks and separate Terra medium review pass; completion becomes effective only after squash merge.
+- [x] Documentation checks and separate Terra medium review pass; completion becomes effective only after squash merge.
 
 ## Potential fallbacks
 
@@ -49,9 +49,11 @@ Validation on Python 3.14.4, Windows: `python -B tests/ticketboard/validate.py -
 
 Check applicability: this PR changes only documentation and ticket dependencies. It does not alter production code, packages, wire vectors, platform manifests, FFI or build infrastructure, so Rust/native execution is not required for this PR. This does not change check applicability for the separate MC-011 dependency PR.
 
+Separate `gpt-5.6-terra` / medium worker completed review of `a565dad5a4e2d1fddcc8428974f66221871e73dc` and posted [COMMENT review 5196135328](https://github.com/wickesjon/meshChat/pull/14#pullrequestreview-5196135328): no actionable findings. The worker reproduced default board validation, all 12 board tests and diff checks, plus an independent 45-ticket/123-edge/127-link audit. Review completion was awaited without polling. This is separate-agent documentation review, not a physical result, formal author self-approval or independent security assessment. The completed-folder state is staged for squash merge only; final metadata review is recorded on the PR.
+
 ## Review and merge
 
 - Branch: `ticket/MC-045-defer-physical-acceptance`.
-- Review/PR: pending.
+- Review/PR: [#14](https://github.com/wickesjon/meshChat/pull/14).
 - Squash commit title: `MC-045: Defer physical acceptance until integrated candidates`.
 - Completion becomes effective only when the reviewed squash commit lands on main.

@@ -41,9 +41,9 @@ After edits run `python tests/ticketboard/validate.py --write`; then run `python
 | [MC-022](backlog/MC-022-full-wire-crypto-review-and-freeze.md) | Full-wire crypto review and freeze | backlog | MC-020, MC-021 |
 | [MC-023](backlog/MC-023-android-gatt-transport.md) | Android GATT transport | backlog | MC-004, MC-016 |
 | [MC-024](backlog/MC-024-android-connection-and-power-integration.md) | Android connection and power integration | backlog | MC-023, MC-014 |
-| [MC-025](backlog/MC-025-android-bench-mesh-and-early-field-gate.md) | Android bench mesh and early field gate | backlog | MC-024, MC-015 |
+| [MC-025](backlog/MC-025-android-bench-mesh-and-early-field-gate.md) | Android integrated bench mesh and field gate | backlog | MC-024, MC-015, MC-029, MC-030, MC-031, MC-032, MC-033, MC-042, MC-022 |
 | [MC-026](backlog/MC-026-ios-corebluetooth-driver.md) | iOS CoreBluetooth driver | backlog | MC-004, MC-016 |
-| [MC-027](backlog/MC-027-cross-platform-radio-interoperability.md) | Cross-platform radio interoperability | backlog | MC-026, MC-023, MC-022 |
+| [MC-027](backlog/MC-027-cross-platform-radio-interoperability.md) | Cross-platform radio interoperability | backlog | MC-026, MC-023, MC-022, MC-035 |
 | [MC-028](backlog/MC-028-android-shell-and-channel-chat.md) | Android shell and channel chat | backlog | MC-018, MC-023, MC-011 |
 | [MC-029](backlog/MC-029-android-friends-and-encrypted-messaging-ui.md) | Android friends and encrypted messaging UI | backlog | MC-028, MC-020 |
 | [MC-030](backlog/MC-030-android-organizer-ui-and-staff-provisioning.md) | Android organizer UI and staff provisioning | backlog | MC-028, MC-021, MC-041 |
@@ -51,7 +51,7 @@ After edits run `python tests/ticketboard/validate.py --write`; then run `python
 | [MC-032](backlog/MC-032-supporter-entitlements-and-accessible-cosmetics.md) | Supporter entitlements and accessible cosmetics | backlog | MC-028, MC-006 |
 | [MC-033](backlog/MC-033-android-phone-beacon-mode.md) | Android phone Beacon Mode | backlog | MC-024, MC-018, MC-028 |
 | [MC-034](backlog/MC-034-android-beta-integration-gate.md) | Android beta integration gate | backlog | MC-025, MC-029, MC-030, MC-031, MC-032, MC-033, MC-042, MC-022, MC-043 |
-| [MC-035](backlog/MC-035-ios-feature-parity-and-lifecycle-ui.md) | iOS feature parity and lifecycle UI | backlog | MC-027, MC-029, MC-030, MC-031, MC-032, MC-042 |
+| [MC-035](backlog/MC-035-ios-feature-parity-and-lifecycle-ui.md) | iOS feature parity and lifecycle UI | backlog | MC-026, MC-022, MC-029, MC-030, MC-031, MC-032, MC-042 |
 | [MC-036](backlog/MC-036-integrated-security-and-resource-regression-gate.md) | Integrated security and resource regression gate | backlog | MC-022, MC-027, MC-033 |
 | [MC-037](backlog/MC-037-independent-security-assessment-and-remediation.md) | Independent security assessment and remediation | backlog | MC-034, MC-035, MC-036, MC-044 |
 | [MC-038](backlog/MC-038-mixed-platform-scale-and-battery-field-validation.md) | Mixed-platform scale and battery field validation | backlog | MC-034, MC-035, MC-036 |
@@ -59,8 +59,9 @@ After edits run `python tests/ticketboard/validate.py --write`; then run `python
 | [MC-040](backlog/MC-040-v1-release-acceptance-gate.md) | v1 release acceptance gate | backlog | MC-039 |
 | [MC-041](backlog/MC-041-offline-organizer-key-and-credential-tooling.md) | Offline organizer key and credential tooling | backlog | MC-021 |
 | [MC-042](backlog/MC-042-honest-contribution-and-power-feedback.md) | Honest contribution and power feedback | backlog | MC-028, MC-024 |
-| [MC-043](backlog/MC-043-android-physical-key-and-storage-verification.md) | Android physical key and storage verification | backlog | MC-017, MC-018 |
-| [MC-044](backlog/MC-044-ios-physical-key-and-storage-verification.md) | iOS physical key and storage verification | backlog | MC-017, MC-018 |
+| [MC-043](backlog/MC-043-android-physical-key-and-storage-verification.md) | Android physical key and storage verification | backlog | MC-017, MC-018, MC-029, MC-030, MC-031, MC-032, MC-033, MC-042 |
+| [MC-044](backlog/MC-044-ios-physical-key-and-storage-verification.md) | iOS physical key and storage verification | backlog | MC-017, MC-018, MC-035 |
+| [MC-045](inreview/MC-045-defer-physical-acceptance.md) | Defer physical acceptance until integrated candidates | inreview | MC-001, MC-007 |
 <!-- INDEX:END -->
 
 ## Status interpretation

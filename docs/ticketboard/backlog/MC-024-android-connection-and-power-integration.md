@@ -26,13 +26,13 @@ Also permitted: this ticket and generated ticketboard index/diagram changes requ
 
 - Implement post-handshake duplicate-link resolution, bounded connection slots, novelty/RSSI selection and idle-peer eviction.
 - Wire core Auto/Saver/Normal policy, isolated scanning backoff, charging and permission changes to Android lifecycle APIs.
-- Exercise reconnect churn and OEM service termination with explicit degraded states.
+- Exercise reconnect churn and injected service-termination callbacks with explicit degraded states; retain actual OEM termination scenarios for MC-025.
 
 ## Exit criteria
 
 - [ ] Duplicate simultaneous connections settle deterministically without blocking asymmetric discovery.
 - [ ] Slot-exhaustion and reconnection tests obey device limits and do not accumulate stale resources.
-- [ ] Pixel/Samsung/Xiaomi evidence covers permissions, screen-off behavior and the selected power thresholds.
+- [ ] Automated lifecycle/permission/service-stop and threshold tests pass with applicable native checks. Pixel/Samsung/Xiaomi permission, screen-off, OEM termination and measured connection-limit evidence is retained in MC-025.
 - [ ] Relevant checks pass, evidence is recorded, required review is complete, and the ticket is squash merged to main.
 
 ## Potential fallbacks
@@ -43,6 +43,8 @@ Also permitted: this ticket and generated ticketboard index/diagram changes requ
 A triggered fallback must be recorded with evidence. It does not authorize weaker security, invented validation or expanded scope.
 
 ## Evidence
+
+Scheduling approved 2026-09-14 in [the validation policy](../../decisions/local-validation-policy.md#physical-acceptance-scheduling--approved-2026-09-14). Physical OEM acceptance transfers to MC-025; native build checks and bounded-state regression tests remain implementation gates.
 
 Not implemented. Record commands, versions, reproducible inputs and results here. For manual/hardware checks include device/OS, duration and report paths. No test or review is claimed yet.
 

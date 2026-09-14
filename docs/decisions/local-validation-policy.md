@@ -17,6 +17,27 @@ Approved by the user on 2026-09-11 after hosted Actions could not provision runn
 
 Assess transitive effects, not just file extensions. An internal Rust change with no native interface/build effect can use host component checks; the reviewer must confirm the rationale for omitted platform jobs. An unavailable required platform check remains a blocker for that change. Unrelated platform jobs are not prerequisites for documentation-only PRs.
 
+## Physical acceptance scheduling — approved 2026-09-14
+
+The user cannot test on real devices until implementation is near completion. Physical checks embedded in implementation tickets MC-023/024/026/033/035 are therefore transferred to the named acceptance gates below. Those implementation tickets may complete with their specified automated tests, applicable native builds and Terra review; their completion does not certify physical behavior. This changes timing and ownership, not supported behavior, acceptance thresholds or evidence quality. Use synthetic data during development until the corresponding MC-043/044 protection gate permits sensitive-data use.
+
+| Implementation work | Required development evidence | Deferred physical owner and deadline |
+|---|---|---|
+| MC-023 Android GATT driver | Native build/lint plus automated whole/fragmented exchange, directional capacity and backpressure/callback tests | MC-025: two real Android devices, both directions, runtime limits/backpressure; before MC-034 beta |
+| MC-024 connection/power policy | Automated duplicate-link, slot/churn, permission/service-stop and power-threshold tests plus native checks | MC-025: Pixel/Samsung/Xiaomi screen-off, OEM termination, permission and connection-limit matrix; before MC-034 |
+| MC-026 CoreBluetooth driver | Mac/Xcode builds and automated role, readiness, capacity, lifecycle and restoration-state tests | MC-027: real-device role/frame matrix, background/suspension/disconnect/restoration/foreground and discovery/force-quit results; before MC-036/037/038 |
+| MC-033 phone Beacon Mode | Native tests for bounded scheduling/cache, long-duration logical operation and power transitions | MC-025: six-hour powered-phone run, physical power removal/downgrade, sparse-gap coverage and battery/load comparison; before MC-034 |
+| MC-035 iOS feature integration | Native builds and UI/integration tests with the production core and synthetic inputs | MC-027: every shipping v1 flow on the supported physical iOS matrix, including reset/restoration, offline purchase cache and catch-up; before MC-036/037/038 |
+| MC-017/018 protected identity/storage | Existing MC-005 development contract and synthetic native lifecycle/negative checks | MC-043 after Android feature integration and before MC-034; MC-044 after MC-035 and before MC-037; both retain all physical backup/lock/restore scenarios |
+
+MC-025 now waits for the Android feature implementations; MC-027 waits for MC-035, while MC-035 depends directly on MC-026 and MC-022 instead of physical interop. MC-043/044 also wait for their platform feature integration. The authoritative ticket dependencies enforce this sequencing without cycles. MC-034 keeps Android physical feature acceptance, MC-036 keeps its integrated adversarial device gate, and MC-038 keeps the 30–50-device field gate. Independent MC-022/037 assessments remain separate and unchanged.
+
+Run available emulator/simulator checks during development and record their exact versions, inputs and limitations. Test doubles remain confined to tests; production implementations must retain their actual native adapters. Simulated timing, radio, lifecycle or security results never establish physical capacity, range, battery, OEM background behavior or hardware key protection. Transfer each deferred scenario and its procedure to its owner; do not mark it passed in the originating implementation ticket. Later failures require scoped remediation and retesting before the physical gate closes.
+
+Native compilation does not require a physical handset and is **not deferred by this decision**. Android Studio can install the pinned SDK/NDK and provide emulator tooling, but installation alone is not a successful build. The current Android Rust build script still needs supported Linux/macOS tooling or separately scoped Windows support. iOS still needs Mac/Xcode, including unsigned device/simulator builds and relevant Swift regressions. Thus MC-011 PR #13's required native dependency checks remain blocking under this policy. Missing hardware blocks the scheduled physical gates; missing required native build tooling blocks affected implementation PRs.
+
+Tooling reference: Android's [NDK installation guide](https://developer.android.com/studio/projects/install-ndk?hl=en) explains installing a specific side-by-side version through SDK Manager; this repository pins NDK `27.3.13750724` in its build workflow. This is setup guidance, not evidence of a completed local installation or test.
+
 For MC-007, the changed runtime artifacts are Python arithmetic/definition validators and JSON scenario inputs, not application code, native packages or dependencies. Required checks are:
 
 ```text
@@ -39,4 +60,4 @@ Record the exact source revision, host/tool versions, commands, outcomes, unavai
 
 Hosted Actions may remain supplemental. A runner that never started is unavailable evidence, not a passing or failing source test. A real failure in a relevant hosted or local check must be investigated and resolved before merge. This policy does not authorize ignoring test failures, overriding branch protection, or modifying account billing/settings. If remote protection demands unavailable hosted statuses, report that separate blocker.
 
-Hardware acceptance, MC-043/044 physical storage verification, independent construction/transcript review, integrated security assessments, and release gates are unchanged. Terra review is an actual separate-agent code/document review, not a substitute for those independent security assessments. A shared author account may record COMMENT review evidence; do not fabricate formal self-approval.
+Hardware acceptance requirements and thresholds remain mandatory with the ownership/timing above. MC-043/044 physical storage verification, independent construction/transcript review, integrated security assessments, and release criteria are not waived. Terra review is an actual separate-agent code/document review, not a substitute for those independent security assessments. A shared author account may record COMMENT review evidence; do not fabricate formal self-approval.

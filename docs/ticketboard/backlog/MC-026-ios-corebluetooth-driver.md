@@ -30,8 +30,8 @@ Also permitted: this ticket and generated ticketboard index/diagram changes requ
 
 ## Exit criteria
 
-- [ ] Real devices exchange all base frame kinds in both roles within runtime value limits.
-- [ ] Background, suspension, disconnect, restoration and foreground catch-up produce recorded expected outcomes.
+- [ ] Automated native-adapter tests cover all base frame kinds in both roles, readiness callbacks and directional runtime limits; relevant Mac/Xcode builds and regressions pass. MC-027 retains physical exchange acceptance.
+- [ ] Injected background, suspension, disconnect, restoration and foreground catch-up transitions produce the expected bounded state in automated tests; real OS execution and timing remain MC-027 acceptance.
 - [ ] Unsupported discovery/force-quit cases are distinguished from regressions.
 - [ ] Relevant checks pass, evidence is recorded, required review is complete, and the ticket is squash merged to main.
 
@@ -43,6 +43,8 @@ Also permitted: this ticket and generated ticketboard index/diagram changes requ
 A triggered fallback must be recorded with evidence. It does not authorize weaker security, invented validation or expanded scope.
 
 ## Evidence
+
+Scheduling approved 2026-09-14 in [the validation policy](../../decisions/local-validation-policy.md#physical-acceptance-scheduling--approved-2026-09-14). All physical driver/lifecycle/discovery scenarios transfer to MC-027 after feature integration; missing Mac/Xcode is still a native build blocker.
 
 Not implemented. Record commands, versions, reproducible inputs and results here. For manual/hardware checks include device/OS, duration and report paths. No test or review is claimed yet.
 

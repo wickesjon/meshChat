@@ -1,7 +1,7 @@
 ---
 id: "MC-035"
 title: "iOS feature parity and lifecycle UI"
-depends_on: ["MC-027","MC-029","MC-030","MC-031","MC-032","MC-042"]
+depends_on: ["MC-026","MC-022","MC-029","MC-030","MC-031","MC-032","MC-042"]
 kind: "ios"
 branch: "ticket/MC-035-ios-feature-parity-and-lifecycle-ui"
 ---
@@ -14,7 +14,7 @@ Implement SwiftUI parity for onboarding/channels, friends/DMs, event trust, shar
 
 ## Dependencies
 
-`MC-027`, `MC-029`, `MC-030`, `MC-031`, `MC-032`, `MC-042` See the [current ticket index](../README.md#ticket-index). Dependencies must be complete on main before implementation starts.
+`MC-026`, `MC-022`, `MC-029`, `MC-030`, `MC-031`, `MC-032`, `MC-042` See the [current ticket index](../README.md#ticket-index). Dependencies must be complete on main before implementation starts.
 
 ## Scope
 
@@ -30,7 +30,7 @@ Also permitted: this ticket and generated ticketboard index/diagram changes requ
 
 ## Exit criteria
 
-- [ ] Each shipping v1 flow passes iOS UI and real-device integration checks with the frozen core.
+- [ ] Each shipping v1 flow passes native UI/integration tests with the production frozen core and synthetic inputs, plus applicable Mac/Xcode builds. Real-device flow/lifecycle acceptance remains mandatory in MC-027.
 - [ ] Key reset, background restoration, offline purchase cache and foreground catch-up behave as specified.
 - [ ] Native iOS screens preserve the same plaintext/encrypted and verified/unverified boundaries as Android.
 - [ ] Relevant checks pass, evidence is recorded, required review is complete, and the ticket is squash merged to main.
@@ -43,6 +43,8 @@ Also permitted: this ticket and generated ticketboard index/diagram changes requ
 A triggered fallback must be recorded with evidence. It does not authorize weaker security, invented validation or expanded scope.
 
 ## Evidence
+
+Scheduling approved 2026-09-14 in [the validation policy](../../decisions/local-validation-policy.md#physical-acceptance-scheduling--approved-2026-09-14). Implementation consumes the native driver and independently frozen core before physical interop. MC-027 now follows this ticket and owns every shipping flow on the real iOS device matrix; no native build waiver is implied.
 
 Not implemented. Record commands, versions, reproducible inputs and results here. For manual/hardware checks include device/OS, duration and report paths. No test or review is claimed yet.
 

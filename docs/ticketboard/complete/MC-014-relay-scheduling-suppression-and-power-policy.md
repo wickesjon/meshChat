@@ -33,7 +33,7 @@ Also permitted: this ticket and generated ticketboard index/diagram changes requ
 - [x] TTL-reachable chain and cut-vertex scenarios meet MC-007 delivery thresholds.
 - [x] Dense results report reduction relative to the baseline with actual GATT sends and measured power-tier work shares.
 - [x] Own-message overflow gives a visible admission failure; no queue exceeds its packet or byte cap and control traffic cannot starve indefinitely.
-- [ ] Relevant checks pass, evidence is recorded, required review is complete, and the ticket is squash merged to main.
+- [x] Relevant checks and source review pass; completion is staged pending final metadata review and squash merge, effective only on main.
 
 ## Potential fallbacks
 
@@ -44,7 +44,7 @@ A triggered fallback must be recorded with evidence. It does not authorize weake
 
 ## Evidence
 
-Implementation started from main `bb0d92954b1d9accb34fece2da1236c23b9b97e4`, with MC-013 and MC-012 complete. The wire contract and dependencies are unchanged. Source review and final check evidence remain pending.
+Implementation started from main `bb0d92954b1d9accb34fece2da1236c23b9b97e4`, with MC-013 and MC-012 complete. The wire contract and dependencies are unchanged. Source review and checks passed as recorded below; final metadata review and squash merge remain pending.
 
 ### Core implementation and consumer contract
 
@@ -71,9 +71,9 @@ Host: Windows x86_64, Rust/cargo 1.85.1, Python 3.14.4. Repository-local toolcha
 
 The final development suite `.work/mc014/final-development/metrics.json` contains 108 reports / 216 executions (18 cases × seeds 7/19/43 × coverage/unsuppressed policies × exact rerun). All required lossless cases have 100% reachable delivery and no beyond-TTL delivery. Maximum p95 across seeds: chain 18,599ms; cycle 11,765ms; barbell 9,705ms; bridge 11,970ms; Saver bridge 12,268ms; dense and mixed tiers 5,020ms, all below 30 seconds. K6 forwarded-attempt ratio is 0.80 against the identical unsuppressed baseline (720 vs 900 forwarded frames, 20% reduction). Loss/outage, late join, capacity refusal, version rejection and backpressure retain missed scheduled pairs in their denominator; no impossible recovery result is claimed.
 
-Mixed-tier K6 assigns nodes 0/1 tier 3 and nodes 2–5 tier 1 through the existing synthetic power-event input. Each node makes 330 total GATT attempts and 120 forwarded attempts: tier 3 accounts for 660/1980 total and 240/720 forwarded attempts, with equal per-node work in this workload. This measures no per-node load-shifting benefit and no battery saving; equal results are retained. Normal/Saver forwarding counts and per-tier total attempts come from the production scheduler. Peak K6 link/node queues are 2/10 objects. On this x86_64 build, outbound reservation is 149,528 bytes node /37,376 per-link slots; recent state 11,224 bytes; target state 16,408; link state 3,096; manager 280. All remain below MC-007 limits. Final clean-source provenance is recorded after committing this source.
+Mixed-tier K6 assigns nodes 0/1 tier 3 and nodes 2–5 tier 1 through the existing synthetic power-event input. Each node makes 330 total GATT attempts and 120 forwarded attempts: tier 3 accounts for 660/1980 total and 240/720 forwarded attempts, with equal per-node work in this workload. This measures no per-node load-shifting benefit and no battery saving; equal results are retained. Normal/Saver forwarding counts and per-tier total attempts come from the production scheduler. Peak K6 link/node queues are 2/10 objects. On this x86_64 build, outbound reservation is 149,528 bytes node /37,376 per-link slots; recent state 11,224 bytes; target state 16,408; link state 3,096; manager 280. All remain below MC-007 limits. Clean-source provenance for the reviewed correction is recorded below.
 
-This is an internal core and simulator change: no native ABI/export, native source, build script or dependency changes. Under the approved local validation policy, host component checks apply; Terra must confirm this rationale for native-job applicability. Relevant hosted results, exact-source simulator metrics and actual source/final review references are recorded before merge.
+This is an internal core and simulator change: no native ABI/export, native source, build script or dependency changes. Under the approved local validation policy, host component checks apply; Terra confirmed this rationale in both source and correction reviews. Relevant hosted status and exact-source evidence are recorded below; final metadata review is recorded in the PR before merge.
 
 ## Review and merge
 
@@ -85,6 +85,17 @@ This is an internal core and simulator change: no native ABI/export, native sour
 
 ### Source review and correction
 
-Separate Terra medium [review 5208448417](https://github.com/wickesjon/meshChat/pull/18#pullrequestreview-5208448417) at `5d5b614ba3a3993cfe7574c55cfa7d705b56840c` found one blocking defect: `infra` was set for charging Normal/Saver phones, contrary to the §15.7 table. It now requires Android Beacon mode plus external power. A regression checks every platform/mode/charging combination and Auto-Beacon entry/power removal. The same review independently passed 13 existing relay tests. Follow-up review of this fix remains required before merge.
+Separate Terra medium [review 5208448417](https://github.com/wickesjon/meshChat/pull/18#pullrequestreview-5208448417) at `5d5b614ba3a3993cfe7574c55cfa7d705b56840c` found one blocking defect: `infra` was set for charging Normal/Saver phones, contrary to the §15.7 table. It now requires Android Beacon mode plus external power. A regression checks every platform/mode/charging combination and Auto-Beacon entry/power removal. The same review independently passed 13 existing relay tests. The follow-up review below accepts the correction.
 
 The initial clean-source suite at `5d5b614ba3a3993cfe7574c55cfa7d705b56840c` reproduced all 216 executions with `source_dirty=false` and exact reruns in `.work/mc014/5d5b614-clean/`. These simulator results do not exercise the corrected infra hint and are not evidence that the earlier hint was correct; the new regression specifically checks that behavior.
+
+
+### Final source gates and pending-merge completion
+
+Separate Terra medium [follow-up review 5208475713](https://github.com/wickesjon/meshChat/pull/18#pullrequestreview-5208475713) at `5102978f1964dd7d4b1783f858f0e204978cb42a` accepts the correction with no blocking findings. The reviewer independently passed all 14 relay tests and confirmed the internal-core local-validation rationale. Full source formatting/clippy, 63 debug and 63 release tests, release builds and ticketboard/diff checks pass after the correction. Retained logs: `.work/mc014/fix-debug-tests.log` and `fix-release-tests.log`.
+
+The corrected clean-source suite `.work/mc014/5102978-clean/metrics.json` and JSONL traces pass all 216 executions. Every report records that exact source revision, `source_dirty=false` and identical reruns. The lossless delivery/latency, dense 0.80 ratio and equal per-node mixed-tier work results above reproduce unchanged. No signed/encrypted acceptance, SYNC session, native radio or battery result is inferred from these synthetic clear-CHAT cases.
+
+Hosted run [34955712229](https://github.com/wickesjon/meshChat/actions/runs/34955712229) passed Rust/ticketboard on the earlier source before the correction superseded its native jobs. Corrected run [34956093664](https://github.com/wickesjon/meshChat/actions/runs/34956093664) had ticketboard passing and Rust/Android/iOS running when final metadata was prepared; it is not claimed as a completed full CI pass. The approved local policy and actual review accept the corrected source's host checks because native source/ABI/build/dependencies are unchanged. An observed relevant failure still blocks merge; branch protection is not bypassed.
+
+The final amendment changes ticket evidence/status and generated links only. Board regeneration/default validation, all 12 board tests and `git diff --check` pass. Unchanged source retains the corrected revision's checks above. Final Terra metadata review is recorded in PR #18 before squash merge; completion becomes effective only on main.

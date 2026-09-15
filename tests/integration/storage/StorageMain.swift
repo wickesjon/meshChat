@@ -67,6 +67,13 @@ private final class FaultDatabase: SqlDatabase, @unchecked Sendable {
             let empty = try store.history(conversation: peer, direct: true, limit: 100); precondition(empty.isEmpty)
             var key = try passphrase(); defer { key.resetBytes(in: 0..<key.count) }
             let db = try CipherConnection(file: folder.appendingPathComponent("history.db"), key: key, create: false); defer { db.close() }
+            try db.execute(sql: "BEGIN IMMEDIATE", values: [])
+            do {
+                try db.execute(sql: "UPDATE records SET value=? WHERE kind=2", values: [.bytes(value: marker + Data([9]))])
+                precondition(FileManager.default.fileExists(atPath: folder.appendingPathComponent("history.db-journal").path))
+                for file in try FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil) { let bytes = try Data(contentsOf: file); precondition(bytes.range(of: marker) == nil && bytes.range(of: key) == nil) }
+                try db.execute(sql: "ROLLBACK", values: [])
+            } catch { try? db.execute(sql: "ROLLBACK", values: []); throw error }
             let fault = try EncryptedStore.open(db: FaultDatabase(db, "INSERT INTO history"), generation: generation, create: false, now: now)
             refused { try fault.acceptAuthenticated(item: item(true, 3), subject: subject, immutableBytes: Data([5]), now: now) }
             let normal = try EncryptedStore.open(db: db, generation: generation, create: false, now: now)

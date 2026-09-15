@@ -9,7 +9,7 @@ if len(frameworks)!=1:raise RuntimeError('Expected pinned SQLCipher macOS framew
 framework=frameworks[0].parent
 ffi=ROOT/'.work/security-ffi/swift';library=ROOT/'.work/security-target/debug'
 cache=work/'module-cache';cache.mkdir(exist_ok=True)
-args=['xcrun','swiftc','-swift-version','6','-warnings-as-errors','-parse-as-library','-module-cache-path',str(cache),'-I',str(ffi),'-Xcc','-fmodule-map-file='+str(ffi/'meshchat_coreFFI.modulemap'),'-F',str(framework),'-framework','SQLCipher','-Xlinker','-rpath','-Xlinker',str(framework),str(ffi/'meshchat_core.swift'),str(ROOT/'src/ios/Security/IdentityProvider.swift'),str(ROOT/'src/ios/Security/EncryptedStorage.swift'),str(ROOT/'tests/integration/storage/StorageMain.swift'),'-L',str(library),'-lmeshchat_core','-Xlinker','-rpath','-Xlinker',str(library),'-o',str(work/'storage-checks')]
+args=['xcrun','swiftc','-swift-version','6','-warnings-as-errors','-parse-as-library','-module-cache-path',str(cache),'-I',str(ffi),'-Xcc','-fmodule-map-file='+str(ffi/'meshchat_coreFFI.modulemap'),'-Xcc','-DSQLITE_HAS_CODEC','-F',str(framework),'-framework','SQLCipher','-Xlinker','-rpath','-Xlinker',str(framework),str(ffi/'meshchat_core.swift'),str(ROOT/'src/ios/Security/IdentityProvider.swift'),str(ROOT/'src/ios/Security/EncryptedStorage.swift'),str(ROOT/'tests/integration/storage/StorageMain.swift'),'-L',str(library),'-lmeshchat_core','-Xlinker','-rpath','-Xlinker',str(library),'-o',str(work/'storage-checks')]
 env=os.environ.copy();env['TMPDIR']=str(ROOT/'.work/tmp')
 subprocess.run(args,cwd=ROOT,env=env,check=True)
 fixtures=work/('fixtures-'+uuid.uuid4().hex);fixtures.mkdir()

@@ -103,12 +103,14 @@ git diff --check
 
 Local logs are `.work/mc018/rust-debug.log` and `rust-release.log`; 46-ticket/127-dependency validation and 12 board tests pass. The final review-source hash will be recorded in PR evidence.
 
+Initial hosted run `34969204506` passed Rust/ticketboard and iOS native device/simulator builds plus existing Swift regressions. The new standalone Swift storage compilation failed because its command omitted `-DSQLITE_HAS_CODEC`; the test runner now includes the same flag as the Xcode project. Native storage tests also inspect the rollback journal during an open transaction, requiring its presence and checking plaintext/passphrase absence. Android test failures include a fixed stage label and exception class without error text or data. These test-only corrections are pending native rerun; they are not passing evidence.
+
 Required pending native gates: existing full Android builds/lint/ABI/alignment and security-emulator checks plus MC-018's separately registered instrumentation runner; pinned Xcode device/simulator builds, existing Swift regressions and the new process-separated Swift/SQLCipher suite. New native fixtures test create/reopen, actual wrong-key read refusal, plaintext-marker/passphrase absence in database/auxiliary files, retained identity/trust, replay/conflict, rollback, pruning, key-loss retention and coordinated reset. Swift uses the pinned SQLCipher macOS framework with test-only wrapping and the actual filesystem backup attributes; Android uses the actual provider in the isolated emulator. No native test or physical result is claimed until these checks run successfully.
 
 
 ## Review and merge
 
 - Branch: `ticket/MC-018-encrypted-persistence-and-retention`.
-- Review/PR: pending.
+- Review/PR: [PR #22](https://github.com/wickesjon/meshChat/pull/22). Terra medium reviewed `4f2f95569617a2b1c49b2165463d9e097cfffc99` with no findings. The worker posting attempt was rejected by automatic approval review; its completed review was accurately transcribed by the primary agent in COMMENT review #5209979292. Follow-up test fixes and final evidence require follow-up review.
 - Squash commit title: `MC-018: Encrypted persistence and retention`.
 - Completion becomes effective only when the reviewed squash commit lands on main.

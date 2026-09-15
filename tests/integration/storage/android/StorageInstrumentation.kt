@@ -11,6 +11,7 @@ import uniffi.meshchat_core.*
 /** Synthetic instrumentation only; runner script selects an isolated emulator. */
 class StorageInstrumentation : Instrumentation() {
     private var phase=""
+    private var stage="start"
     override fun onCreate(arguments:Bundle?) {super.onCreate(arguments);phase=arguments?.getString("phase")?:"";start()}
     private fun refused(work:()->Unit) {var failed=false;try{work()}catch(_:Exception){failed=true};check(failed)}
     private fun contains(bytes:ByteArray,marker:ByteArray):Boolean = marker.isNotEmpty() && bytes.asList().windowed(marker.size).any{it==marker.asList()}
@@ -33,7 +34,7 @@ class StorageInstrumentation : Instrumentation() {
             }
             when(phase) {
                 "create" -> {
-                    refused{store.reopen()};val info=identity.create();store.create()
+                    refused{store.reopen()};val info=identity.create();stage="create-store";store.create()
                     store.putRecord(RecordKind.SETTING,"own-public".toByteArray(),info.identity.signingKey)
                     store.putRecord(RecordKind.FRIEND,peer,marker)
                     store.putRecord(RecordKind.SUBSCRIPTION,channel,byteArrayOf(1))
@@ -41,6 +42,7 @@ class StorageInstrumentation : Instrumentation() {
                     store.putRecord(RecordKind.STAFF_CREDENTIAL,ByteArray(64){8},marker)
                     store.appendUnverified(item(false,1));check(store.acceptAuthenticated(item(true,2),subject,byteArrayOf(3,4))==AcceptResult.ACCEPTED)
                     check(folder.canonicalPath.startsWith(context.noBackupFilesDir.canonicalPath+File.separator))
+                    check(context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_ALLOW_BACKUP == 0)
                 }
                 "reopen" -> {
                     store.reopen();check(store.getRecord(RecordKind.SETTING,"own-public".toByteArray())!!.contentEquals(identity.load().identity.signingKey))
@@ -62,13 +64,21 @@ class StorageInstrumentation : Instrumentation() {
                     check(store.ambiguousTarget(subject,ByteArray(8){2}));check(store.history(peer,true,100u).isEmpty())
                     val passphrase=key()
                     try {CipherConnection.open(File(folder,"history.db"),passphrase,false).use{connection ->
+                        stage="journal-encryption"
+                        connection.execute("BEGIN IMMEDIATE",emptyList())
+                        try {
+                            connection.execute("UPDATE records SET value=? WHERE kind=2",listOf(SqlValue.Bytes(marker+byteArrayOf(9))))
+                            check(File(folder,"history.db-journal").isFile)
+                            for(file in checkNotNull(folder.listFiles()).filter{it.isFile}) {val bytes=file.readBytes();check(!contains(bytes,marker));check(!contains(bytes,passphrase))}
+                        } finally {connection.execute("ROLLBACK",emptyList())}
+                        stage="atomic-effect"
                         val fault=object:SqlDatabase {
                             var enabled=true
                             override fun execute(sql:String,values:List<SqlValue>){if(enabled&&sql.startsWith("INSERT INTO history"))throw StorageException.Database();connection.execute(sql,values)}
                             override fun query(sql:String,values:List<SqlValue>,limit:UInt)=connection.query(sql,values,limit)
                         }
                         EncryptedStore.open(fault,generation,false,now).use{core->refused{core.acceptAuthenticated(item(true,3),subject,byteArrayOf(5),now)};fault.enabled=false;check(core.acceptAuthenticated(item(true,3),subject,byteArrayOf(5),now)==AcceptResult.ACCEPTED)}
-                        connection.execute("DROP TABLE ledger",emptyList());connection.execute("DROP TABLE clock",emptyList());connection.execute("PRAGMA user_version=1",emptyList())
+                        stage="migration";connection.execute("DROP TABLE ledger",emptyList());connection.execute("DROP TABLE clock",emptyList());connection.execute("PRAGMA user_version=1",emptyList())
                         val migration=object:SqlDatabase {
                             override fun execute(sql:String,values:List<SqlValue>){if(sql.startsWith("CREATE TABLE clock"))throw StorageException.Database();connection.execute(sql,values)}
                             override fun query(sql:String,values:List<SqlValue>,limit:UInt)=connection.query(sql,values,limit)
@@ -77,7 +87,7 @@ class StorageInstrumentation : Instrumentation() {
                         check((connection.query("PRAGMA user_version",emptyList(),1u).single().cells.single() as SqlValue.Integer).value==1L)
                         EncryptedStore.open(connection,generation,false,now).use{core->
                             check(core.getRecord(RecordKind.FRIEND,peer)!!.contentEquals(marker))
-                            core.prune(now+1000);refused{core.prune(now)};refused{core.prune(null)};core.prune(now+1000)
+                            stage="pruning";core.prune(now+1000);refused{core.prune(now)};refused{core.prune(null)};core.prune(now+1000)
                             core.prune(now+172801);check(core.history(channel,false,100u).isEmpty());check(core.history(peer,true,100u).isEmpty())
                         }
                     }}finally{passphrase.fill(0)}
@@ -95,6 +105,6 @@ class StorageInstrumentation : Instrumentation() {
                 else -> error("unknown phase")
             }
             result.putString("mc018","PASS $phase synthetic_functional_only");finish(Activity.RESULT_OK,result)
-        } catch(_:Throwable) {result.putString("mc018","FAIL $phase sanitized");finish(Activity.RESULT_CANCELED,result)}
+        } catch(error:Throwable) {result.putString("mc018","FAIL $phase $stage ${error.javaClass.simpleName} sanitized");finish(Activity.RESULT_CANCELED,result)}
     }
 }

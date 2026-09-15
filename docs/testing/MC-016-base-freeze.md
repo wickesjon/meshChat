@@ -1,6 +1,6 @@
 # MC-016 base transport freeze
 
-Status: reviewed-ticket candidate; effective only when MC-016 is squash merged to main. The stable base contract is MC-006 plus MC-007's approved budgets and the explicitly isolated MC-008 structural extension allocations. This freezes base encoding/decoding and transport behavior for subsequent implementation. It does not freeze or certify cryptographic constructions, native radio behavior, persistent storage, UI admission, or the full wire/security contract.
+Status: accepted by Terra medium review5209133847 at `a2ff0714f3faddecc62dd30617a65e05c70a549f`; effective only when MC-016 is squash merged to main. The stable base contract is MC-006 plus MC-007's approved budgets and the explicitly isolated MC-008 structural extension allocations. This freezes base encoding/decoding and transport behavior for subsequent implementation. It does not freeze or certify cryptographic constructions, native radio behavior, persistent storage, UI admission, or the full wire/security contract.
 
 ## Frozen boundary and compatibility
 

@@ -30,10 +30,10 @@ Also permitted: this ticket and generated ticketboard index/diagram changes requ
 
 ## Exit criteria
 
-- [ ] All MC-007 base gates and fuzz regressions pass with reproducible evidence.
-- [ ] Approved MC-004 online feasibility and permission evidence exists; runtime capacity assumptions/refusal cases are explicit and no unresolved base-wire ambiguity remains. This does not certify physical radio support.
-- [ ] Base freeze is documented without falsely declaring unfinished crypto envelopes frozen.
-- [ ] Relevant checks pass, evidence is recorded, required review is complete, and the ticket is squash merged to main.
+- [x] All MC-007 base gates and fuzz regressions pass with reproducible evidence.
+- [x] Approved MC-004 online feasibility and permission evidence exists; runtime capacity assumptions/refusal cases are explicit and no unresolved base-wire ambiguity remains. This does not certify physical radio support.
+- [x] Base freeze is documented without falsely declaring unfinished crypto envelopes frozen.
+- [x] Relevant checks pass, evidence is recorded, required review is complete, and the ticket is squash merged to main.
 
 ## Potential fallbacks
 
@@ -56,11 +56,12 @@ Full relay evidence `.work/mc016/all-relay-metrics.json`:108 unique reports/216 
 
 MC-004's approved online feasibility/permission evidence and explicit146-byte refusal/512-byte ceiling remain the contract; physical radio/driver/protected-storage certification is not claimed. The native HELLO/admission handshake is a specified driver obligation, not executed by the pre-admitted host harness. Actual integrated crypto/security and encrypted persistence remain with their owning downstream tickets. All base wire layouts and limits are explicit; no unresolved base ambiguity was found in this review. A discovered implementation defect would block this freeze and require scoped remediation rather than silently changing production code outside this ticket.
 
-This ticket changes documentation only and has no native/interface/build/dependency effect; applicable host+documentation gates and required Terra review satisfy the local validation policy. No full hosted matrix, physical test or independent security assessment is substituted. Review is pending; completion is effective only after accepted review and squash merge.
+This ticket changes documentation only and has no native/interface/build/dependency effect; applicable host+documentation gates and required Terra review satisfy the local validation policy. No full hosted matrix, physical test or independent security assessment is substituted. Terra medium COMMENT review5209133847 accepted candidate `a2ff0714f3faddecc62dd30617a65e05c70a549f` without findings, verified corpus hashes and local evidence counts, and confirmed documentation-only scope and pending-owner boundaries. Completion becomes effective only on squash merge.
 
 ## Review and merge
 
 - Branch: `ticket/MC-016-base-transport-freeze-gate`.
-- Review/PR: pending.
+- PR: https://github.com/wickesjon/meshChat/pull/20.
+- Separate Terra medium COMMENT review [5209133847](https://github.com/wickesjon/meshChat/pull/20#pullrequestreview-5209133847), reviewed `a2ff0714f3faddecc62dd30617a65e05c70a549f`, no findings. Final completion metadata review recorded on the PR.
 - Squash commit title: `MC-016: Base transport freeze gate`.
 - Completion becomes effective only when the reviewed squash commit lands on main.

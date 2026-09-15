@@ -725,3 +725,37 @@ fn deficit_quanta_weight_continuously_ready_small_objects() {
     assert_eq!(&order[..16], &[Kind::Own; 16]);
     assert_eq!(&order[16..], &[Kind::Reaction; 4]);
 }
+
+#[test]
+fn infra_is_only_charging_android_beacon_not_an_ordinary_power_hint() {
+    for platform in [Platform::Android, Platform::Ios] {
+        for mode in [Mode::Normal, Mode::Saver, Mode::Beacon] {
+            assert!(!parameters(platform, mode, false, false).infra);
+            assert_eq!(
+                parameters(platform, mode, true, false).infra,
+                platform == Platform::Android && mode == Mode::Beacon
+            );
+        }
+    }
+    let mut policy = Policy::new(Platform::Android, 0);
+    let input = Inputs {
+        battery_percent: 80,
+        charging: true,
+        visible_peers: 4,
+        auto_beacon: true,
+    };
+    assert!(!policy.update(input, 0).unwrap().infra);
+    assert!(policy.update(input, 60_000).unwrap().infra);
+    assert!(
+        !policy
+            .update(
+                Inputs {
+                    charging: false,
+                    ..input
+                },
+                60_001
+            )
+            .unwrap()
+            .infra
+    );
+}

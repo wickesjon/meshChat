@@ -144,7 +144,7 @@ pub fn parameters(
         announce_ms: if mode == Mode::Saver { 60_000 } else { 30_000 },
         scan_on_ms: if mode == Mode::Saver { 10_000 } else { 0 },
         scan_off_ms: if mode == Mode::Saver { 50_000 } else { 0 },
-        infra: charging,
+        infra: platform == Platform::Android && mode == Mode::Beacon && charging,
         beacon_battery_exit,
     }
 }

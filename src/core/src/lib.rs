@@ -14,6 +14,7 @@ pub mod ingress;
 pub mod links;
 pub mod power;
 pub mod relay;
+pub mod storage;
 pub mod sync;
 pub mod text;
 

@@ -45,6 +45,7 @@ class IdentityProvider internal constructor(
 ) {
     companion object {
         private val operationLock = Any()
+        internal fun <T> withOperation(work: () -> T): T = synchronized(operationLock) { work() }
         fun android(context: Context, state: IdentityResetStore): IdentityProvider = IdentityProvider(
             AndroidIdentityStorage(context.applicationContext), AndroidIdentityProtection(context.applicationContext), state,
         )

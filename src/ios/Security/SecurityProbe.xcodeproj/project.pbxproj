@@ -4,6 +4,8 @@
     classes = {};
     objectVersion = 56;
     objects = {
+        C00000000000000000000003 = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EncryptedStorage.swift; sourceTree = "<group>"; };
+        C00000000000000000000004 = { isa = PBXBuildFile; fileRef = C00000000000000000000003; };
         C00000000000000000000001 = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IdentityProvider.swift; sourceTree = "<group>"; };
         C00000000000000000000002 = { isa = PBXBuildFile; fileRef = C00000000000000000000001; };
         B00000000000000000000001 = {
@@ -30,7 +32,7 @@
         };
         A00000000000000000000002 = {
             isa = PBXGroup;
-            children = (A00000000000000000000005, A00000000000000000000016, C00000000000000000000001, A00000000000000000000003);
+            children = (A00000000000000000000005, A00000000000000000000016, C00000000000000000000001, C00000000000000000000003, A00000000000000000000003);
             sourceTree = "<group>";
         };
         A00000000000000000000003 = {
@@ -67,7 +69,7 @@
         A00000000000000000000007 = {
             isa = PBXSourcesBuildPhase;
             buildActionMask = 2147483647;
-            files = (A0000000000000000000000A, A00000000000000000000017, C00000000000000000000002);
+            files = (A0000000000000000000000A, A00000000000000000000017, C00000000000000000000002, C00000000000000000000004);
             runOnlyForDeploymentPostprocessing = 0;
         };
         A00000000000000000000008 = {

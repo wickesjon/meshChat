@@ -1,0 +1,47 @@
+[
+  {
+    "id": "late-join", "nodes": 3, "edges": [[0,1],[1,2]], "initial_down": [[1,2]],
+    "duration_ms": 60000, "origin_times_ms": [0,30000], "announce": false,
+    "changes": [{"time_ms": 15000,"kind": "up","edge": [1,2]}]
+  },
+  {
+    "id": "mobility-reconnect", "nodes": 4, "edges": [[0,1],[1,2],[2,3],[0,3]],
+    "duration_ms": 90000, "origin_times_ms": [0,30000,60000],
+    "changes": [
+      {"time_ms": 1000,"kind": "down","edge": [1,2]},
+      {"time_ms": 1500,"kind": "down","edge": [0,3]},
+      {"time_ms": 15000,"kind": "up","edge": [1,2]},
+      {"time_ms": 45000,"kind": "up","edge": [0,3]}
+    ]
+  },
+  {
+    "id": "version-identity-clock-power", "nodes": 3, "edges": [[0,1],[1,2]],
+    "duration_ms": 150000, "origin_times_ms": [0,30000,60000,90000,120000], "announce": false,
+    "changes": [
+      {"time_ms": 10000,"kind": "version","node": 1,"version": 2},
+      {"time_ms": 10000,"kind": "identity","node": 1},
+      {"time_ms": 10000,"kind": "clock","node": 2,"offset_ms": 7200000},
+      {"time_ms": 10000,"kind": "power","node": 1,"mode": "saver"},
+      {"time_ms": 70000,"kind": "version","node": 1,"version": 1},
+      {"time_ms": 70000,"kind": "identity","node": 1},
+      {"time_ms": 70000,"kind": "clock","node": 2,"offset_ms": -7200000},
+      {"time_ms": 70000,"kind": "power","node": 1,"mode": "beacon"}
+    ]
+  },
+  {
+    "id": "directional-capacity", "nodes": 2, "edges": [[0,1,146,512]],
+    "duration_ms": 60000, "origin_times_ms": [0,30000], "announce": false
+  },
+  {
+    "id": "capacity-refusal", "nodes": 2, "edges": [[0,1,145,146]],
+    "duration_ms": 30000, "origin_times_ms": [0], "announce": false
+  },
+  {
+    "id": "backpressure-recovery", "nodes": 2, "edges": [[0,1]],
+    "duration_ms": 90000, "origin_times_ms": [0,30000,60000], "announce": false,
+    "changes": [
+      {"time_ms": 0,"kind": "readiness","edge": [0,1],"ready": false},
+      {"time_ms": 40000,"kind": "readiness","edge": [0,1],"ready": true}
+    ]
+  }
+]

@@ -1,0 +1,18 @@
+[workspace]
+
+[package]
+name = "meshchat-simulator-core"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85.1"
+publish = false
+
+[dependencies]
+meshchat-core = { version = "=0.1.0", path = "../../src/core" }
+serde_json = "=1.0.151"
+
+[profile.release]
+overflow-checks = true
+
+[lints.rust]
+unsafe_code = "forbid"

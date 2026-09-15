@@ -172,7 +172,7 @@ class Simulation:
         self.trace = trace
         self.trace_hash = hashlib.sha256()
         self.link_cursor = [0] * self.count
-        core.call("reset", nodes=self.count, ingress=scenario.get("core_ingress", False))
+        core.call("reset", nodes=self.count, ingress=scenario.get("core_ingress", False), relay=scenario.get("core_relay",False), suppression=policy=="coverage-fixture")
         self.edges = {}
         for edge in scenario["edges"]:
             a, b, *capacities = edge
@@ -601,6 +601,7 @@ def main():
     parser.add_argument("--seed", type=int, help="one seed; default all committed seeds")
     parser.add_argument("--extra", type=Path, help="additional simulator driver scenario JSON array")
     parser.add_argument("--core-ingress", action="store_true", help="use MC-013 core admission instead of fixture ingress buckets")
+    parser.add_argument("--core-relay", action="store_true", help="use MC-014 production relay and MC-013 ingress")
     args = parser.parse_args()
     output = args.output.resolve()
     if not output.is_relative_to(ROOT / ".work"):
@@ -609,6 +610,8 @@ def main():
     manifest_bytes = MANIFEST.read_bytes()
     manifest = json.loads(manifest_bytes)
     cases = list(scenarios(manifest))
+    if args.core_relay:
+        cases.extend(json.loads((MANIFEST.parent / "MC-014-power-tiers.json").read_text(encoding="utf-8-sig")))
     if args.extra:
         cases.extend(json.loads(args.extra.read_text(encoding="utf-8")))
     if args.scenario:
@@ -625,25 +628,34 @@ def main():
                       manifest_sha256=hashlib.sha256(manifest_bytes).hexdigest())
     core = CoreProcess(args.core.resolve())
     reports = []
+    if args.core_relay:
+        from relay_runner import RelaySimulation
+    simulation = RelaySimulation if args.core_relay else Simulation
     try:
         for case in cases:
-            case = dict(case, core_ingress=args.core_ingress)
+            case = dict(case, core_ingress=args.core_ingress or args.core_relay, core_relay=args.core_relay)
             for seed in [args.seed] if args.seed is not None else manifest["seeds"]:
                 pair = []
                 for policy in ("coverage-fixture", "unsuppressed-fixture"):
                     name = f"{case['id']}-{seed}-{policy}"
                     with (output / f"{name}.jsonl").open("w", encoding="utf-8", newline="\n") as trace:
-                        result = Simulation(core, case, seed, policy, trace).run()
-                    repeated = Simulation(core, case, seed, policy).run()
+                        result = simulation(core, case, seed, policy, trace).run()
+                    repeated = simulation(core, case, seed, policy).run()
                     assert result == repeated, f"nondeterministic metrics/trace: {name}"
                     result.update(provenance, scenario_sha256=hashlib.sha256(canonical(case).encode()).hexdigest(), identical_rerun=True)
                     pair.append(result)
                 baseline = pair[1]["counters"].get("relay_frames", 0)
                 ratio = pair[0]["counters"].get("relay_frames", 0) / baseline if baseline else None
                 for result in pair:
-                    result["paired_fixture_relay_frame_ratio"] = ratio
+                    result["paired_relay_frame_ratio" if args.core_relay else "paired_fixture_relay_frame_ratio"] = ratio
                     reports.append(result)
-                print(f"{case['id']} seed={seed}: fixture delivery {pair[0]['delivered_reachable_pairs']}/{pair[0]['reachable_pairs']}; relay ratio={ratio}; identical reruns", flush=True)
+                if args.core_relay and case["id"] in {t["id"] for t in manifest["topologies"]} | {"bridge9-saver", "dense6-mixed-tiers"}:
+                    for result in pair:
+                        assert result["delivery_ratio"] == 1 and result["outside_ttl_deliveries"] == 0
+                        assert result["p95_latency_ms"] <= 30_000
+                    if case["id"] in {"dense6", "dense6-mixed-tiers"}:
+                        assert ratio is not None and ratio <= 1
+                print(f"{case['id']} seed={seed}: delivery {pair[0]['delivered_reachable_pairs']}/{pair[0]['reachable_pairs']}; relay ratio={ratio}; identical reruns", flush=True)
     finally:
         core.close()
     (output / "metrics.json").write_text(json.dumps(reports, indent=2, sort_keys=True) + "\n", encoding="utf-8")

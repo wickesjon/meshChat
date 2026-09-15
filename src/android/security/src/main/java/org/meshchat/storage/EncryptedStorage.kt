@@ -102,6 +102,7 @@ class StorageVault internal constructor(
         } finally{key.fill(0)}
     }
     override fun clearIdentityState() = IdentityProvider.withOperation {
+        IdentityProvider.requireResetInProgress()
         protection.requireUnlocked()
         if(files.hasArtifacts()||protection.exists()) {
             files.write(IdentityFile.JOURNAL,byteArrayOf(2))

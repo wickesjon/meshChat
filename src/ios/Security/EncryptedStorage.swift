@@ -130,6 +130,7 @@ final class CipherConnection: SqlDatabase, @unchecked Sendable {
         return result
     }
     func clearIdentityState() throws {
+        try IdentityProvider.requireResetInProgress()
         try protection.requireUnlocked()
         if try files.hasArtifacts() || protection.exists() {
             try files.write(.journal, Data([2])); try protection.delete()

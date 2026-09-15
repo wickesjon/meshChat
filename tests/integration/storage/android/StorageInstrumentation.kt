@@ -57,6 +57,8 @@ class StorageInstrumentation : Instrumentation() {
                     store.reopen();refused{store.create()}
                 }
                 "checks" -> {
+                    refused{vault.clearIdentityState()}
+                    check(store.getRecord(RecordKind.FRIEND,peer)!!.contentEquals(marker))
                     val generation=identity.load().identity.generation
                     store.deleteHistory(peer,true)
                     check(store.acceptAuthenticated(item(true,2),subject,byteArrayOf(3,4))==AcceptResult.REPLAY)

@@ -36,6 +36,10 @@ enum IdentityFile: Hashable { case envelope, journal }
 // Actor serialization prevents reset racing an operation. The application's
 // methods take opaque generation handles and never return private material.
 @MainActor final class IdentityProvider {
+    private static var resettingState = false
+    static func requireResetInProgress() throws {
+        guard resettingState else { throw IdentityFailure.recoveryRequired }
+    }
     private let storage: IdentityStorage
     private let protection: IdentityProtection
     private let state: IdentityResetStore
@@ -100,7 +104,12 @@ enum IdentityFile: Hashable { case envelope, journal }
     func reset() throws -> IdentityInfo { try guarded {
         try protection.requireUnlocked()
         try storage.write(.journal, Data([2]))
-        try state.clearIdentityState()
+        guard !Self.resettingState else { throw IdentityFailure.recoveryRequired }
+        Self.resettingState = true
+        do {
+            defer { Self.resettingState = false }
+            try state.clearIdentityState()
+        }
         try protection.delete(); try storage.delete(.envelope)
         try provision(); try storage.delete(.journal)
         return try loadInternal()

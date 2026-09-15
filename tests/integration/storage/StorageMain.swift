@@ -59,6 +59,8 @@ private final class FaultDatabase: SqlDatabase, @unchecked Sendable {
             refused { let db = try CipherConnection(file: folder.appendingPathComponent("history.db"), key: wrong, create: false); defer { db.close() }; _ = try EncryptedStore.open(db: db, generation: identity.load().identity.generation, create: false, now: now) }
             try store.reopen(); refused { try store.create() }
         case "checks":
+            refused { try vault.clearIdentityState() }
+            let retainedPin = try store.getRecord(kind: .friend, key: peer); precondition(retainedPin == marker)
             let generation = try identity.load().identity.generation
             try store.deleteHistory(conversation: peer, direct: true)
             let replay = try store.acceptAuthenticated(item(true, 2), subject: subject, immutableBytes: Data([3, 4])); precondition(replay == .replay)

@@ -1,3 +1,8 @@
+// This selector test shares ingress helpers; receiver helpers are used by core tests.
+#[allow(dead_code)]
+#[path = "../../integration/sync/admission.rs"]
+mod admission;
+use admission::RawSessions;
 use meshchat_core::{
     LinkHandle,
     codec::{self, Context, Header},

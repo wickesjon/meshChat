@@ -44,7 +44,7 @@ A triggered fallback must be recorded with evidence. It does not authorize weake
 
 ## Evidence
 
-Implemented from main `953debe57d3119e88524ef287dab6a664e95d874`; MC-014/007 dependencies are complete. Source review is pending; completion is not effective before merge.
+Implemented from main `953debe57d3119e88524ef287dab6a664e95d874`; MC-014/007 dependencies are complete. Initial review found an admission API blocker; the fix and follow-up review are in progress. Completion is not effective before merge.
 
 ### Implementation and lifecycle
 
@@ -52,7 +52,7 @@ Implemented from main `953debe57d3119e88524ef287dab6a664e95d874`; MC-014/007 dep
 
 `sync::session::Sessions` caps one walk per direction/link, two serving plus two requesting/node, eight links, 40 KiB reference arrays per serving snapshot and total allocated session state below 256 KiB. It tracks all remote-used u16 session IDs per link without assuming ascending IDs. Refused initial IDs are consumed, exact duplicates do not restart a walk, cursors are opaque monotonically allocated tokens bound to active link/session/filter/count/snapshot position and consumed once. Four items/page, eight items/8192 encoded bytes/session, explicit empty/complete/truncated endings, 120-second absolute lifetime, disconnect/cancel/native-failure endings and four bounded gap objects/session with a 30-second absolute unresolved-gap deadline are enforced. Native consumers must call `advance` with monotonic time, report the first request attempt, and feed each Relay terminal result back to `served_complete`; the integration harness exercises that contract.
 
-Deferred ingress charges actual outer frames/bytes/staging/reassembly before session correlation; only ordered, active-session data invokes normal embedded CHAT admission. Stale/unsolicited/gapped objects cannot alter inner logical state. Exact duplicates are ignored, conflicts abort, markers cannot complete or permit continuation before prior sequence processing. This preserves structural pending state and does not invent cryptographic verification. MC-019/020/021 and MC-022 retain integrated crypto/replay and independent-assessment ownership under the approved base sequencing.
+Deferred ingress issues a non-Clone/non-Copy opaque borrowed `SyncAdmission` only after actual outer frames/bytes/staging/reassembly and applicable logical control admission. Public session dispatch requires consuming that token, bound to immutable output bytes, link, object kind and dispatch time; raw bytes cannot manufacture admission. Embedded admission is crate-private. The production receiver correlates the session before inner admission; only ordered, active-session data invokes normal embedded CHAT admission. Stale/unsolicited/gapped objects cannot alter inner logical state. Exact duplicates are ignored, conflicts abort, markers cannot complete or permit continuation before prior sequence processing. This preserves structural pending state and does not invent cryptographic verification. MC-019/020/021 and MC-022 retain integrated crypto/replay and independent-assessment ownership under the approved base sequencing.
 
 ### Measured automated evidence
 
@@ -74,11 +74,14 @@ The original MC-007 JSON fixtures are consumed directly by a Rust simulator test
 
 Windows x86_64, Rust/Cargo 1.85.1, Python 3.14.4, cargo-deny 0.20.2. Logs in ignored `.work/mc015/`. All listed gates passed: 79 debug and 79 release Rust tests, four cache/11 session/one 18-case exchange tests included, one direct fixed-fixture simulator test in debug/release, 15 Python simulator and 12 board tests. The later strengthened byte-pressure cache test was rerun in debug/release. A release artifact collision after switching the standalone simulator feature set was resolved with `cargo clean -p meshchat-core --release`; the clean all-feature release suite/build passed. This was stale local build output, not a source fix. Exact committed source will be recorded in the PR before review. Required commands: `cargo fmt --all -- --check`; workspace all-target/all-feature clippy with `-D warnings`; locked offline debug/release all-feature tests; locked offline release build; cargo-deny all-feature locked advisory/bans/licenses/sources; simulator manifest fmt/clippy/debug/release tests/build; scenario definitions and budget worksheet; 15 existing Python simulator regressions; ticketboard default plus 12 unit tests; `git diff --check`; unchanged root/simulator lockfiles.
 
+After the review fix, 82 debug/release tests (including two compile-fail token tests), core clippy/fmt/release build and board checks pass. The real exchange remains 18/18, with the same measured timing. Standalone simulator validation uses `.work/mc015/simulator-target` to keep feature builds isolated.
+
 No UniFFI export, native source, build script, native dependency or wire contract changes. This internal core module/ingress path uses the local host component gate under the validation policy; Terra must confirm omitted Android/iOS job applicability. No hardware, proof, actual crypto, independent-security or full hosted-matrix success is claimed.
 
 ## Review and merge
 
 - Branch: `ticket/MC-015-forward-cache-and-paginated-sync`.
-- Review/PR: pending.
+- PR: https://github.com/wickesjon/meshChat/pull/19.
+- Terra medium review 5208909830 at `5638bee2060cab2b2bf4fcb749c12b1c89476f4c` found one P1: raw session APIs did not enforce prior outer ingress admission. Opaque consuming admission tokens replace that trust boundary; runtime and compile-fail regressions cover binding/forgery/reuse. Follow-up review pending. The reviewer confirmed host-only native applicability.
 - Squash commit title: `MC-015: Forward cache and paginated SYNC`.
 - Completion becomes effective only when the reviewed squash commit lands on main.

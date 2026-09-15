@@ -1,3 +1,5 @@
+mod admission;
+use admission::RawSessions;
 use meshchat_core::{
     LinkHandle,
     codec::{self, Context, Header, Payload},
@@ -247,7 +249,7 @@ fn altered_filter_aborts_and_replayed_initial_never_refreshes_deadline() {
     );
     assert_eq!(events.last().unwrap().end, End::Conflict);
 }
-use meshchat_core::ingress::{Ingress, Outcome, State};
+use meshchat_core::ingress::{Ingress, State};
 fn ingress() -> Ingress {
     let mut i = Ingress::new(7, 8, 0).unwrap();
     i.register(&link(1), 512, 0).unwrap();
@@ -284,27 +286,6 @@ fn response(session: u16, sequence: u16, flags: u8, cursor: u32, blob: &[u8]) ->
     raw[11..].copy_from_slice(blob);
     raw
 }
-fn deferred(i: &mut Ingress, raw: &[u8], now: u64) -> Vec<u8> {
-    let e = framing::Encoder::transport(1, raw, 512, 1).unwrap();
-    let mut out = [0; 1035];
-    for f in 0..e.frame_count() {
-        let mut frame = [0; 512];
-        let n = e.frame(f, &mut frame).unwrap();
-        let result = i
-            .receive_deferred_sync(&link(1), n as u64, &frame[..n], now, &mut out)
-            .unwrap();
-        if f + 1 == e.frame_count() {
-            assert!(matches!(
-                result,
-                Outcome::Complete {
-                    state: State::DeferredSync,
-                    ..
-                }
-            ));
-        }
-    }
-    out[..raw.len()].to_vec()
-}
 #[test]
 fn deferred_session_order_prevents_unsolicited_inner_state_and_false_completion() {
     let (mut s, _) = setup(1);
@@ -312,7 +293,7 @@ fn deferred_session_order_prevents_unsolicited_inner_state_and_false_completion(
     let mut events = vec![];
     let mut messages = vec![];
     let raw = response(1, 0, 0, 0, &body(1));
-    let raw = deferred(&mut i, &raw, 0);
+
     assert_eq!(i.reservations().accepted, 0);
     assert_eq!(
         s.receive(
@@ -330,7 +311,7 @@ fn deferred_session_order_prevents_unsolicited_inner_state_and_false_completion(
     assert!(messages.is_empty());
     assert_eq!(i.reservations().accepted, 0);
     start(&mut s, &mut i);
-    let marker = deferred(&mut i, &response(1, 1, 5, 0, &[]), 0);
+    let marker = response(1, 1, 5, 0, &[]);
     assert_eq!(
         s.receive(
             &link(1),
@@ -366,7 +347,7 @@ fn deferred_session_order_prevents_unsolicited_inner_state_and_false_completion(
     assert_eq!(events.len(), 1);
     assert_eq!(events[0].items, 1);
     assert_eq!(events[0].end, End::Complete);
-    assert_eq!(i.counters().admitted_frames, 2);
+    assert_eq!(i.counters().admitted_frames, 3);
     assert_eq!(i.reservations().accepted, 1);
 }
 #[test]
@@ -376,7 +357,7 @@ fn duplicate_and_conflicting_responses_are_exact_and_gap_deadline_does_not_refre
     start(&mut s, &mut i);
     let mut events = vec![];
     let mut messages = 0;
-    let raw = deferred(&mut i, &response(1, 1, 0, 0, &body(2)), 0);
+    let raw = response(1, 1, 0, 0, &body(2));
     for t in [0, 29_999] {
         let result = s
             .receive(
@@ -407,7 +388,7 @@ fn duplicate_and_conflicting_responses_are_exact_and_gap_deadline_does_not_refre
     let (mut s, _) = setup(1);
     let mut i = ingress();
     start(&mut s, &mut i);
-    let raw = deferred(&mut i, &response(1, 0, 0, 0, &body(1)), 0);
+    let raw = response(1, 0, 0, 0, &body(1));
     for _ in 0..2 {
         s.receive(
             &link(1),
@@ -422,7 +403,7 @@ fn duplicate_and_conflicting_responses_are_exact_and_gap_deadline_does_not_refre
         .unwrap();
     }
     assert_eq!(messages, 1);
-    let conflict = deferred(&mut i, &response(1, 0, 0, 0, &body(2)), 0);
+    let conflict = response(1, 0, 0, 0, &body(2));
     assert_eq!(
         s.receive(
             &link(1),
@@ -445,7 +426,7 @@ fn continuation_preserves_filter_session_and_deadline_and_old_session_does_not_b
     let mut i = ingress();
     let p = start(&mut s, &mut i);
     let mut events = vec![];
-    let marker = deferred(&mut i, &response(1, 0, 3, 123, &[]), 1);
+    let marker = response(1, 0, 3, 123, &[]);
     assert_eq!(
         s.receive(
             &link(1),
@@ -497,7 +478,7 @@ fn continuation_preserves_filter_session_and_deadline_and_old_session_does_not_b
         .unwrap_err(),
         Error::Stale
     );
-    let stale = deferred(&mut i, &response(2, 1, 5, 0, &[]), 3);
+    let stale = response(2, 1, 5, 0, &[]);
     assert_eq!(
         s.receive(
             &link(1),
@@ -524,11 +505,7 @@ fn bounded_gap_pool_does_not_admit_inner_packets() {
     start(&mut s, &mut i);
     let mut events = vec![];
     for sequence in 1..=4 {
-        let raw = deferred(
-            &mut i,
-            &response(1, sequence, 0, 0, &body(u64::from(sequence))),
-            0,
-        );
+        let raw = response(1, sequence, 0, 0, &body(u64::from(sequence)));
         assert_eq!(
             s.receive(
                 &link(1),
@@ -549,7 +526,7 @@ fn bounded_gap_pool_does_not_admit_inner_packets() {
     assert!(r.gap_bytes_per_session <= 8 * 1024);
     assert!(r.allocated_bytes <= 256 * 1024);
     assert_eq!(i.reservations().accepted, 0);
-    let raw = deferred(&mut i, &response(1, 5, 0, 0, &body(5)), 0);
+    let raw = response(1, 5, 0, 0, &body(5));
     assert_eq!(
         s.receive(
             &link(1),
@@ -645,7 +622,7 @@ fn embedded_sync_cannot_bypass_sender_bucket_or_claim_completion_after_rejection
         } else {
             response(1, seq, 0, 0, &body(u64::from(seq) + 1))
         };
-        let raw = deferred(&mut i, &raw, 0);
+
         let result = s.receive(
             &link(1),
             &raw,
@@ -677,5 +654,47 @@ fn embedded_sync_cannot_bypass_sender_bucket_or_claim_completion_after_rejection
     assert_eq!(i.counters().budget_drops, 1);
     assert_eq!(events.len(), 1);
     assert_eq!(events[0].end, End::Admission);
+    assert_eq!(s.reservations().requesting, 0);
+}
+#[test]
+fn admission_tokens_bind_kind_link_and_dispatch_time_and_drops_issue_none() {
+    let (mut s, mut c) = setup(2);
+    let mut i = ingress();
+    let mut out = [0; 1035];
+    let raw = req(1, 0, &[0; 512]);
+    let token = admission::admission(&mut i, &link(1), &raw, false, 0, &mut out);
+    assert_eq!(
+        s.accept_admitted_request(&link(2), token, &mut c, 0, &mut |_| {}),
+        Err(Error::Stale)
+    );
+    assert_eq!(s.reservations().serving, 0);
+    let token = admission::admission(&mut i, &link(1), &raw, false, 0, &mut out);
+    assert_eq!(
+        s.accept_admitted_request(&link(1), token, &mut c, 1, &mut |_| {}),
+        Err(Error::Stale)
+    );
+    let token = admission::admission(
+        &mut i,
+        &link(1),
+        &response(1, 0, 5, 0, &[]),
+        true,
+        0,
+        &mut out,
+    );
+    assert_eq!(
+        s.accept_admitted_request(&link(1), token, &mut c, 0, &mut |_| {}),
+        Err(Error::Stale)
+    );
+    assert_eq!(s.reservations().serving, 0);
+    let packet = framing::Encoder::transport(1, &[0; 11], 512, 1);
+    assert!(packet.is_err());
+    // Exhaust outer admission without producing a valid completion capability.
+    for _ in 0..20 {
+        let got = i
+            .receive_deferred_sync(&link(1), 1, &[255], 0, &mut out)
+            .unwrap();
+        assert!(got.sync.is_none());
+    }
+    assert!(i.counters().budget_drops > 0);
     assert_eq!(s.reservations().requesting, 0);
 }

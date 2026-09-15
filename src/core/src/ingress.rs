@@ -58,6 +58,47 @@ pub enum Outcome {
     },
 }
 
+/// Single-use proof of outer admission. Private fields and no Clone/Copy keep
+/// raw bytes from manufacturing or reusing admission. The borrowed output is
+/// immutable until consumed, so the admitted body cannot be substituted.
+///
+/// ```compile_fail
+/// use meshchat_core::ingress::SyncAdmission;
+/// let forged = SyncAdmission {};
+/// ```
+/// ```compile_fail
+/// use meshchat_core::ingress::SyncAdmission;
+/// fn twice(token: SyncAdmission<'_>) {
+///     let first = token;
+///     let second = token;
+/// }
+/// ```
+#[derive(Debug)]
+pub struct SyncAdmission<'a> {
+    link: LinkHandle,
+    now: u64,
+    kind: framing::ObjectKind,
+    bytes: &'a [u8],
+}
+impl<'a> SyncAdmission<'a> {
+    pub(crate) fn consume(
+        self,
+        link: &LinkHandle,
+        now: u64,
+        kind: framing::ObjectKind,
+    ) -> Result<&'a [u8], Error> {
+        if self.link != *link || self.now != now || self.kind != kind {
+            return Err(Error::Stale);
+        }
+        Ok(self.bytes)
+    }
+}
+#[derive(Debug)]
+pub struct Admitted<'a> {
+    pub outcome: Outcome,
+    pub sync: Option<SyncAdmission<'a>>,
+}
+
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct Counters {
     pub offered_frames: u64,
@@ -665,26 +706,41 @@ impl Ingress {
     /// MC-015 receive path: correlate and order a SYNC object before the inner
     /// packet can affect logical dedup, sender budgets or pending crypto state.
     /// All outer frame/byte charges and reassembly limits are unchanged.
-    pub fn receive_deferred_sync(
+    pub fn receive_deferred_sync<'a>(
         &mut self,
         handle: &LinkHandle,
         reported: u64,
         raw: &[u8],
         now: u64,
-        output: &mut [u8],
-    ) -> Result<Outcome, Error> {
+        output: &'a mut [u8],
+    ) -> Result<Admitted<'a>, Error> {
         if output.len() < 1035 {
             return Err(Error::Output);
         }
-        match self.enqueue(handle, reported, raw, now)? {
-            Ok(token) => self.process_inner(token, now, output, true),
-            Err(reason) => Ok(Outcome::Dropped(reason)),
-        }
+        let outcome = match self.enqueue(handle, reported, raw, now)? {
+            Ok(token) => self.process_inner(token, now, output, true)?,
+            Err(reason) => Outcome::Dropped(reason),
+        };
+        let sync = match outcome {
+            Outcome::Complete { kind, len, .. }
+                if kind == framing::ObjectKind::Transport(1)
+                    || (kind == framing::ObjectKind::Logical && output[1] == 3) =>
+            {
+                Some(SyncAdmission {
+                    link: handle.clone(),
+                    now,
+                    kind,
+                    bytes: &output[..len],
+                })
+            }
+            _ => None,
+        };
+        Ok(Admitted { outcome, sync })
     }
     /// Called once in sequence by MC-015 after deferred outer admission and an
     /// active-session check. No native frame is charged a second time. Ordinary
     /// sender/dedup/pending gates still apply, and no authenticated state exists.
-    pub fn admit_stored_sync(
+    pub(crate) fn admit_stored_sync(
         &mut self,
         handle: &LinkHandle,
         blob: &[u8],

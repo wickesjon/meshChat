@@ -1,6 +1,5 @@
 use meshchat_core::{
     LinkHandle,
-    codec::{self, Context},
     framing::ObjectKind,
     ingress::{Ingress, Outcome, State},
     power::{Mode, Platform},
@@ -153,20 +152,20 @@ impl Endpoint {
     }
     fn receive(&mut self, frame: &[u8], now: u64) {
         let mut raw = [0; 1035];
-        match self
+        let admitted = self
             .ingress
             .receive_deferred_sync(&self.link, frame.len() as u64, frame, now, &mut raw)
-            .unwrap()
-        {
+            .unwrap();
+        match admitted.outcome {
             Outcome::Incomplete => (),
             Outcome::Dropped(d) => panic!("ingress drop {d:?} at {now}"),
-            Outcome::Complete { kind, len, state } => {
+            Outcome::Complete { kind, state, .. } => {
                 if state == State::DeferredSync {
                     let r = self
                         .sessions
-                        .receive(
+                        .receive_admitted(
                             &self.link,
-                            &raw[..len],
+                            admitted.sync.unwrap(),
                             &mut self.ingress,
                             now,
                             &mut Sink {
@@ -193,17 +192,15 @@ impl Endpoint {
                     } else if matches!(r, Received::Complete { .. }) {
                         self.finished = Some(now);
                     }
-                } else if kind == ObjectKind::Logical
-                    && codec::parse(&raw[..len], Context::Live)
-                        .unwrap()
-                        .header()
-                        .kind
-                        == 3
-                {
+                } else if kind == ObjectKind::Logical && admitted.sync.is_some() {
                     self.sessions
-                        .accept_request(&self.link, &raw[..len], &mut self.cache, now, &mut |e| {
-                            self.events.push(e)
-                        })
+                        .accept_admitted_request(
+                            &self.link,
+                            admitted.sync.unwrap(),
+                            &mut self.cache,
+                            now,
+                            &mut |e| self.events.push(e),
+                        )
                         .unwrap();
                 }
             }

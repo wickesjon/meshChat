@@ -1,7 +1,7 @@
 //! Link-bound SYNC sessions. Outer ingress admission is required before requests
 //! or deferred responses reach this component; no authentication is inferred.
 use super::{Cache, bloom_contains};
-use crate::ingress::{Ingress, State};
+use crate::ingress::{Ingress, State, SyncAdmission};
 use crate::{
     LinkHandle,
     codec::{self, Context, Payload},
@@ -310,14 +310,17 @@ impl Sessions {
     }
     /// The incoming initial request's serving bucket must already be charged by
     /// Ingress. Duplicate/cursor handling never creates a fresh walk or deadline.
-    pub fn accept_request(
+    pub fn accept_admitted_request(
         &mut self,
         h: &LinkHandle,
-        raw: &[u8],
+        admission: SyncAdmission<'_>,
         cache: &mut Cache,
         now: u64,
         emit: &mut impl FnMut(Event),
     ) -> Result<RequestOutcome, Error> {
+        let raw = admission
+            .consume(h, now, crate::framing::ObjectKind::Logical)
+            .map_err(|_| Error::Stale)?;
         self.advance(now, emit)?;
         let link = self.link(h)?;
         let p = codec::parse(raw, Context::Live).map_err(|_| Error::Invalid)?;
@@ -670,14 +673,17 @@ impl Sessions {
     }
     /// Only complete objects from Ingress::receive_deferred_sync may enter here.
     /// Correlate/order before invoking ordinary inner admission exactly once.
-    pub fn receive(
+    pub fn receive_admitted(
         &mut self,
         h: &LinkHandle,
-        raw: &[u8],
+        admission: SyncAdmission<'_>,
         ingress: &mut Ingress,
         now: u64,
         sink: &mut Sink<'_>,
     ) -> Result<Received, Error> {
+        let raw = admission
+            .consume(h, now, crate::framing::ObjectKind::Transport(1))
+            .map_err(|_| Error::Stale)?;
         self.advance(now, &mut sink.events)?;
         let link = self.link(h)?;
         let i = self

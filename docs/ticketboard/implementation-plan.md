@@ -74,7 +74,7 @@ Every ticket carries its implementation scope, exit criteria and conditional fal
 - Full-wire freeze requires authenticated negative vectors, lifecycle checks and independent crypto review.
 - MC-043 verifies Android production key/storage behavior before MC-034; MC-044 verifies iOS before MC-037. Both require named minimum/current OS devices and the deferred MC-005 scenarios. Android beta does not depend on iOS verification. Real sensitive-data use requires the corresponding platform verification; independent security assessments remain separate.
 - Physical driver, OEM, Beacon and iOS UI criteria formerly embedded in MC-023/024/026/033/035 are owned explicitly by MC-025/027 under the [validation policy](../decisions/local-validation-policy.md#physical-acceptance-scheduling--approved-2026-09-14). Their original scenarios and thresholds remain mandatory. Implementation tickets require automated tests and relevant native builds; completion is not physical certification. Radio/feature acceptance gates require named physical devices/OS versions, exact builds and retained measurement methods.
-- Android Studio installation can support Android SDK/NDK and emulator setup, but is not build evidence and does not supply Mac/Xcode. This physical scheduling change does not waive MC-011's outstanding Android/iOS dependency build checks. Host Rust or emulator success alone cannot satisfy physical acceptance or an unavailable required native build.
+- Android Studio installation can support Android SDK/NDK and emulator setup, but is not build evidence and does not supply Mac/Xcode. MC-046 adds [Windows Android core/app builds](../testing/windows-android-build.md); full security/emulator coverage remains separate. The physical scheduling change does not waive MC-011's Android/iOS dependency build checks on its own revision. Host Rust or emulator success alone cannot satisfy physical acceptance or an unavailable required native build.
 - Release requires both applications, independent integrated assessment, predeclared scale targets and actual store outcomes.
 - A fallback may reduce optional behavior only where approved. It may never replace encrypted storage with plaintext, trust with a cosmetic signal, actual hardware evidence with simulation, or a failed acceptance gate with an unsupported success claim.
 
@@ -130,6 +130,7 @@ flowchart TD
     MC_039["MC-039: Release operations, store readiness and user docs"]
     MC_040["MC-040: v1 release acceptance gate"]
     MC_045["MC-045: Defer physical acceptance until integrated candidates"]
+    MC_046["MC-046: Windows Android core and app builds"]
     MC_001 --> MC_002
     MC_002 --> MC_003
     MC_003 --> MC_004
@@ -253,6 +254,8 @@ flowchart TD
     MC_039 --> MC_040
     MC_001 --> MC_045
     MC_007 --> MC_045
+    MC_003 --> MC_046
+    MC_045 --> MC_046
 ```
 <!-- DAG:END -->
 

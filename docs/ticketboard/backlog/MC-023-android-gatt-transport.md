@@ -10,7 +10,7 @@ branch: "ticket/MC-023-android-gatt-transport"
 
 ## Objective
 
-Implement scanner/advertiser, GATT server/client, CCCD setup, concrete UUIDs and measured write/notify flow control.
+Implement scanner/advertiser, GATT server/client, CCCD setup, concrete UUIDs and runtime write/notify flow control.
 
 ## Dependencies
 
@@ -24,13 +24,13 @@ Also permitted: this ticket and generated ticketboard index/diagram changes requ
 
 ## Implementation details
 
-- Implement scanner/advertiser, GATT server/client, CCCD setup, concrete UUIDs and measured write/notify flow control.
+- Implement scanner/advertiser, GATT server/client, CCCD setup, concrete UUIDs and runtime write/notify flow control.
 - Feed per-direction capacity and link lifecycle events to the core; preserve contiguous fragment transfer and disconnect cleanup.
 - Integrate the foreground service and approved permission manifest for supported Android versions.
 
 ## Exit criteria
 
-- [ ] Two real Android devices exchange whole/fragmented packets in both directions with measured backpressure.
+- [ ] Automated native-adapter tests exchange whole/fragmented packets in both directions and exercise runtime capacity/backpressure through controlled callbacks; applicable Android build/lint/tests pass. Two-device physical exchange and measured backpressure remain mandatory in MC-025.
 - [ ] Notify subscription, busy/error callbacks, stalled writes, MTU changes and disconnects recover as specified.
 - [ ] The native driver forwards untrusted bytes without duplicating core parsing.
 - [ ] Relevant checks pass, evidence is recorded, required review is complete, and the ticket is squash merged to main.
@@ -43,6 +43,8 @@ Also permitted: this ticket and generated ticketboard index/diagram changes requ
 A triggered fallback must be recorded with evidence. It does not authorize weaker security, invented validation or expanded scope.
 
 ## Evidence
+
+Scheduling approved 2026-09-14 in [the validation policy](../../decisions/local-validation-policy.md#physical-acceptance-scheduling--approved-2026-09-14). Physical driver acceptance transfers to MC-025; implementation evidence must distinguish controlled callbacks/emulation from physical radio results.
 
 Not implemented. Record commands, versions, reproducible inputs and results here. For manual/hardware checks include device/OS, duration and report paths. No test or review is claimed yet.
 

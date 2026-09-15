@@ -25,7 +25,7 @@ Also permitted: this ticket and generated ticketboard index/diagram changes requ
 ## Implementation details
 
 - Exercise every Android v1 feature against production core/radio/storage integrations.
-- Run a mid-app field check and verify offline onboarding, privacy/trust states, reset/delete and degraded lifecycle behavior.
+- Run a pre-beta integrated-candidate field check and verify offline onboarding, privacy/trust states, reset/delete and degraded lifecycle behavior.
 - Record beta build provenance, known limitations and reproducible end-to-end evidence.
 
 ## Exit criteria
@@ -45,6 +45,8 @@ Also permitted: this ticket and generated ticketboard index/diagram changes requ
 A triggered fallback must be recorded with evidence. It does not authorize weaker security, invented validation or expanded scope.
 
 ## Evidence
+
+Scheduling approved 2026-09-14 in [the validation policy](../../decisions/local-validation-policy.md#physical-acceptance-scheduling--approved-2026-09-14). MC-025 now includes the deferred Android driver/OEM/Beacon evidence and remains mandatory with MC-043 before this gate. All Android physical feature checks still apply; no emulator-only beta certification or distribution authorization is introduced.
 
 Not implemented. Record commands, versions, reproducible inputs and results here. For manual/hardware checks include device/OS, duration and report paths. No test or review is claimed yet.
 

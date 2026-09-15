@@ -1,7 +1,7 @@
 ---
 id: "MC-044"
 title: "iOS physical key and storage verification"
-depends_on: ["MC-017","MC-018"]
+depends_on: ["MC-017","MC-018","MC-035"]
 kind: "gate"
 branch: "ticket/MC-044-ios-physical-key-and-storage-verification"
 ---
@@ -14,7 +14,7 @@ Complete the physical protected-key and encrypted-storage verification deferred 
 
 ## Dependencies
 
-`MC-017`, `MC-018` See the [current ticket index](../README.md#ticket-index). Dependencies must be complete on main before implementation starts.
+`MC-017`, `MC-018`, `MC-035` See the [current ticket index](../README.md#ticket-index). Dependencies must be complete on main before implementation starts.
 
 ## Scope
 
@@ -43,6 +43,8 @@ Also permitted: this ticket and generated ticketboard index/diagram changes requ
 - If the development protection model fails, open scoped remediation or an explicit support decision. Never fall back to plaintext, silent identity replacement or undocumented weaker key protection. Independent security assessments remain separate requirements.
 
 ## Evidence
+
+Scheduling approved 2026-09-14 in [the validation policy](../../decisions/local-validation-policy.md#physical-acceptance-scheduling--approved-2026-09-14). Execute after iOS feature integration MC-035 and before MC-037. All original production-provider, minimum/current OS, wrapping, lock, reboot, backup, transfer, restore and invalidation criteria remain unchanged; missing devices blocks this gate when reached.
 
 Deferred, not tested. This ticket is a mandatory later gate created under the user's 2026-09-11 scheduling decision. Device/signing inventory is unknown; no physical result is claimed. The early MC-005 emulator/source evidence is recorded in [the probe plan](../../decisions/MC-005-probe-plan.md).
 

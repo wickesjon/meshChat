@@ -14,6 +14,31 @@ def run(*args, env=None):
     subprocess.run([str(arg) for arg in args], cwd=ROOT, env=env, check=True)
 
 
+def android_linker_env(sdk, system, target, compiler):
+    hosts = {'Windows': 'windows-x86_64', 'Linux': 'linux-x86_64',
+             'Darwin': 'darwin-x86_64'}
+    if system not in hosts:
+        raise ValueError(f'Unsupported Android build host: {system}')
+    if not sdk:
+        raise ValueError('Set ANDROID_HOME to the SDK containing NDK 27.3.13750724')
+    ndk = Path(sdk) / 'ndk' / '27.3.13750724'
+    compiler_dir = ndk / 'toolchains' / 'llvm' / 'prebuilt' / hosts[system] / 'bin'
+    linker = compiler_dir / ('clang.exe' if system == 'Windows' else compiler)
+    if not linker.is_file():
+        raise ValueError(f'Missing pinned Android NDK compiler: {linker}')
+    env = os.environ.copy()
+    prefix = 'CARGO_TARGET_' + target.upper().replace('-', '_')
+    env[prefix + '_LINKER'] = str(linker)
+    flags = ('-C link-arg=-Wl,-z,max-page-size=16384 '
+             '-C link-arg=-Wl,-z,common-page-size=16384')
+    if system == 'Windows':
+        # Direct Clang avoids batch-wrapper argument forwarding on Windows.
+        # The API suffix is essential: otherwise Clang targets the Windows host.
+        flags += ' -C link-arg=--target=' + compiler.removesuffix('-clang')
+    env[prefix + '_RUSTFLAGS'] = flags
+    return env
+
+
 def main():
     global OUT
     parser = argparse.ArgumentParser()
@@ -43,21 +68,12 @@ def main():
             '--language', language, '--out-dir', OUT / language,
             '--config', ROOT / 'src/core/uniffi.toml', '--no-format')
     if args.platform == 'android':
-        sdk = Path(os.environ['ANDROID_HOME'])
-        ndk = sdk / 'ndk' / '27.3.13750724'
-        host = {'Linux': 'linux-x86_64', 'Darwin': 'darwin-x86_64'}[system]
-        compiler_dir = ndk / 'toolchains' / 'llvm' / 'prebuilt' / host / 'bin'
         for target, abi, compiler in [
             ('aarch64-linux-android', 'arm64-v8a', 'aarch64-linux-android29-clang'),
             ('x86_64-linux-android', 'x86_64', 'x86_64-linux-android29-clang'),
         ]:
+            env = android_linker_env(os.environ.get('ANDROID_HOME'), system, target, compiler)
             run('rustup', 'target', 'add', target)
-            env = os.environ.copy()
-            env['CARGO_TARGET_' + target.upper().replace('-', '_') + '_LINKER'] = str(compiler_dir / compiler)
-            env['CARGO_TARGET_' + target.upper().replace('-', '_') + '_RUSTFLAGS'] = (
-                '-C link-arg=-Wl,-z,max-page-size=16384 '
-                '-C link-arg=-Wl,-z,common-page-size=16384'
-            )
             run('cargo', 'build', '--locked', '--lib', '--release', '--target', target, *features, env=env)
             destination = OUT / 'android' / abi
             destination.mkdir(parents=True, exist_ok=True)

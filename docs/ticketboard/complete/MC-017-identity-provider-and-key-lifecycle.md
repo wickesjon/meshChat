@@ -33,7 +33,7 @@ Also permitted: this ticket and generated ticketboard index/diagram changes requ
 - [x] Both platform adapters implement the MC-005 development contract; synthetic automated provisioning/reopen/error tests pass, and iOS device/simulator builds pass. Production iOS has no software wrapping fallback. Physical certification is deferred to MC-043/044; test doubles are confined to tests.
 - [x] Reset rotates both keypairs and invalidates associated pins/state atomically or with recoverable journaled behavior.
 - [x] Key-unavailable and invalidated states block authenticated sends and have tested recovery paths.
-- [x] Relevant checks pass, evidence is recorded, required review is complete, and the ticket is squash merged to main.
+- [x] Relevant checks pass, evidence is recorded and the source review is complete. This is a staged merge candidate: ticket completion becomes effective only when the final reviewed squash commit lands on main.
 
 ## Potential fallbacks
 

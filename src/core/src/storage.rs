@@ -284,7 +284,9 @@ impl EncryptedStore {
             return Err(StorageError::Database);
         }
         store.exec("PRAGMA foreign_keys=ON", vec![])?;
-        store.exec("PRAGMA secure_delete=ON", vec![])?;
+        if store.scalar("PRAGMA secure_delete=ON", vec![])? != 1 {
+            return Err(StorageError::Database);
+        }
         store.exec("PRAGMA temp_store=MEMORY", vec![])?;
         store.rows("PRAGMA max_page_count=16384", vec![], 1)?;
         store.migrate(&generation, create)?;

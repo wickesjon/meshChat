@@ -14,7 +14,10 @@ class Database:
         self.fail=None
     def execute(self,sql,values):
         if self.fail and self.fail in sql:raise m.StorageError.Database()
-        try:self.db.execute(sql,[x.value for x in values])
+        try:
+            cursor=self.db.execute(sql,[x.value for x in values])
+            # Match native execute: a row-returning statement needs query.
+            if cursor.description is not None:raise m.StorageError.Database()
         except sqlite3.Error:raise m.StorageError.Database() from None
     def query(self,sql,values,limit):
         # This is a test double, not a claim that ordinary SQLite is encrypted.

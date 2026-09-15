@@ -36,6 +36,10 @@ enum IdentityFile: Hashable { case envelope, journal }
 // Actor serialization prevents reset racing an operation. The application's
 // methods take opaque generation handles and never return private material.
 @MainActor final class IdentityProvider {
+    private static var resettingState = false
+    static func requireResetInProgress() throws {
+        guard resettingState else { throw IdentityFailure.recoveryRequired }
+    }
     private let storage: IdentityStorage
     private let protection: IdentityProtection
     private let state: IdentityResetStore
@@ -100,7 +104,12 @@ enum IdentityFile: Hashable { case envelope, journal }
     func reset() throws -> IdentityInfo { try guarded {
         try protection.requireUnlocked()
         try storage.write(.journal, Data([2]))
-        try state.clearIdentityState()
+        guard !Self.resettingState else { throw IdentityFailure.recoveryRequired }
+        Self.resettingState = true
+        do {
+            defer { Self.resettingState = false }
+            try state.clearIdentityState()
+        }
         try protection.delete(); try storage.delete(.envelope)
         try provision(); try storage.delete(.journal)
         return try loadInternal()
@@ -121,9 +130,10 @@ enum IdentityFile: Hashable { case envelope, journal }
 
 @MainActor final class AppleIdentityStorage: IdentityStorage {
     private let folder: URL
-    init() throws {
+    init(folder: URL) { self.folder = folder }
+    init(name: String = "meshchat-identity-v1") throws {
         folder = try FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: false)
-            .appendingPathComponent("meshchat-identity-v1", isDirectory: true)
+            .appendingPathComponent(name, isDirectory: true)
     }
     private func path(_ file: IdentityFile) -> URL { folder.appendingPathComponent(file == .envelope ? "identity.enc" : "operation") }
     func hasArtifacts() -> Bool { FileManager.default.fileExists(atPath: folder.path) }
@@ -142,23 +152,30 @@ enum IdentityFile: Hashable { case envelope, journal }
     }
     func write(_ file: IdentityFile, _ bytes: Data) throws {
         guard bytes.count <= 1024 else { throw IdentityFailure.invalidInput }
-        #if os(iOS)
         if !hasArtifacts() {
+            #if os(iOS)
             try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true, attributes: [.protectionKey: FileProtectionType.complete])
+            #else
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            #endif
             try syncDirectory(folder.deletingLastPathComponent())
         }
         // Retry protection/exclusion even after an interrupted directory setup.
+        #if os(iOS)
         try FileManager.default.setAttributes([.protectionKey: FileProtectionType.complete], ofItemAtPath: folder.path)
+        #endif
         var excluded = folder; var values = URLResourceValues(); values.isExcludedFromBackup = true
         try excluded.setResourceValues(values)
         guard try excluded.resourceValues(forKeys: [.isExcludedFromBackupKey]).isExcludedFromBackup == true else { throw IdentityFailure.provider }
+        #if os(iOS)
         try bytes.write(to: path(file), options: [.atomic, .completeFileProtection])
+        #else
+        // Native key protection still refuses host operations. Filesystem tests
+        // can exercise actual backup attributes with test-only wrapping.
+        try bytes.write(to: path(file), options: [.atomic])
+        #endif
         let handle = try FileHandle(forWritingTo: path(file)); defer { try? handle.close() }
         try handle.synchronize(); try syncDirectory(folder)
-        #else
-        // Host tests inject their test-only store. Production has no host store fallback.
-        throw IdentityFailure.unavailable
-        #endif
     }
     func delete(_ file: IdentityFile) throws {
         if exists(file) { try FileManager.default.removeItem(at: path(file)); try syncDirectory(folder) }
@@ -166,7 +183,8 @@ enum IdentityFile: Hashable { case envelope, journal }
 }
 
 @MainActor final class AppleIdentityProtection: IdentityProtection {
-    private let tag = Data("org.meshchat.identity.wrapping.v1".utf8)
+    private let tag: Data
+    init(tag: String = "org.meshchat.identity.wrapping.v1") { self.tag = Data(tag.utf8) }
     private let algorithm = SecKeyAlgorithm.eciesEncryptionCofactorX963SHA256AESGCM
     private var query: [String: Any] { [kSecClass as String: kSecClassKey, kSecAttrApplicationTag as String: tag, kSecAttrKeyType as String: kSecAttrKeyTypeECSECPrimeRandom] }
     func requireUnlocked() throws {

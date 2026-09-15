@@ -21,6 +21,8 @@ android {
         jniLibs.srcDir("../../../.work/security-ffi/android")
     }
     sourceSets.getByName("androidTest").java.srcDir("../../../tests/bench/security/android")
+    sourceSets.getByName("androidTest").java.srcDir("../../../tests/integration/storage/android")
+    sourceSets.getByName("androidTest").manifest.srcFile("../../../tests/integration/storage/android/AndroidManifest.xml")
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
     lint { warningsAsErrors = true; abortOnError = true; disable += setOf("GradleDependency", "AndroidGradlePluginVersion") }
 }

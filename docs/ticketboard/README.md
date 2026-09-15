@@ -34,7 +34,7 @@ After edits run `python tests/ticketboard/validate.py --write`; then run `python
 | [MC-015](complete/MC-015-forward-cache-and-paginated-sync.md) | Forward cache and paginated SYNC | complete | MC-014, MC-007 |
 | [MC-016](complete/MC-016-base-transport-freeze-gate.md) | Base transport freeze gate | complete | MC-011, MC-015 |
 | [MC-017](complete/MC-017-identity-provider-and-key-lifecycle.md) | Identity provider and key lifecycle | complete | MC-005, MC-008, MC-003 |
-| [MC-018](backlog/MC-018-encrypted-persistence-and-retention.md) | Encrypted persistence and retention | backlog | MC-017, MC-011 |
+| [MC-018](complete/MC-018-encrypted-persistence-and-retention.md) | Encrypted persistence and retention | complete | MC-017, MC-011 |
 | [MC-019](backlog/MC-019-verified-friends-and-fresh-presence.md) | Verified friends and fresh presence | backlog | MC-017, MC-018, MC-011, MC-008 |
 | [MC-020](backlog/MC-020-authenticated-encrypted-dms-and-reactions.md) | Authenticated encrypted DMs and reactions | backlog | MC-019, MC-008, MC-006, MC-016 |
 | [MC-021](backlog/MC-021-organizer-trust-credentials-and-signed-updates.md) | Organizer trust, credentials and signed updates | backlog | MC-019, MC-006, MC-016 |

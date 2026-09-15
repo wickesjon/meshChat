@@ -20,8 +20,8 @@ import javax.crypto.SecretKey
 import javax.crypto.SecretKeyFactory
 import javax.crypto.spec.GCMParameterSpec
 
-internal class AndroidIdentityStorage(context: Context) : IdentityStorage {
-    private val folder = File(context.noBackupFilesDir, "meshchat-identity-v1")
+internal class AndroidIdentityStorage(context: Context, name: String = "meshchat-identity-v1") : IdentityStorage {
+    private val folder = File(context.noBackupFilesDir, name)
     private fun path(file: IdentityFile) = File(folder, if (file == IdentityFile.ENVELOPE) "identity.enc" else "operation")
     override fun exists(file: IdentityFile): Boolean = path(file).exists() || File(path(file).path + ".bak").exists()
     override fun hasArtifacts(): Boolean = folder.exists()
@@ -65,8 +65,7 @@ internal class AndroidIdentityStorage(context: Context) : IdentityStorage {
     }
 }
 
-internal class AndroidIdentityProtection(private val context: Context) : IdentityProtection {
-    private val alias = "org.meshchat.identity.wrapping.v1"
+internal class AndroidIdentityProtection(private val context: Context, private val alias: String = "org.meshchat.identity.wrapping.v1") : IdentityProtection {
     private val keyguard get() = context.getSystemService(KeyguardManager::class.java)
     private fun store() = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
     override fun requireUnlocked() {

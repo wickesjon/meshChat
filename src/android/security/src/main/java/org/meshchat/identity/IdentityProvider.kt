@@ -45,6 +45,11 @@ class IdentityProvider internal constructor(
 ) {
     companion object {
         private val operationLock = Any()
+        private var resettingState = false
+        internal fun <T> withOperation(work: () -> T): T = synchronized(operationLock) { work() }
+        internal fun requireResetInProgress() {
+            if (!resettingState) throw IdentityProviderException(IdentityFailure.RECOVERY_REQUIRED)
+        }
         fun android(context: Context, state: IdentityResetStore): IdentityProvider = IdentityProvider(
             AndroidIdentityStorage(context.applicationContext), AndroidIdentityProtection(context.applicationContext), state,
         )
@@ -115,7 +120,9 @@ class IdentityProvider internal constructor(
     @Synchronized fun reset(): IdentityInfo = guarded {
         protection.requireUnlocked()
         storage.write(IdentityFile.JOURNAL, byteArrayOf(2))
-        state.clearIdentityState()
+        if (resettingState) refuse(IdentityFailure.RECOVERY_REQUIRED)
+        resettingState = true
+        try { state.clearIdentityState() } finally { resettingState = false }
         protection.delete()
         storage.delete(IdentityFile.ENVELOPE)
         provision()

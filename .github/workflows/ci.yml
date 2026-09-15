@@ -57,6 +57,8 @@ jobs:
           cargo test --workspace --all-features --locked --release
           cargo build --workspace --all-features --locked --release
           git diff --exit-code -- Cargo.lock
+      - name: Shared encrypted-storage policy regression
+        run: python3 -B tests/integration/storage/run_policy.py
       - name: Dependency advisory, license, version and source gates
         run: |
           curl --fail --location --retry 3 \
@@ -162,6 +164,7 @@ jobs:
           source tests/bench/security/emulator.sh
           start_security_emulator
           python3 -B tests/bench/security/run_android_emulator.py --serial emulator-5554
+          python3 -B tests/integration/storage/run_android.py --serial emulator-5554
       - name: Stop isolated security emulator
         if: always()
         run: |
@@ -250,3 +253,5 @@ jobs:
             -Xlinker -rpath -Xlinker "$PWD/.work/security-target/debug" \
             -o .work/security-ffi/swift-regression
           .work/security-ffi/swift-regression
+      - name: Encrypted storage Swift integration
+        run: python3 -B tests/integration/storage/run_apple.py

@@ -74,5 +74,16 @@ path = "../../tests/fuzz/ingress_smoke.rs"
 name = "relay"
 path = "../../tests/integration/relay/relay.rs"
 
+[[test]]
+name = "sync_cache"
+path = "../../tests/integration/sync/cache.rs"
+
+[[test]]
+name = "sync_session"
+path = "../../tests/integration/sync/session.rs"
+
 [lints]
 workspace = true
+[[test]]
+name = "sync_exchange"
+path = "../../tests/integration/sync/exchange.rs"

@@ -13,6 +13,7 @@ pub mod ingress;
 pub mod links;
 pub mod power;
 pub mod relay;
+pub mod sync;
 pub mod text;
 
 // Temporary MC-005 feasibility surface; absent from normal application builds.

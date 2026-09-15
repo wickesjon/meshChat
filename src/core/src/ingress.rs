@@ -33,6 +33,9 @@ pub enum State {
     PendingDuplicate,
     Duplicate,
     Control,
+    /// Frame/reassembly admission only; MC-015 must validate the SYNC session
+    /// and order before admitting its embedded logical CHAT.
+    DeferredSync,
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Drop {
@@ -659,11 +662,52 @@ impl Ingress {
             Err(reason) => Ok(Outcome::Dropped(reason)),
         }
     }
+    /// MC-015 receive path: correlate and order a SYNC object before the inner
+    /// packet can affect logical dedup, sender budgets or pending crypto state.
+    /// All outer frame/byte charges and reassembly limits are unchanged.
+    pub fn receive_deferred_sync(
+        &mut self,
+        handle: &LinkHandle,
+        reported: u64,
+        raw: &[u8],
+        now: u64,
+        output: &mut [u8],
+    ) -> Result<Outcome, Error> {
+        if output.len() < 1035 {
+            return Err(Error::Output);
+        }
+        match self.enqueue(handle, reported, raw, now)? {
+            Ok(token) => self.process_inner(token, now, output, true),
+            Err(reason) => Ok(Outcome::Dropped(reason)),
+        }
+    }
+    /// Called once in sequence by MC-015 after deferred outer admission and an
+    /// active-session check. No native frame is charged a second time. Ordinary
+    /// sender/dedup/pending gates still apply, and no authenticated state exists.
+    pub fn admit_stored_sync(
+        &mut self,
+        handle: &LinkHandle,
+        blob: &[u8],
+        now: u64,
+    ) -> Result<Result<State, Drop>, Error> {
+        self.advance(now)?;
+        let index = self.link(handle)?;
+        Ok(self.logical(index, blob, codec::Context::StoredChat))
+    }
     pub fn process(
         &mut self,
         token: Intake,
         now: u64,
         output: &mut [u8],
+    ) -> Result<Outcome, Error> {
+        self.process_inner(token, now, output, false)
+    }
+    fn process_inner(
+        &mut self,
+        token: Intake,
+        now: u64,
+        output: &mut [u8],
+        defer_sync: bool,
     ) -> Result<Outcome, Error> {
         if output.len() < 1035 {
             return Err(Error::Output);
@@ -709,6 +753,7 @@ impl Ingress {
         let body = &output[..completed.len];
         let state = match completed.kind {
             framing::ObjectKind::Logical => self.logical(index, body, codec::Context::Live),
+            framing::ObjectKind::Transport(1) if defer_sync => Ok(State::DeferredSync),
             framing::ObjectKind::Transport(1) => match framing::transport(1, body) {
                 Ok(framing::Transport::SyncItem { blob, .. }) if !blob.is_empty() => {
                     self.logical(index, blob, codec::Context::StoredChat)

@@ -11,6 +11,8 @@ pub mod codec;
 pub mod framing;
 pub mod ingress;
 pub mod links;
+pub mod power;
+pub mod relay;
 pub mod text;
 
 // Temporary MC-005 feasibility surface; absent from normal application builds.

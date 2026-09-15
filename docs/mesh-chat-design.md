@@ -1,6 +1,6 @@
 # Detailed Design Document — Offline BLE Mesh Chat
 **Working name: "Meshfest" (placeholder)**
-Version 0.7 — Base wire, budgets and crypto contract specified; independent crypto freeze pending
+Version 0.8 — Base transport freeze recorded in MC-016; full-wire crypto freeze pending
 
 ---
 
@@ -41,6 +41,8 @@ On 2026-09-11 the user explicitly replaced MC-004 physical acceptance with prima
 On 2026-09-11 the user subsequently deferred MC-005 physical key/storage verification. [MC-005's development contract](decisions/MC-005-probe-plan.md) selects wrapped software curves protected by the platform wrapping policy, with synthetic automated evidence sufficient for the early spike. MC-043 owns Android physical verification before MC-034 beta acceptance; MC-044 owns iOS physical verification before MC-037 integrated assessment. These dependencies carry verification into release. MC-017/018 can implement and test with synthetic data before those gates, but real sensitive-data use and verified-device claims remain blocked for an unverified platform. No plaintext storage, silent key replacement, iOS software wrapping fallback or independent-security-review waiver is introduced.
 
 On 2026-09-14 the user deferred real-device verification until implementation is near completion. The [validation policy](decisions/local-validation-policy.md#physical-acceptance-scheduling--approved-2026-09-14) transfers physical Android driver/OEM/Beacon scenarios to MC-025 and physical iOS driver/feature scenarios to MC-027. MC-025 follows Android feature integration, MC-027 follows MC-035, and MC-043/044 follow their platform feature integrations. MC-035 may implement against MC-026 and the MC-022 frozen core before physical interop. Native build and automated checks still apply during implementation; simulation is not device certification. Beta/release dependency closure retains all transferred physical requirements, original thresholds, sensitive-data restrictions and independent assessments.
+
+The [MC-016 base transport freeze](testing/MC-016-base-freeze.md) records the stable version1 base grammar, compatibility/refusal rules, bounded ingress/relay/SYNC behavior and reproducible host evidence. It becomes effective when its reviewed ticket is squash merged. This does not declare unfinished cryptographic verification, proof authenticity or full-wire security frozen: MC-019/020/021 and the independently assessed MC-022 gate remain mandatory. Published feasibility evidence and simulated native outcomes do not certify physical radio support.
 
 MC-004 records documented Android/iOS behavior and permission decisions; MC-005 records protected-key and encrypted-store feasibility; MC-016 gates the base transport; MC-022 gates crypto/full-wire review; MC-036–MC-040 gate integrated security, field evidence and release. Missing devices block the scheduled physical gates; missing required macOS/native tooling still blocks affected build validation. Independent review, store/domain access and publication authorization remain explicit prerequisites at their respective gates. Do not fabricate evidence or weaken security as a fallback.
 

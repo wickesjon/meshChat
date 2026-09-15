@@ -48,7 +48,15 @@ Under the user-approved 2026-09-15 MC-013 sequencing correction, base ingress ga
 
 Acceptance reference updated under the user-approved MC-004 physical-gate replacement on 2026-09-11; see [the decision](../../decisions/MC-004-online-feasibility.md). MC-025/MC-027 retain physical radio acceptance.
 
-Not implemented. Record commands, versions, reproducible inputs and results here. For manual/hardware checks include device/OS, duration and report paths. No test or review is claimed yet.
+The [base freeze record](../../testing/MC-016-base-freeze.md) defines the stable boundary, compatibility/versioning policy, corpus hashes, exact commands, measured outcomes and remaining owner gates. The normative design links this record without declaring crypto/full-wire security frozen. No runtime, dependency or vector bytes changed.
+
+Runtime source: merged MC-015 `30ba33debac4530db60d6614df49506ab1c18bc8`, clean at measurement; MC-011/015 hard dependencies complete on main. Host Windows x86_64, Rust/Cargo1.85.1, Python3.14.4, cargo-deny0.20.2. Local core fmt/clippy/all-feature debug+release tests (82 each)/release build and dependency gates pass. Standalone simulator fmt/clippy/debug+release fixture tests/build pass with isolated target output. Both locks unchanged. Independent generators match170 logical+15 frame vectors. Twelve board and15 Python simulator regressions, definitions and budget worksheet pass.
+
+Full relay evidence `.work/mc016/all-relay-metrics.json`:108 unique reports/216 executions across18 cases, seeds7/19/43 and both policies, every report clean source and identical rerun. All required lossless pairs deliver; max p95 18,599ms; dense forwarded ratio0.80 (720/900). Stress loss/outage reports missed pairs explicitly. Eighteen real production SYNC exchange cases rerun twice produce36 identical direction/capacity/fixture metrics; worst71.02s versus120s, all8 selected packets+ordered terminal, stored bytes/TTL preserved, with actual framing/ingress/scheduler and concurrent controls. The full8192-byte case remains the explicit1024-byte sizing worksheet (102.02s) plus production budget boundary arithmetic; signed556/encrypted387-byte structural fixtures remain Pending. The separate fixed JSON selection tests preserve mixed-channel and repeated Bloom omissions.
+
+MC-004's approved online feasibility/permission evidence and explicit146-byte refusal/512-byte ceiling remain the contract; physical radio/driver/protected-storage certification is not claimed. The native HELLO/admission handshake is a specified driver obligation, not executed by the pre-admitted host harness. Actual integrated crypto/security and encrypted persistence remain with their owning downstream tickets. All base wire layouts and limits are explicit; no unresolved base ambiguity was found in this review. A discovered implementation defect would block this freeze and require scoped remediation rather than silently changing production code outside this ticket.
+
+This ticket changes documentation only and has no native/interface/build/dependency effect; applicable host+documentation gates and required Terra review satisfy the local validation policy. No full hosted matrix, physical test or independent security assessment is substituted. Review is pending; completion is effective only after accepted review and squash merge.
 
 ## Review and merge
 

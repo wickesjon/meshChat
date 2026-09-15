@@ -30,10 +30,10 @@ Also permitted: this ticket and generated ticketboard index/diagram changes requ
 
 ## Exit criteria
 
-- [ ] Late-join tests meet the approved eligible-workload gate at each supported link capacity.
-- [ ] Empty caches, full-byte-budget pages, concurrent mutation, disconnects and stale cursors terminate predictably.
-- [ ] SYNC cannot reset TTL, bypass crypto/ingress caps or turn expired cache entries into indefinite replay loops.
-- [ ] Relevant checks pass, evidence is recorded, required review is complete, and the ticket is squash merged to main.
+- [x] Late-join tests meet the approved eligible-workload gate at each supported link capacity.
+- [x] Empty caches, full-byte-budget pages, concurrent mutation, disconnects and stale cursors terminate predictably.
+- [x] SYNC cannot reset TTL, bypass crypto/ingress caps or turn expired cache entries into indefinite replay loops.
+- [x] Relevant checks pass, evidence is recorded, required review is complete, and the ticket is squash merged to main.
 
 ## Potential fallbacks
 
@@ -44,7 +44,7 @@ A triggered fallback must be recorded with evidence. It does not authorize weake
 
 ## Evidence
 
-Implemented from main `953debe57d3119e88524ef287dab6a664e95d874`; MC-014/007 dependencies are complete. Initial review found an admission API blocker; the fix and follow-up review are in progress. Completion is not effective before merge.
+Implemented from main `953debe57d3119e88524ef287dab6a664e95d874`; MC-014/007 dependencies are complete. Initial review found an admission API blocker, resolved at `ee7e6b9127d71fcc571483f133e8fbbe54c45191`; Terra follow-up review 5208995661 accepted that revision with no new blockers. Completion becomes effective only on squash merge.
 
 ### Implementation and lifecycle
 
@@ -74,7 +74,7 @@ The original MC-007 JSON fixtures are consumed directly by a Rust simulator test
 
 Windows x86_64, Rust/Cargo 1.85.1, Python 3.14.4, cargo-deny 0.20.2. Logs in ignored `.work/mc015/`. All listed gates passed: 79 debug and 79 release Rust tests, four cache/11 session/one 18-case exchange tests included, one direct fixed-fixture simulator test in debug/release, 15 Python simulator and 12 board tests. The later strengthened byte-pressure cache test was rerun in debug/release. A release artifact collision after switching the standalone simulator feature set was resolved with `cargo clean -p meshchat-core --release`; the clean all-feature release suite/build passed. This was stale local build output, not a source fix. Exact committed source will be recorded in the PR before review. Required commands: `cargo fmt --all -- --check`; workspace all-target/all-feature clippy with `-D warnings`; locked offline debug/release all-feature tests; locked offline release build; cargo-deny all-feature locked advisory/bans/licenses/sources; simulator manifest fmt/clippy/debug/release tests/build; scenario definitions and budget worksheet; 15 existing Python simulator regressions; ticketboard default plus 12 unit tests; `git diff --check`; unchanged root/simulator lockfiles.
 
-After the review fix, 82 debug/release tests (including two compile-fail token tests), core clippy/fmt/release build and board checks pass. The real exchange remains 18/18, with the same measured timing. Standalone simulator validation uses `.work/mc015/simulator-target` to keep feature builds isolated.
+Corrected clean source `ee7e6b9127d71fcc571483f133e8fbbe54c45191` reproduced 18 exchange case metrics twice (36 executions, source_dirty=false, exact equality); `.work/mc015/fixed-replay.json`. After the review fix, 82 debug/release tests (including two compile-fail token tests), core clippy/fmt/release build and board checks pass. The real exchange remains 18/18, with the same measured timing. Standalone simulator validation uses `.work/mc015/simulator-target` to keep feature builds isolated.
 
 No UniFFI export, native source, build script, native dependency or wire contract changes. This internal core module/ingress path uses the local host component gate under the validation policy; Terra must confirm omitted Android/iOS job applicability. No hardware, proof, actual crypto, independent-security or full hosted-matrix success is claimed.
 
@@ -82,6 +82,6 @@ No UniFFI export, native source, build script, native dependency or wire contrac
 
 - Branch: `ticket/MC-015-forward-cache-and-paginated-sync`.
 - PR: https://github.com/wickesjon/meshChat/pull/19.
-- Terra medium review 5208909830 at `5638bee2060cab2b2bf4fcb749c12b1c89476f4c` found one P1: raw session APIs did not enforce prior outer ingress admission. Opaque consuming admission tokens replace that trust boundary; runtime and compile-fail regressions cover binding/forgery/reuse. Follow-up review pending. The reviewer confirmed host-only native applicability.
+- Terra medium review 5208909830 at `5638bee2060cab2b2bf4fcb749c12b1c89476f4c` found one P1: raw session APIs did not enforce prior outer ingress admission. Opaque consuming admission tokens replace that trust boundary; runtime and compile-fail regressions cover binding/forgery/reuse. Follow-up COMMENT review [5208995661](https://github.com/wickesjon/meshChat/pull/19#pullrequestreview-5208995661) accepted `ee7e6b9127d71fcc571483f133e8fbbe54c45191`, confirming the P1 resolved and no new blockers; independently reran 12 session tests, all 18 paced cases and two compile-fail doctests. Both reviews confirmed host-only native applicability. This is separate-agent review evidence, not formal author self-approval or the later independent security assessment.
 - Squash commit title: `MC-015: Forward cache and paginated SYNC`.
 - Completion becomes effective only when the reviewed squash commit lands on main.

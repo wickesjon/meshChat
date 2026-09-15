@@ -33,7 +33,7 @@ Also permitted by the 2026-09-15 user decision: coordinated acceptance-sequencin
 - [x] Malformed-first/structurally-valid-second and identical-replay tests pass for clear and opaque signed/encrypted fixtures at the admission/state-machine boundary. Signed/encrypted inputs remain pending/unverified and never enter trusted dedup or authenticated display before a production verifier succeeds. These are ingress/state tests, not cryptographic validation.
 - [x] Flooding rotated identities cannot exceed the sum of the attacker's actual admitted link budgets; multi-link attacks are measured separately.
 - [x] Over-budget frames never enter display, reassembly or crypto paths; memory and work remain within specified bounds.
-- [ ] Relevant checks pass, evidence is recorded, required review is complete, and the ticket is squash merged to main.
+- [x] Relevant checks pass and source review is complete; completion is staged pending final metadata review and squash merge, effective only on main.
 
 ## Potential fallbacks
 
@@ -44,7 +44,7 @@ A triggered fallback must be recorded with evidence. It does not authorize weake
 
 ## Evidence
 
-Implementation prepared for review. Dependencies MC-010/007/012 are complete on main; branch starts from `c3ef8dba9b9bd0ce4400622d84c374ac2b51a92c`. No passing cryptographic fixture or completion is claimed.
+Implementation and source checks passed; completion is staged pending final metadata review and squash merge. Dependencies MC-010/007/012 are complete on main; branch starts from `c3ef8dba9b9bd0ce4400622d84c374ac2b51a92c`. No passing cryptographic fixture or completion is claimed.
 
 ### Approved acceptance sequencing — 2026-09-15
 
@@ -75,13 +75,19 @@ Host: Windows x86_64, Rust/cargo 1.85.1, Python 3.14.4. Commands use repository-
 - The 600-second established-link sender-rotation attack offers 100 values/second/link. One link: 60,000 offered, 614 admitted, sender peak 314. Eight links: 480,000 offered, 4,859 admitted, sender peak 2,459. These fit the declared link/node burst+refill bounds; the cases are reported separately. Admitted records rotate both message IDs and claimed sender IDs. Sender reservation stays 688,152 bytes on this host; accepted state reaches its fixed 4096 ceiling and staging stays bounded. No crypto operation runs.
 - Tests also cover staging overflow, work concurrency and atomicity, explicit pending-queue pressure/expiry/eviction, session roles, all control/unknown classes, shared sender budgets, malformed-first/valid-second recovery, cross-link rejected-fragment poisoning, retired partition reclamation, backwards time, oversize/size mismatch, stale tokens, capacity change and reconnect-resistant node/address budgets.
 - `cargo fmt --manifest-path tests/simulator/Cargo.toml -- --check`; corresponding locked build/clippy; `python -B tests/integration/simulator/test_simulator.py`: pass. The core-ingress scenario suite uses `python -B tests/simulator/runner.py --core target/release/meshchat-simulator-core.exe --output .work/mc013/ingress-suite --extra tests/simulator/scenarios/MC-012-driver-cases.json --core-ingress`. All 17 cases × three seeds × two policies with exact reruns pass (204 executions), exercising production ingress and retaining fixture relay/scheduler labeling; no production relay acceptance is claimed. Metrics include actual core admission and reservation counters.
-- MC-007 definition/worksheet checks, ticketboard validator (46 tickets/127 dependencies), its 12 tests, and `git diff --check` pass. Cargo-deny 0.20.2 passes advisory/license/version/source checks with a freshly fetched RustSec database (only unused license-allowance warnings). Hosted native results remain pending and are recorded before merge. A required failed check still blocks completion.
+- MC-007 definition/worksheet checks, ticketboard validator (46 tickets/127 dependencies), its 12 tests, and `git diff --check` pass. Cargo-deny 0.20.2 passes advisory/license/version/source checks with a freshly fetched RustSec database (only unused license-allowance warnings). Hosted native results are recorded below. A required failed check still blocks completion.
 
-Required Terra review, final check evidence and squash merge remain pending.
+A clean-source rerun at `a2a8e45a68e7c649b913aed7b44e4cefe61ba3b3` passes all 204 core-ingress executions (102 reports with exact reruns). Retained output: `.work/mc013/a2a8e45-core-ingress/metrics.json` and corresponding JSONL traces. Every report records that revision, `source_dirty=false`, identical reruns and actual ingress counters. Lossless fixture graphs retain every reachable pair and no beyond-TTL delivery; loss/mobility/backpressure misses remain in their denominators. Relay/SYNC production acceptance is still pending its owners.
+
+Hosted [CI run 34948013046](https://github.com/wickesjon/meshChat/actions/runs/34948013046) passes all four jobs at source revision `a2a8e45a68e7c649b913aed7b44e4cefe61ba3b3`: ticketboard, Rust (including dependency gates), Android and iOS. Android builds/lints the app and BLE/security probes, checks packaged native libraries and alignment, and passes synthetic create/reopen/key-loss/reset lifecycle tests on API 29 with 4096-byte pages. This is not a 16-KiB-page emulator or physical key-storage result. iOS uses Xcode 16.4 (16F6), builds the unsigned app and BLE/security probes in Debug/Release, and passes Swift FFI and CryptoKit curve interoperability checks. Native platform code and dependencies are unchanged; these runs verify the shared core still builds with both consumers.
+
+The final amendment changes only ticket evidence/status and generated board links. Ticketboard regeneration/default validation, all 12 ticketboard unit tests and `git diff --check` pass. Under the approved local validation policy, unchanged production/test source retains the source-revision checks above; final documentation review is required and recorded in the PR before merge. No physical or independent security evidence is claimed.
+
+Separate Terra medium [source review 5207636272](https://github.com/wickesjon/meshChat/pull/17#pullrequestreview-5207636272) reviewed `a2a8e45a68e7c649b913aed7b44e4cefe61ba3b3` and found no blocking issues. The worker independently ran ingress/fuzz tests, formatting, core clippy, simulator integration tests, ticketboard validation and diff checks. This is a source review, not an independent security assessment. Final completion metadata review and squash merge remain pending.
 
 ## Review and merge
 
 - Branch: `ticket/MC-013-ingress-budgets-authentication-states-and-dedup`.
-- Review/PR: pending.
+- Review/PR: [PR #17](https://github.com/wickesjon/meshChat/pull/17); source review linked above, final metadata review recorded in the PR before merge.
 - Squash commit title: `MC-013: Ingress budgets, authentication states and dedup`.
 - Completion becomes effective only when the reviewed squash commit lands on main.

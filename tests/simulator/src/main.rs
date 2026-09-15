@@ -3,6 +3,7 @@ use meshchat_core::{
     Capacities, Core, DriverEvent, Limits, LinkHandle, PowerState, SendPath, UiEvent,
     codec::{self, Context},
     framing::{Encoder, MAX_CAPACITY, MIN_CAPACITY, ObjectKind, Reassembler},
+    ingress::{Ingress, Outcome},
 };
 use serde_json::{Value, json};
 use std::collections::BTreeMap;
@@ -11,8 +12,32 @@ use std::io::{self, BufRead, Write};
 
 struct Node {
     core: Core,
-    reassembly: Reassembler,
+    receiver: Receiver,
     handles: BTreeMap<u64, LinkHandle>,
+}
+enum Receiver {
+    Framing(Box<Reassembler>),
+    Ingress(Box<Ingress>),
+}
+impl Receiver {
+    fn advance(&mut self, now: u64) {
+        match self {
+            Self::Framing(r) => r.advance(now).unwrap(),
+            Self::Ingress(r) => r.advance(now).unwrap(),
+        }
+    }
+    fn register(&mut self, link: &LinkHandle, capacity: usize, now: u64) {
+        match self {
+            Self::Framing(r) => r.register(link, capacity).unwrap(),
+            Self::Ingress(r) => r.register(link, capacity, now).unwrap(),
+        }
+    }
+    fn disconnect(&mut self, link: &LinkHandle, now: u64) {
+        match self {
+            Self::Framing(r) => r.disconnect(link).unwrap(),
+            Self::Ingress(r) => r.disconnect(link, now).unwrap(),
+        }
+    }
 }
 fn number(v: &Value, key: &str) -> u64 {
     v[key].as_u64().expect("integer command field")
@@ -48,7 +73,11 @@ fn command(nodes: &mut Vec<Node>, v: Value) -> Value {
                     0,
                 )
                 .unwrap(),
-                reassembly: Reassembler::new(nonce, 8, 0).unwrap(),
+                receiver: if v["ingress"].as_bool().unwrap_or(false) {
+                    Receiver::Ingress(Box::new(Ingress::new(nonce, 8, 0).unwrap()))
+                } else {
+                    Receiver::Framing(Box::new(Reassembler::new(nonce, 8, 0).unwrap()))
+                },
                 handles: BTreeMap::new(),
             })
             .collect();
@@ -81,7 +110,10 @@ fn command(nodes: &mut Vec<Node>, v: Value) -> Value {
     n.core
         .handle_event(DriverEvent::TimeAdvanced { monotonic_ms: now })
         .unwrap();
-    n.reassembly.advance(now).unwrap();
+    // Receiving uses the admission fast path before table maintenance/reassembly.
+    if op != "receive" {
+        n.receiver.advance(now);
+    }
     match op {
         "connect" => {
             let send = number(&v, "send") as u16;
@@ -102,7 +134,7 @@ fn command(nodes: &mut Vec<Node>, v: Value) -> Value {
                     let UiEvent::LinkConnected { link } = &effects.ui_events[0] else {
                         unreachable!()
                     };
-                    n.reassembly.register(link, receive as usize).unwrap();
+                    n.receiver.register(link, receive as usize, now);
                     n.handles.insert(link.generation, link.clone());
                     json!({"handle": link.generation})
                 }
@@ -121,10 +153,30 @@ fn command(nodes: &mut Vec<Node>, v: Value) -> Value {
             json!({"ok": true})
         }
         "stats" => {
-            let r = n.reassembly.reservations();
-            json!({"reserved_bytes": r.logical_bytes + r.transport_bytes + r.rejected_bytes + r.manager_bytes,
+            let (r, counters, ingress) = match &n.receiver {
+                Receiver::Framing(r) => (r.reservations(), r.counters(), Value::Null),
+                Receiver::Ingress(i) => {
+                    let r = i.reservations();
+                    let c = i.counters();
+                    (
+                        r.reassembly,
+                        i.reassembly_counters(),
+                        json!({"offered_frames":c.offered_frames,"admitted_frames":c.admitted_frames,
+                        "budget_drops":c.budget_drops,"pending":r.pending,"accepted":r.accepted,"senders":r.senders,
+                        "sender_peak":c.peak_senders,"accepted_peak":c.peak_accepted,"pending_peak":c.peak_pending,
+                        "reserved_work_units":c.reserved_work_units,"sender_reserved_bytes":r.sender_bytes,
+                        "pending_reserved_bytes":r.pending_bytes,"accepted_reserved_bytes":r.accepted_bytes,
+                        "staging_reserved_bytes":r.staging_bytes,"rejected_reserved_bytes":r.rejected_bytes,"address_reserved_bytes":r.address_bytes,"manager_bytes":r.manager_bytes}),
+                    )
+                }
+            };
+            let mut result = json!({"reserved_bytes": r.logical_bytes + r.transport_bytes + r.rejected_bytes + r.manager_bytes,
                 "peak_logical_groups": r.peak_logical_groups, "peak_transport_groups": r.peak_transport_groups,
-                "peak_rejected_groups": r.peak_rejected_groups, "malformed": n.reassembly.counters().malformed})
+                "peak_rejected_groups": r.peak_rejected_groups, "malformed": counters.malformed});
+            if !ingress.is_null() {
+                result["ingress"] = ingress;
+            }
+            result
         }
         "disconnect" | "send" | "receive" => {
             let generation = number(&v, "handle");
@@ -136,7 +188,7 @@ fn command(nodes: &mut Vec<Node>, v: Value) -> Value {
                     n.core
                         .handle_event(DriverEvent::Disconnected { link: link.clone() })
                         .unwrap();
-                    n.reassembly.disconnect(&link).unwrap();
+                    n.receiver.disconnect(&link, now);
                     n.handles.remove(&generation);
                     json!({"ok": true})
                 }
@@ -149,18 +201,35 @@ fn command(nodes: &mut Vec<Node>, v: Value) -> Value {
                 },
                 "receive" => {
                     let frame = bytes(&v["frame"]);
+                    let mut output = [0; 1035];
+                    let (done, admission) = match &mut n.receiver {
+                        Receiver::Framing(r) => (
+                            r.ingest_admitted(&link, &frame, now, &mut output)
+                                .map_err(|e| e.to_string()),
+                            Value::Null,
+                        ),
+                        Receiver::Ingress(i) => {
+                            match i.receive(&link, frame.len() as u64, &frame, now, &mut output) {
+                                Err(e) => (Err(e.to_string()), Value::Null),
+                                Ok(Outcome::Dropped(reason)) => {
+                                    return json!({"error":format!("ingress {reason:?}"),"ingress_drop":true});
+                                }
+                                Ok(Outcome::Incomplete) => (Ok(None), Value::Null),
+                                Ok(Outcome::Complete { kind, len, state }) => (
+                                    Ok(Some(meshchat_core::framing::Completed { kind, len })),
+                                    json!(format!("{state:?}")),
+                                ),
+                            }
+                        }
+                    };
                     if let Err(e) = n.core.handle_event(DriverEvent::InboundBytes {
                         link: link.clone(),
                         bytes: frame.clone(),
                     }) {
                         return json!({"error": e.to_string()});
                     }
-                    let mut output = [0; 1035];
-                    match n
-                        .reassembly
-                        .ingest_admitted(&link, &frame, now, &mut output)
-                    {
-                        Err(e) => json!({"error": e.to_string()}),
+                    match done {
+                        Err(e) => json!({"error": e}),
                         Ok(None) => json!({"complete": false}),
                         Ok(Some(done)) => {
                             let body = &output[..done.len];
@@ -175,8 +244,12 @@ fn command(nodes: &mut Vec<Node>, v: Value) -> Value {
                                         .forward_to(&mut forwarded)
                                         .unwrap()
                                         .map(|len| hex(&forwarded[..len]));
-                                    json!({"complete": true, "body": hex(body), "forward": next,
-                                        "id": hex(&packet.header().message_id), "ttl": packet.header().ttl})
+                                    let mut result = json!({"complete": true, "body": hex(body), "forward": next,
+                                        "id": hex(&packet.header().message_id), "ttl": packet.header().ttl});
+                                    if !admission.is_null() {
+                                        result["admission_state"] = admission;
+                                    }
+                                    result
                                 }
                             }
                         }

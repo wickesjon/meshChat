@@ -44,6 +44,8 @@ A triggered fallback must be recorded with evidence. It does not authorize weake
 
 ## Evidence
 
+Under the user-approved 2026-09-15 MC-013 sequencing correction, base ingress gates cover admission and clear/opaque pending-state behavior. Real signed/encrypted ingress replay evidence is pending MC-019/020/021 and must pass MC-022; the base freeze cannot label those cryptographic results passed. All base rate/memory/relay/SYNC checks remain required.
+
 Acceptance reference updated under the user-approved MC-004 physical-gate replacement on 2026-09-11; see [the decision](../../decisions/MC-004-online-feasibility.md). MC-025/MC-027 retain physical radio acceptance.
 
 Not implemented. Record commands, versions, reproducible inputs and results here. For manual/hardware checks include device/OS, duration and report paths. No test or review is claimed yet.

@@ -29,7 +29,7 @@ After edits run `python tests/ticketboard/validate.py --write`; then run `python
 | [MC-010](complete/MC-010-bounded-framing-and-reassembly.md) | Bounded framing and reassembly | complete | MC-009, MC-007 |
 | [MC-011](complete/MC-011-channels-text-and-deep-link-parsing.md) | Channels, text and deep-link parsing | complete | MC-009 |
 | [MC-012](complete/MC-012-deterministic-gatt-overlay-simulator.md) | Deterministic GATT-overlay simulator | complete | MC-003, MC-007, MC-009, MC-010 |
-| [MC-013](backlog/MC-013-ingress-budgets-authentication-states-and-dedup.md) | Ingress budgets, authentication states and dedup | backlog | MC-010, MC-007, MC-012 |
+| [MC-013](complete/MC-013-ingress-budgets-authentication-states-and-dedup.md) | Ingress budgets, authentication states and dedup | complete | MC-010, MC-007, MC-012 |
 | [MC-014](backlog/MC-014-relay-scheduling-suppression-and-power-policy.md) | Relay scheduling, suppression and power policy | backlog | MC-013, MC-012 |
 | [MC-015](backlog/MC-015-forward-cache-and-paginated-sync.md) | Forward cache and paginated SYNC | backlog | MC-014, MC-007 |
 | [MC-016](backlog/MC-016-base-transport-freeze-gate.md) | Base transport freeze gate | backlog | MC-011, MC-015 |

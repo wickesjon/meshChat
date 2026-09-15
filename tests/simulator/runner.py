@@ -172,7 +172,7 @@ class Simulation:
         self.trace = trace
         self.trace_hash = hashlib.sha256()
         self.link_cursor = [0] * self.count
-        core.call("reset", nodes=self.count)
+        core.call("reset", nodes=self.count, ingress=scenario.get("core_ingress", False))
         self.edges = {}
         for edge in scenario["edges"]:
             a, b, *capacities = edge
@@ -473,7 +473,7 @@ class Simulation:
             self.record("stale_arrival", source=source, destination=dest, object=obj, fragment=index)
             return
         size = len(frame) // 2
-        if not charge(self.now, [(link.ingress_frames, 1), (link.ingress_bytes, size),
+        if not self.scenario.get("core_ingress", False) and not charge(self.now, [(link.ingress_frames, 1), (link.ingress_bytes, size),
                                  (self.node_frames_in[node], 1), (self.node_bytes_in[node], size)]):
             self.counters["fixture_ingress_drops"] += 1
             self.record("ingress_drop", source=source, destination=dest, object=obj, fragment=index)
@@ -483,6 +483,8 @@ class Simulation:
         self.record("arrival", source=source, destination=dest, object=obj, fragment=index, complete=received.get("complete", False), error=received.get("error"))
         if "error" in received:
             self.counters["core_rejected_frames"] += 1
+            if received.get("ingress_drop"):
+                self.counters["production_ingress_drops"] += 1
             return
         if not received.get("complete") or obj not in self.origins:
             return
@@ -544,8 +546,10 @@ class Simulation:
         delivered = set(self.deliveries)
         return dict(schema_version=1, scenario=self.scenario["id"], seed=self.seed, policy=self.policy,
                     evidence="tested synthetic harness and real core primitives", production_acceptance="not_run",
+                    ingress_mode="production core" if self.scenario.get("core_ingress", False) else "fixture buckets",
                     initial_state="empty fixture dedup, full fixture buckets, links assumed preadmitted; no HELLO/proof exchange",
-                    pending_owners=["MC-013", "MC-014", "MC-015", "MC-016"], duration_ms=self.duration,
+                    pending_owners=(["MC-014", "MC-015", "MC-016"] if self.scenario.get("core_ingress", False)
+                                    else ["MC-013", "MC-014", "MC-015", "MC-016"]), duration_ms=self.duration,
                     scheduled_origins=len(self.origins), reachable_pairs=len(self.expected),
                     delivered_reachable_pairs=len(delivered & self.expected),
                     delivery_ratio=len(delivered & self.expected) / len(self.expected) if self.expected else None,
@@ -596,6 +600,7 @@ def main():
     parser.add_argument("--scenario", help="one manifest scenario ID; default all")
     parser.add_argument("--seed", type=int, help="one seed; default all committed seeds")
     parser.add_argument("--extra", type=Path, help="additional simulator driver scenario JSON array")
+    parser.add_argument("--core-ingress", action="store_true", help="use MC-013 core admission instead of fixture ingress buckets")
     args = parser.parse_args()
     output = args.output.resolve()
     if not output.is_relative_to(ROOT / ".work"):
@@ -622,6 +627,7 @@ def main():
     reports = []
     try:
         for case in cases:
+            case = dict(case, core_ingress=args.core_ingress)
             for seed in [args.seed] if args.seed is not None else manifest["seeds"]:
                 pair = []
                 for policy in ("coverage-fixture", "unsuppressed-fixture"):

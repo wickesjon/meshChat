@@ -62,5 +62,13 @@ path = "../../tests/integration/links/links.rs"
 name = "links_fuzz"
 path = "../../tests/fuzz/links_smoke.rs"
 
+[[test]]
+name = "ingress"
+path = "../../tests/integration/ingress/ingress.rs"
+
+[[test]]
+name = "ingress_fuzz"
+path = "../../tests/fuzz/ingress_smoke.rs"
+
 [lints]
 workspace = true

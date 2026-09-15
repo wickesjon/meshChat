@@ -1,3 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- AGP applies the configured default runner to the first entry. Keep it
+         explicit so the separately invoked storage runner survives merging. -->
+    <instrumentation android:name="org.meshchat.securityprobe.SecurityInstrumentation" android:targetPackage="org.meshchat.securityprobe" />
     <instrumentation android:name="org.meshchat.storage.StorageInstrumentation" android:targetPackage="org.meshchat.securityprobe" android:functionalTest="true" />
 </manifest>

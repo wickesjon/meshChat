@@ -66,6 +66,10 @@ The 2026-09-14 scheduling decision permits feature implementation before physica
 
 No reliable calendar critical path can be claimed before feasibility evidence and ticket sizing. Re-estimate after MC-004/MC-005 and again at each freeze. All dependencies below are hard completion prerequisites; concurrent readiness is not authorization to spawn agents or widen ticket scope.
 
+### Ingress and crypto acceptance sequencing — approved 2026-09-15
+
+MC-013 implements and tests ingress budgets, attempt tracking, clear/opaque state handling and dedup without claiming unavailable authentication. Its signed/encrypted fixtures stay pending/unverified until a production verifier succeeds. Real ingress-plus-crypto invalid-first/valid-second and authenticated-replay gates are required in MC-019 (friend signatures), MC-020 (DMs) and MC-021 (organizer chains), including failures, eviction, concurrency and budget-available recovery. MC-022 requires those results before full-wire freeze; MC-016 explicitly records that cryptographic portion as pending. Test-verifier outcomes cannot replace actual integrated cryptographic results. No security test, independent assessment or beta/release requirement is removed. This avoids the MC-013→020→016→015→014→013 prerequisite cycle while preserving the existing authoritative dependencies and MC-008 dependency-integration scope.
+
 ## Acceptance and fallback policy
 
 Every ticket carries its implementation scope, exit criteria and conditional fallbacks. Tests are added alongside each implementation; MC-036 aggregates them rather than postponing security until release.

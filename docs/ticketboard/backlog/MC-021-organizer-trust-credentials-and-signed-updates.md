@@ -30,6 +30,7 @@ Also permitted: this ticket and generated ticketboard index/diagram changes requ
 
 ## Exit criteria
 
+- [ ] Integrated ingress and real production verification of organizer signatures/credentials pass invalid-first/cryptographically-valid-second same-ID and identical-authenticated-replay cases. Later valid acceptance remains possible once budget is available; replay repeats no effect or trust refresh. Include failure, eviction, concurrent arrivals and a budget-available recovery phase; no test-verifier substitute.
 - [ ] Root-to-credential-to-message vectors pass including multiple staff keys, altered pin fields and mismatched root/key IDs.
 - [ ] A multi-hop late joiner resolves credentials when its immediate peer initially lacks them; stale or unavailable data stays pending/unverified.
 - [ ] Unadopted roots and forged chains never grant badges; credential floods stay within memory and work limits.
@@ -43,6 +44,8 @@ Also permitted: this ticket and generated ticketboard index/diagram changes requ
 A triggered fallback must be recorded with evidence. It does not authorize weaker security, invented validation or expanded scope.
 
 ## Evidence
+
+The user-approved 2026-09-15 MC-013 sequencing correction assigns the real ingress/crypto replay gate here. MC-013 covers admission and pending/unverified state tests only; MC-022 requires these integrated results before full-wire freeze. No criterion is marked passed by this scheduling change.
 
 Not implemented. Record commands, versions, reproducible inputs and results here. For manual/hardware checks include device/OS, duration and report paths. No test or review is claimed yet.
 

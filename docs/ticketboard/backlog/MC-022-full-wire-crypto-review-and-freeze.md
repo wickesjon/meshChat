@@ -30,6 +30,7 @@ Also permitted: this ticket and generated ticketboard index/diagram changes requ
 
 ## Exit criteria
 
+- [ ] MC-019/020/021 provide real-verifier ingress invalid-first/valid-second and authenticated-replay evidence, including failure, eviction, concurrency and budget-available recovery; pending-state fixtures alone cannot satisfy this full-wire gate.
 - [ ] All required forgery, replay, binding, key lifecycle and credential-recovery checks pass.
 - [ ] Independent review findings affecting the protocol are resolved, with evidence linked.
 - [ ] Every v1 wire/QR format is frozen and versioned; no undocumented field remains.

@@ -30,10 +30,10 @@ Also permitted: this ticket and generated ticketboard index/diagram changes requ
 
 ## Exit criteria
 
-- [ ] Wrong-key reads fail; plaintext message/key markers are absent from the database and auxiliary files in controlled tests.
-- [ ] Restart preserves appropriate history and trust state; rotating DM tags do not split a conversation.
-- [ ] Synthetic migration rollback/failure, retention, deletion and backup-configuration tests pass for both platform integrations. Physical backup/transfer/restore tests remain mandatory at MC-043/044 before real sensitive-data use.
-- [ ] Relevant checks pass, evidence is recorded, required review is complete, and the ticket is squash merged to main.
+- [x] Wrong-key reads fail; plaintext message/key markers are absent from the database and auxiliary files in controlled tests.
+- [x] Restart preserves appropriate history and trust state; rotating DM tags do not split a conversation.
+- [x] Synthetic migration rollback/failure, retention, deletion and backup-configuration tests pass for both platform integrations. Physical backup/transfer/restore tests remain mandatory at MC-043/044 before real sensitive-data use.
+- [x] Relevant checks pass, evidence is recorded and the source review is complete. This is a staged merge candidate: ticket completion becomes effective only when the final reviewed squash commit lands on main.
 
 ## Potential fallbacks
 
@@ -46,7 +46,7 @@ A triggered fallback must be recorded with evidence. It does not authorize weake
 
 Scheduling decision: the user deferred MC-005 physical verification on 2026-09-11. This implementation ticket uses synthetic data and automated tests; MC-043/044 retest the production provider/storage on actual devices. Its completion does not certify hardware, backup or lock behavior.
 
-Implemented candidate with passing shared/Mac checks and Terra source review; Android emulator integration remains pending. This ticket is not complete.
+Implemented and tested source `8e970761b345e4372865323b0409eb11fd784873`. Required source reviews and shared/native checks passed. Completion is staged for the final reviewed squash merge and becomes effective only on main.
 
 ### Started 2026-09-15; CI scope approved
 
@@ -103,22 +103,37 @@ git diff --check
 
 Local logs are `.work/mc018/rust-debug.log` and `rust-release.log`; 46-ticket/127-dependency validation and 12 board tests pass. The final review-source hash will be recorded in PR evidence.
 
-Initial hosted run `34969204506` passed Rust/ticketboard and iOS native device/simulator builds plus existing Swift regressions. The new standalone Swift storage compilation failed because its command omitted `-DSQLITE_HAS_CODEC`; the test runner now includes the same flag as the Xcode project. Native storage tests also inspect the rollback journal during an open transaction, requiring its presence and checking plaintext/passphrase absence. Android test failures include a fixed stage label and exception class without error text or data. These test-only corrections are pending native rerun; they are not passing evidence.
+### Native validation and resolved failures
 
-A further lifecycle check identified that the public reset callback could otherwise be invoked directly. Both native providers now guard that callback within the journaled identity-reset window; native tests assert direct calls refuse and preserve stored pins. The Android compile and existing MC-017 Kotlin lifecycle regression pass after this source fix. It requires native rerun and follow-up review before merge.
+All four jobs in [CI run 34973787716](https://github.com/wickesjon/meshChat/actions/runs/34973787716) passed on reviewed source `8e970761b345e4372865323b0409eb11fd784873`:
 
-Hosted run `34970140170` passed Rust/ticketboard and the native iOS builds but failed Swift storage creation. The shared `secure_delete` assignment returns a row and had used the write-only callback; it now uses the scalar query and requires the enabled result. Tightening the SQLite policy double to reject row-returning writes reproduced all 11 setup failures before the fix. Native rerun remains required. Terra reviewed reset-guard revision `89a06b45172a33809a15e763ffec0c49564cdf56` with no findings.
+| Job | Evidence |
+|---|---|
+| Rust `104396284676` | Pinned Rust 1.85.1 formatting/clippy, debug/release tests and build, lockfile consistency, 11 shared SQLite-double policy tests and dependency gates |
+| Ticketboard `104396284579` | Generated index/DAG consistency and board tests |
+| Android `104396284143` | JDK 17.0.15+6, Kotlin 2.2.0, AGP 8.11.1, NDK 27.3.13750724, compile SDK 36; Debug/Release builds, lint, both native ABIs and alignment checks; existing MC-005 phases and all five MC-018 phases on isolated API 29 emulator with 4096-byte pages |
+| iOS `104396284535` | Xcode 16.4, Swift 6.1.2 in Swift 6 mode, iOS SDK 18.5; unsigned device/simulator builds and existing FFI/identity/curve regressions; all five MC-018 Swift/SQLCipher phases on the Mac host |
 
-Source revision `0db4b5ab912499282356cfd08b4bbc4f1a0e0d12` passes hosted run `34971686271` Rust job `104389563629`, ticketboard job `104389563285` and iOS job `104389563553`. The Mac job built unsigned iOS device/simulator targets with pinned Xcode 16.4 and passed existing Swift regressions plus all five new SQLCipher phases (`create`, `reopen`, `checks`, `key-loss`, `reset`). This includes wrong-key refusal, encrypted database/active-journal inspection, process restart, migration/effect rollback, retention, real Mac backup-exclusion attributes and the direct-reset refusal guard. The wrapping provider in the Mac storage fixture is test-only; no Secure Enclave or physical iOS result is claimed. Local Rust fmt/clippy, 84 debug/84 release tests, release build, 11 stricter storage-policy tests and both pinned Android NDK cross-builds also pass after this correction.
+The native suites execute `create`, `reopen`, `checks`, `key-loss` and `reset` in separate app processes. They verify retained identity/pins/history; actual wrong-key refusal; plaintext-marker/passphrase absence in the database and auxiliary files, including an active rollback journal; atomic history/ledger rollback; synthetic v1 migration rollback and upgrade; age pruning, clock uncertainty and history deletion without replay acceptance; retained ciphertext after wrapping-key loss; and coordinated identity/storage reset with stale-handle refusal. Calling the storage-reset callback directly refuses without deleting pins. Android checks its real no-backup path and disabled backup flag. Mac checks the real filesystem backup-exclusion attribute.
 
-Android job `104389563842` passed builds/lint/packaging and all existing MC-005 emulator phases, then failed to launch the new runner. Local AGP 8.11.1 manifest merging reproduced the defect: the configured default runner overwrote the sole storage instrumentation entry. The test manifest now declares the default runner first and storage runner second; the actual merger output retains both. The isolated manifest-only diagnostic uses the pinned upstream SQLCipher AAR manifest, not a native rebuild/alignment substitute. The runner script also checks installed registration before launching. Android storage execution is still pending rerun.
+Android uses the actual AndroidKeyStore provider and pinned SQLCipher 4.17.0 build. Swift uses the actual pinned SQLCipher framework and production filesystem adapter with test-only wrapping; it does not exercise production Secure Enclave wrapping on the Mac. Neither emulator nor host tests establish physical backup/transfer/restore, hardware key protection or lock behavior. Those remain MC-043/044. Controlled synthetic v1 migrations are fixtures, not an upgrade claim for an earlier released app.
 
-Pending Android gate (the following paragraph describes the full native suite): existing full Android builds/lint/ABI/alignment and security-emulator checks plus MC-018's separately registered instrumentation runner; pinned Xcode device/simulator builds, existing Swift regressions and the new process-separated Swift/SQLCipher suite. New native fixtures test create/reopen, actual wrong-key read refusal, plaintext-marker/passphrase absence in database/auxiliary files, retained identity/trust, replay/conflict, rollback, pruning, key-loss retention and coordinated reset. Swift uses the pinned SQLCipher macOS framework with test-only wrapping and the actual filesystem backup attributes; Android uses the actual provider in the isolated emulator. No native test or physical result is claimed until these checks run successfully.
+Reproduction commands are the existing workflow build/lint/package gates plus:
+
+```text
+python -B src/core/build_bindings.py android --security-probe
+python3 -B tests/integration/storage/run_android.py --serial emulator-5554
+python3 -B tests/integration/storage/run_apple.py
+```
+
+Local Windows cross-compilation passed for arm64-v8a and x86_64 after the final production correction, with logs in `.work/mc018/android-cross.log`. Hosted checks are required here because both native consumers and the FFI surface changed. The final ticket/index-only completion update changes no tested source, dependency, binding, build configuration or runtime fixture; the passing native/source results remain applicable under the local-validation policy, with final board/diff checks and Terra review required on that metadata revision.
+
+Three earlier failures were resolved and rerun, not counted as passes: the standalone Swift command omitted `-Xcc -DSQLITE_HAS_CODEC`; the shared secure-delete pragma used a write-only callback despite returning a row (the stricter SQLite double reproduced failure before the scalar-query correction); and AGP replaced the test manifest's sole instrumentation entry with the default runner. The manifest now declares both runners, and the Android script verifies installed registration. Actual local AGP merging reproduced and verified that correction; its isolated diagnostic used the pinned upstream AAR manifest only, not a substitute for native build/alignment evidence. The final hosted Android job provides that native evidence.
 
 
 ## Review and merge
 
 - Branch: `ticket/MC-018-encrypted-persistence-and-retention`.
-- Review/PR: [PR #22](https://github.com/wickesjon/meshChat/pull/22). Terra medium reviewed `4f2f95569617a2b1c49b2165463d9e097cfffc99` with no findings. The worker posting attempt was rejected by automatic approval review; its completed review was accurately transcribed by the primary agent in COMMENT review #5209979292. Terra follow-ups found no issues at `cf6ef6b71b18731f5e18f2d4b4f2caeff57ba80e` (COMMENT #5210052176), `89a06b45172a33809a15e763ffec0c49564cdf56` (#5210202215) and `0db4b5ab912499282356cfd08b4bbc4f1a0e0d12` (#5210210338). Each is the completed separate worker artifact, accurately transcribed and anchored to its actual revision. Final evidence/completion metadata still requires review before merge.
+- Review/PR: [PR #22](https://github.com/wickesjon/meshChat/pull/22). Terra medium reviewed `4f2f95569617a2b1c49b2165463d9e097cfffc99` with no findings. The worker posting attempt was rejected by automatic approval review; its completed review was accurately transcribed by the primary agent in COMMENT review #5209979292. Terra follow-ups found no issues at `cf6ef6b71b18731f5e18f2d4b4f2caeff57ba80e` (COMMENT #5210052176), `89a06b45172a33809a15e763ffec0c49564cdf56` (#5210202215) and `0db4b5ab912499282356cfd08b4bbc4f1a0e0d12` (#5210210338) and `8e970761b345e4372865323b0409eb11fd784873` (#5210435009). Each is the completed separate worker artifact, accurately transcribed and anchored to its actual revision. Final evidence/completion metadata review must be recorded on PR #22 before merge.
 - Squash commit title: `MC-018: Encrypted persistence and retention`.
 - Completion becomes effective only when the reviewed squash commit lands on main.

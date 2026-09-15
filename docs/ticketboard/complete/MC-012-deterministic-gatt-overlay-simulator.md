@@ -33,7 +33,7 @@ Also permitted: this ticket and generated ticketboard index/diagram changes requ
 - [x] A seed reproduces event traces and metrics; link budgets and fragmentation costs match the transport contract.
 - [x] Scenarios count each actual egress transmission and distinguish origin sends, relays, fragments and delivery.
 - [x] The same harness can run an unsuppressed reference policy without changing production protocol behavior.
-- [ ] Relevant checks pass, evidence is recorded, required review is complete, and the ticket is squash merged to main.
+- [x] Relevant checks pass, evidence is recorded, required review is complete, and the ticket is squash merged to main.
 
 ## Potential fallbacks
 
@@ -44,7 +44,7 @@ A triggered fallback must be recorded with evidence. It does not authorize weake
 
 ## Evidence
 
-Implementation ready for review. MC-009/010 are added as hard dependencies because the runner directly exercises their codec and framing APIs; both are complete on main. The simulator has its own test-only Cargo workspace under its permitted paths. A synthetic fixture policy drives the existing core primitives; production ingress, relay scheduling and SYNC gates remain MC-013/014/015/016, as the MC-007 manifest already specifies. No production protocol acceptance or device evidence is claimed by fixture-policy runs.
+Implementation independently reviewed; completion is pending the authorized squash merge. MC-009/010 are added as hard dependencies because the runner directly exercises their codec and framing APIs; both are complete on main. The simulator has its own test-only Cargo workspace under its permitted paths. A synthetic fixture policy drives the existing core primitives; production ingress, relay scheduling and SYNC gates remain MC-013/014/015/016, as the MC-007 manifest already specifies. No production protocol acceptance or device evidence is claimed by fixture-policy runs.
 
 ### Implementation and validation
 
@@ -55,11 +55,11 @@ Implementation ready for review. MC-009/010 are added as hard dependencies becau
 - All six lossless coverage-fixture topologies have full scheduled TTL-reachable delivery and zero beyond-TTL deliveries. Loss, late join, version/capacity refusal and backpressure retain failed pairs. Exact C146 CHAT cost is three values of 146/146/100 bytes; C512 is one 342-byte value. These test-driver results do not complete MC-014.
 - Relevant checks are local under the approved policy. The existing hosted jobs do not discover the independent simulator workspace; changing `.github/**` is outside this ticket. Native Android/iOS source, dependencies and artifacts are unchanged from the fully passing MC-011 revision; simulator host builds/tests and the dependency gate are the relevant checks.
 - cargo-deny 0.20.2 advisory/license/version/source gates pass with a freshly fetched RustSec database. The initial bans check correctly rejected the unversioned local path dependency; adding the exact current core version fixed it without relaxing policy. Only unused allowances from the broader production policy produce warnings. MC-007 definition/worksheet checks pass unchanged. Ticketboard default validator, its 12 tests, and `git diff --check` pass.
-- Required Terra review and squash merge remain pending. No fallback was triggered and no acceptance requirement was changed.
+- Separate Terra medium review [5207059712](https://github.com/wickesjon/meshChat/pull/16#pullrequestreview-5207059712) independently reviewed `ac4e1cbe7d9c360f683d73dc70c1092c08a8120b`, found no blocking issues, and reran targeted Debug/Release integration checks, MC-007 checks, ticketboard validation, diff checks and a chain replay. Full clean-source Debug/Release reports have identical metrics/traces across profiles (102 reports/profile, 408 replayed executions total); only executable digests differ. Final completion metadata is reviewed separately before merge. No fallback was triggered and no acceptance requirement was changed.
 
 ## Review and merge
 
 - Branch: `ticket/MC-012-deterministic-gatt-overlay-simulator`.
-- Review/PR: pending.
+- Review/PR: [PR #16](https://github.com/wickesjon/meshChat/pull/16); Terra review [5207059712](https://github.com/wickesjon/meshChat/pull/16#pullrequestreview-5207059712).
 - Squash commit title: `MC-012: Deterministic GATT-overlay simulator`.
 - Completion becomes effective only when the reviewed squash commit lands on main.

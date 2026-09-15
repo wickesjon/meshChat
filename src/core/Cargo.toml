@@ -15,13 +15,13 @@ sha2 = "=0.10.9"
 unicode-normalization = "=0.1.24"
 unicode-security = "=0.1.2"
 
-ed25519-dalek = { version = "=2.2.0", default-features = false, features = ["std", "zeroize"], optional = true }
-x25519-dalek = { version = "=2.0.1", default-features = false, features = ["static_secrets", "zeroize"], optional = true }
+ed25519-dalek = { version = "=2.2.0", default-features = false, features = ["std", "zeroize"] }
+x25519-dalek = { version = "=2.0.1", default-features = false, features = ["static_secrets", "zeroize"] }
 getrandom = { version = "=0.4.3", optional = true }
 zeroize = "=1.8.1"
 
 [features]
-security-probe = ["dep:ed25519-dalek", "dep:x25519-dalek", "dep:getrandom"]
+security-probe = ["dep:getrandom"]
 bindgen = ["uniffi/cli", "uniffi/cargo-metadata"]
 
 [[bin]]
@@ -87,3 +87,7 @@ workspace = true
 [[test]]
 name = "sync_exchange"
 path = "../../tests/integration/sync/exchange.rs"
+
+[[test]]
+name = "identity"
+path = "../../tests/integration/identity/identity.rs"

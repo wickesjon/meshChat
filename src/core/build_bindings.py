@@ -5,6 +5,7 @@ from pathlib import Path
 import platform
 import shutil
 import subprocess
+import sys
 
 ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / '.work' / 'ffi'
@@ -91,6 +92,10 @@ def main():
             target_dir / 'aarch64-apple-ios-sim/release/libmeshchat_core.a',
             target_dir / 'x86_64-apple-ios/release/libmeshchat_core.a',
             '-output', OUT / 'iphonesimulator/libmeshchat_core.a')
+        if args.security_probe:
+            # Exercise the production provider with test-only native storage/wrapping.
+            # Real Secure Enclave use remains the physical-device gate.
+            run(sys.executable, '-B', ROOT / 'tests/integration/identity/run_apple.py')
 
 
 if __name__ == '__main__':

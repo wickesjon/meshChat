@@ -33,7 +33,7 @@ After edits run `python tests/ticketboard/validate.py --write`; then run `python
 | [MC-014](complete/MC-014-relay-scheduling-suppression-and-power-policy.md) | Relay scheduling, suppression and power policy | complete | MC-013, MC-012 |
 | [MC-015](complete/MC-015-forward-cache-and-paginated-sync.md) | Forward cache and paginated SYNC | complete | MC-014, MC-007 |
 | [MC-016](complete/MC-016-base-transport-freeze-gate.md) | Base transport freeze gate | complete | MC-011, MC-015 |
-| [MC-017](backlog/MC-017-identity-provider-and-key-lifecycle.md) | Identity provider and key lifecycle | backlog | MC-005, MC-008, MC-003 |
+| [MC-017](inreview/MC-017-identity-provider-and-key-lifecycle.md) | Identity provider and key lifecycle | inreview | MC-005, MC-008, MC-003 |
 | [MC-018](backlog/MC-018-encrypted-persistence-and-retention.md) | Encrypted persistence and retention | backlog | MC-017, MC-011 |
 | [MC-019](backlog/MC-019-verified-friends-and-fresh-presence.md) | Verified friends and fresh presence | backlog | MC-017, MC-018, MC-011, MC-008 |
 | [MC-020](backlog/MC-020-authenticated-encrypted-dms-and-reactions.md) | Authenticated encrypted DMs and reactions | backlog | MC-019, MC-008, MC-006, MC-016 |

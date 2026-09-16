@@ -129,3 +129,5 @@ impl IdentityKeySession {
         self.generation == *generation && self.material.lock().is_ok_and(|m| m.is_some())
     }
 }
+
+mod dm;

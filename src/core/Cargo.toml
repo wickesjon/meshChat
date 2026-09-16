@@ -17,11 +17,18 @@ unicode-security = "=0.1.2"
 
 ed25519-dalek = { version = "=2.2.0", default-features = false, features = ["std", "zeroize"] }
 x25519-dalek = { version = "=2.0.1", default-features = false, features = ["static_secrets", "zeroize"] }
-getrandom = { version = "=0.4.3", optional = true }
+getrandom = { version = "=0.4.3" }
 zeroize = "=1.8.1"
+hpke = { version = "=0.14.1", default-features = false, features = ["alloc", "x25519", "chacha", "getrandom"] }
+hmac = { version = "=0.13.0", default-features = false, features = ["zeroize"] }
+sha2_11 = { package = "sha2", version = "=0.11.0", default-features = false, features = ["zeroize"] }
+subtle = { version = "=2.6.1", default-features = false }
+# Enable supported key/state clearing in HPKE's existing symmetric dependencies.
+chacha20poly1305 = { version = "=0.11.0", default-features = false, features = ["zeroize"] }
+poly1305 = { version = "=0.9.1", default-features = false, features = ["zeroize"] }
 
 [features]
-security-probe = ["dep:getrandom"]
+security-probe = []
 bindgen = ["uniffi/cli", "uniffi/cargo-metadata"]
 
 [[bin]]
@@ -95,3 +102,7 @@ path = "../../tests/integration/identity/identity.rs"
 [[test]]
 name = "friends"
 path = "../../tests/integration/friends/friends.rs"
+
+[[test]]
+name = "dm"
+path = "../../tests/integration/dm/dm.rs"

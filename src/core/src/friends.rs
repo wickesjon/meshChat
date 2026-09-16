@@ -183,7 +183,7 @@ impl Friends {
         result.reload(store)?;
         Ok(result)
     }
-    fn reload(&mut self, store: &EncryptedStore) -> Result<(), Error> {
+    pub(crate) fn reload(&mut self, store: &EncryptedStore) -> Result<(), Error> {
         if store.identity_generation()? != self.generation {
             self.clear_session_trust();
             return Err(Error::Stale);

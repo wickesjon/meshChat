@@ -4,6 +4,7 @@
 //! storing provenance does not itself verify a signature or establish liveness.
 use sha2::{Digest, Sha256};
 use std::sync::{Arc, Mutex};
+use zeroize::{Zeroize, Zeroizing};
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error, uniffi::Error)]
 pub enum StorageError {
@@ -19,6 +20,12 @@ pub enum StorageError {
     Capacity,
     #[error("local clock uncertain")]
     ClockUncertain,
+}
+impl Zeroize for HistoryItem {
+    fn zeroize(&mut self) {
+        self.body.zeroize();
+        self.provenance.zeroize();
+    }
 }
 #[derive(Clone, Debug, PartialEq, Eq, uniffi::Enum)]
 pub enum SqlValue {
@@ -327,7 +334,8 @@ impl EncryptedStore {
         self.exec(
             "DELETE FROM ledger WHERE timestamp < ?",
             vec![n(now.saturating_sub(172800))],
-        )
+        )?;
+        self.prune_dm_reactions()
     }
     fn validate_item(item: &HistoryItem) -> Result<(), StorageError> {
         if item.conversation.len() != if item.direct { 64 } else { 4 }
@@ -462,40 +470,7 @@ impl EncryptedStore {
         immutable_bytes: Vec<u8>,
         now: Option<i64>,
     ) -> Result<AcceptResult, StorageError> {
-        Self::validate_item(&item)?;
-        let valid = match subject.first() {
-            Some(1) => subject.len() == 33,
-            Some(2) | Some(3) => subject.len() == 65,
-            _ => false,
-        };
-        if !valid
-            || immutable_bytes.is_empty()
-            || immutable_bytes.len() > 2048
-            || item.provenance.is_empty()
-            || (item.direct && (subject.first() != Some(&2) || subject[1..] != item.conversation))
-        {
-            return Err(StorageError::InvalidInput);
-        }
-        let _lock = self.lock.lock().map_err(|_| StorageError::Unavailable)?;
-        let time = self.clock(now)?;
-        if item.timestamp < time.saturating_sub(172800) || item.timestamp > time + 300 {
-            return Err(StorageError::InvalidInput);
-        }
-        let digest = Sha256::digest(&immutable_bytes);
-        self.tx(||{
-            self.prune_at(time)?;
-            let key=vec![b(&subject),n(item.direction.into()),n(item.logical_type.into()),b(&item.message_id)];
-            let rows=self.rows("SELECT digest FROM ledger WHERE subject=? AND direction=? AND logical_type=? AND message_id=?",key.clone(),1)?;
-            if let Some(row)=rows.first(){
-                if bytes(row.cells.first().ok_or(StorageError::Schema)?)?==digest.as_slice(){return Ok(AcceptResult::Replay)}
-                self.exec("UPDATE ledger SET conflict=1 WHERE subject=? AND direction=? AND logical_type=? AND message_id=?",key)?;
-                return Ok(AcceptResult::Conflict)
-            }
-            if self.scalar("SELECT count(*) FROM ledger",vec![])?>=100000{return Err(StorageError::Capacity)}
-            let mut values=key;values.push(b(&digest));values.push(n(item.timestamp));
-            self.exec("INSERT INTO ledger(subject,direction,logical_type,message_id,digest,timestamp) VALUES(?,?,?,?,?,?)",values)?;
-            self.insert(&item)?;Ok(AcceptResult::Accepted)
-        })
+        self.accept_record(item, subject, immutable_bytes, now, false)
     }
     /// A target with multiple authenticated meanings or a recorded conflict is
     /// ambiguous even across logical types/directions; never select one by ID.
@@ -531,14 +506,165 @@ impl EncryptedStore {
             return Err(StorageError::InvalidInput);
         }
         let _lock = self.lock.lock().map_err(|_| StorageError::Unavailable)?;
-        self.exec(
-            "DELETE FROM history WHERE direct=? AND conversation=?",
-            vec![n(direct as i64), b(&conversation)],
-        )
+        self.tx(|| {
+            self.exec(
+                "DELETE FROM history WHERE direct=? AND conversation=?",
+                vec![n(direct as i64), b(&conversation)],
+            )?;
+            self.prune_dm_reactions()
+        })
     }
     pub fn prune(&self, now: Option<i64>) -> Result<(), StorageError> {
         let _lock = self.lock.lock().map_err(|_| StorageError::Unavailable)?;
         let time = self.clock(now)?;
         self.tx(|| self.prune_at(time))
+    }
+}
+
+impl EncryptedStore {
+    fn accept_record(
+        &self,
+        item: HistoryItem,
+        subject: Vec<u8>,
+        immutable_bytes: Vec<u8>,
+        now: Option<i64>,
+        dm: bool,
+    ) -> Result<AcceptResult, StorageError> {
+        let mut item = Zeroizing::new(item);
+        Self::validate_item(&item)?;
+        let valid = match subject.first() {
+            Some(1) => subject.len() == 33,
+            Some(2) | Some(3) => subject.len() == 65,
+            _ => false,
+        };
+        if !valid
+            || immutable_bytes.is_empty()
+            || immutable_bytes.len() > 2048
+            || item.provenance.is_empty()
+            || (item.direct && (subject.first() != Some(&2) || subject[1..] != item.conversation))
+        {
+            return Err(StorageError::InvalidInput);
+        }
+        let _lock = self.lock.lock().map_err(|_| StorageError::Unavailable)?;
+        let time = self.clock(now)?;
+        if item.timestamp < time.saturating_sub(172800) || item.timestamp > time + 300 {
+            return Err(StorageError::InvalidInput);
+        }
+        let digest = Sha256::digest(&immutable_bytes);
+        self.tx(||{
+            self.prune_at(time)?;
+            let key=vec![b(&subject),n(item.direction.into()),n(item.logical_type.into()),b(&item.message_id)];
+            let rows=self.rows("SELECT digest FROM ledger WHERE subject=? AND direction=? AND logical_type=? AND message_id=?",key.clone(),1)?;
+            if let Some(row)=rows.first(){
+                if bytes(row.cells.first().ok_or(StorageError::Schema)?)?==digest.as_slice(){return Ok(AcceptResult::Replay)}
+                self.exec("UPDATE ledger SET conflict=1 WHERE subject=? AND direction=? AND logical_type=? AND message_id=?",key)?;
+                return Ok(AcceptResult::Conflict)
+            }
+            if self.scalar("SELECT count(*) FROM ledger",vec![])?>=100000{return Err(StorageError::Capacity)}
+            let mut values=key;values.push(b(&digest));values.push(n(item.timestamp));
+            self.exec("INSERT INTO ledger(subject,direction,logical_type,message_id,digest,timestamp) VALUES(?,?,?,?,?,?)",values)?;
+            if dm {
+                let name=b"mc020.sequence";
+                let rows=self.rows("SELECT value FROM records WHERE kind=5 AND key=?",vec![b(name)],1)?;
+                let sequence=match rows.first(){Some(r)=>u64::from_be_bytes(bytes(r.cells.first().ok_or(StorageError::Schema)?)?.try_into().map_err(|_|StorageError::Schema)?),None=>0}.checked_add(1).ok_or(StorageError::Capacity)?;
+                self.exec("INSERT INTO records(kind,key,value) VALUES(5,?,?) ON CONFLICT(kind,key) DO UPDATE SET value=excluded.value",vec![b(name),b(&sequence.to_be_bytes())])?;
+                item.provenance=subject.clone();item.provenance.extend_from_slice(&sequence.to_be_bytes());
+            }
+            self.insert(&item)?;
+            if dm && item.logical_type==6 { self.apply_dm_reaction(&item.conversation,&item.message_id,item.direction)?; }
+            self.prune_dm_reactions()?;
+            Ok(AcceptResult::Accepted)
+        })
+    }
+    pub(crate) fn accept_dm(
+        &self,
+        item: HistoryItem,
+        subject: Vec<u8>,
+        immutable: Vec<u8>,
+        now: Option<i64>,
+    ) -> Result<AcceptResult, StorageError> {
+        self.accept_record(item, subject, immutable, now, true)
+    }
+    fn prune_dm_reactions(&self) -> Result<(), StorageError> {
+        self.exec("DELETE FROM records WHERE kind=6 AND NOT EXISTS (SELECT 1 FROM history WHERE direct=1 AND logical_type=1 AND conversation=substr(records.key,1,64) AND message_id=substr(records.key,65,8))",vec![])
+    }
+    // Returns false only when no unique authenticated visible target exists.
+    // Counter comparison makes recovery idempotent and prevents an older orphan
+    // from overwriting a more recently accepted reaction after a storage retry.
+    fn apply_dm_reaction(
+        &self,
+        peer: &[u8],
+        reaction: &[u8],
+        direction: u8,
+    ) -> Result<bool, StorageError> {
+        let rows=self.rows("SELECT body,provenance FROM history WHERE direct=1 AND logical_type=6 AND conversation=? AND message_id=? AND direction=?",vec![b(peer),b(reaction),n(direction.into())],2)?;
+        if rows.len() != 1 {
+            return Ok(false);
+        }
+        let body = bytes(&rows[0].cells[0])?;
+        let provenance = bytes(&rows[0].cells[1])?;
+        if body.len() != 64
+            || provenance.len() != 73
+            || provenance[0] != 2
+            || provenance[1..65] != *peer
+        {
+            return Err(StorageError::Schema);
+        }
+        let target = &body[4..12];
+        let mut subject = vec![2];
+        subject.extend_from_slice(peer);
+        if self.scalar("SELECT count(*)+coalesce(sum(conflict),0) FROM ledger WHERE subject=? AND message_id=?",vec![b(&subject),b(target)])?!=1{return Ok(false)}
+        if self.scalar("SELECT count(*) FROM history WHERE direct=1 AND logical_type=1 AND conversation=? AND message_id=?",vec![b(peer),b(target)])?!=1{return Ok(false)}
+        let mut key = peer.to_vec();
+        key.extend_from_slice(target);
+        key.push(direction);
+        let old = self.rows(
+            "SELECT value FROM records WHERE kind=6 AND key=?",
+            vec![b(&key)],
+            1,
+        )?;
+        if let Some(r) = old.first() {
+            let value = bytes(&r.cells[0])?;
+            if value.len() != 10 {
+                return Err(StorageError::Schema);
+            }
+            if value[..8] >= provenance[65..] {
+                return Ok(true);
+            }
+        }
+        let mut value = provenance[65..].to_vec();
+        value.push(body[12] & 1);
+        value.push(body[13]);
+        self.exec("INSERT INTO records(kind,key,value) VALUES(6,?,?) ON CONFLICT(kind,key) DO UPDATE SET value=excluded.value",vec![b(&key),b(&value)])?;
+        Ok(true)
+    }
+    pub(crate) fn recover_dm_reaction(
+        &self,
+        peer: &[u8],
+        id: &[u8],
+        direction: u8,
+    ) -> Result<bool, StorageError> {
+        let _lock = self.lock.lock().map_err(|_| StorageError::Unavailable)?;
+        self.tx(|| self.apply_dm_reaction(peer, id, direction))
+    }
+    pub(crate) fn dm_reactions(
+        &self,
+        peer: &[u8],
+        target: &[u8],
+        now: Option<i64>,
+    ) -> Result<Vec<(u8, u8)>, StorageError> {
+        let _lock = self.lock.lock().map_err(|_| StorageError::Unavailable)?;
+        let time = self.clock(now)?;
+        self.tx(||{
+            self.prune_at(time)?;
+            let mut subject=vec![2];subject.extend_from_slice(peer);
+            if self.scalar("SELECT count(*)+coalesce(sum(conflict),0) FROM ledger WHERE subject=? AND message_id=?",vec![b(&subject),b(target)])?!=1{return Ok(vec![])}
+            let mut prefix=peer.to_vec();prefix.extend_from_slice(target);
+            let rows=self.rows("SELECT key,value FROM records WHERE kind=6 AND substr(key,1,72)=? ORDER BY key",vec![b(&prefix)],2)?;
+            let mut out=Vec::new();
+            for row in rows{let key=bytes(&row.cells[0])?;let value=bytes(&row.cells[1])?;if key.len()!=73||value.len()!=10{return Err(StorageError::Schema)}
+            if value[8]==0{out.push((key[72],value[9]));}}
+            Ok(out)
+        })
     }
 }

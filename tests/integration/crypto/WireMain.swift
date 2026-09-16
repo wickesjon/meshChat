@@ -33,6 +33,17 @@ struct WireChecks {
                 // A typed Rust error must survive the generated Swift binding.
             }
         }
+        var renamedDm = dm
+        var renamedBytes = renamedDm.removeValue(forKey: "chat_2_1")!
+        renamedBytes[renamedBytes.count - 1] ^= 1
+        renamedDm["unexpected"] = renamedBytes
+        precondition(renamedDm.count == 17)
+        do {
+            _ = try checkWireVectors(friendVectors: friend, dmVectors: renamedDm, organizerVectors: organizer)
+            fatalError("renamed expected fixture accepted")
+        } catch FixtureError.Mismatch {
+            // Same-count substitutions must not silently remove an expected case.
+        }
         let recovered = try checkWireVectors(friendVectors: friend, dmVectors: dm, organizerVectors: organizer)
         precondition(recovered == expected)
         print("Swift public crypto vectors and corruption/error parity passed")

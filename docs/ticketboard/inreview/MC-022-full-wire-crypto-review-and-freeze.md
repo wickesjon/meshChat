@@ -74,6 +74,12 @@ Logs and generated input inventory remain in `.work/mc022`. Native Swift executi
 ## Review and merge
 
 - Branch: `ticket/MC-022-full-wire-crypto-review-and-freeze`.
-- Review/PR: pending.
+- Review/PR: [PR #26](https://github.com/wickesjon/meshChat/pull/26). External construction assessment remains unsupplied; do not merge as complete.
 - Squash commit title: `MC-022: Full-wire crypto review and freeze`.
 - Completion becomes effective only when the reviewed squash commit lands on main.
+
+### Automated peer review correction
+
+Terra medium reviewed source `4fb33c84157374a982b2f00f4b732730b9583341` and posted [its findings](https://github.com/wickesjon/meshChat/pull/26#issuecomment-5704376205). It found one P2: checking only fixture-map counts allowed an expected DM vector to be replaced by a renamed invalid input, silently omitting a positive case. The test facade now requires the exact expected key set for every family. A Kotlin regression reproduced the old false success by renaming `chat_2_1` and corrupting its ciphertext at unchanged count; Swift includes the same negative case. This corrects test coverage, not production crypto.
+
+After the fix, all 57 combined harness tests pass in debug and release; release build, clippy, formatting, reference reproduction/lock-package checks, board validation and diff checks pass. Kotlin's two native tests (positive/corruption/recovery and same-count renamed input) are rerun through the actual Android test task. Follow-up review and corrected-source hosted Swift evidence are still required. These automated reviews do not satisfy the separately required independent construction assessment.

@@ -37,6 +37,8 @@ Use the pinned Rust 1.85.1 toolchain and repository-local cache/output configura
 
 The native facade reuses the same endpoint harnesses as the Rust tests. Foreign callers supply the reference bytes; production owners perform real HELLO/admission/signature/HPKE/storage processing. Assertions are converted to a typed fixture error at this test-only boundary. The SQLite callback process uses plaintext synthetic databases and validates SQL transaction behavior, not native encryption. Actual SQLCipher/key-lifecycle checks remain separate. The database helper includes its module namespace in temporary filenames so the combined harness cannot collide between friend/DM/organizer instances. No production code or root lockfile changes are needed.
 
+The facade requires the exact fixture-name set in each family, not only its count. Kotlin and Swift also replace a positive DM case with an unknown name and corrupt ciphertext at the same count; this must produce a typed fixture error. The Kotlin regression reproduced the previous false success before the key-set correction, demonstrating that dropping a required positive cannot silently preserve a green parity result.
+
 ## Required assessor questions and test map
 
 | Area | Code / executable evidence | Review questions |

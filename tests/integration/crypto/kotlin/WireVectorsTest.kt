@@ -13,6 +13,17 @@ class WireVectorsTest {
                 key to hex.chunked(2).map { it.toInt(16).toByte() }.toByteArray()
             }
 
+    @Test fun renamedDmFixtureCannotReplaceExpectedPositive() {
+        val dm = vectors("dm").toMutableMap()
+        val renamed = requireNotNull(dm.remove("chat_2_1"))
+        renamed[renamed.lastIndex] = (renamed.last().toInt() xor 1).toByte()
+        dm["unexpected"] = renamed
+        assertEquals(17, dm.size)
+        assertThrows(FixtureException.Mismatch::class.java) {
+            checkWireVectors(vectors("friend"), dm, vectors("organizer"))
+        }
+    }
+
     @Test fun publicReferenceBytesAndCorruptionCrossGeneratedBindings() {
         val friend = vectors("friend")
         val dm = vectors("dm")

@@ -645,6 +645,15 @@ impl Ingress {
         body: &[u8],
         now: u64,
     ) -> Result<Option<WorkPermit>, Error> {
+        self.begin_authentication(handle, body, 1, now)
+    }
+    pub(crate) fn begin_authentication(
+        &mut self,
+        handle: &LinkHandle,
+        body: &[u8],
+        units: u8,
+        now: u64,
+    ) -> Result<Option<WorkPermit>, Error> {
         self.advance(now)?;
         self.link(handle)?;
         if body.len() < codec::HEADER_LEN {
@@ -664,7 +673,7 @@ impl Ingress {
         {
             return Ok(None);
         }
-        let permit = self.begin_work(handle, 1, now)?;
+        let permit = self.begin_work(handle, units, now)?;
         if let Some(permit) = &permit {
             let expires = self
                 .pending

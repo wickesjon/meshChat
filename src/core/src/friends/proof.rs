@@ -148,7 +148,7 @@ impl Friends {
         }
         Ok(())
     }
-    pub(super) fn link_ready(&self, link: &LinkHandle) -> bool {
+    pub(crate) fn link_ready(&self, link: &LinkHandle) -> bool {
         self.sessions
             .iter()
             .any(|s| s.link == *link && s.ready.is_some())

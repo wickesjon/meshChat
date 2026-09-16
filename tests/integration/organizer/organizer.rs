@@ -56,6 +56,54 @@ fn cred(r: u8, s: u8, before: u32, after: u32) -> Vec<u8> {
 fn credential() -> Vec<u8> {
     cred(9, 7, WALL as u32 - 10, WALL as u32 + 1000)
 }
+#[test]
+fn signed_forbidden_labels_never_gain_authority_or_poison_valid_recovery() {
+    for label in ["\u{202e}Ops", "\u{200b}", "A\nB", "A\0B"] {
+        let mut credential = credential();
+        credential.truncate(50);
+        credential[49] = label.len() as u8;
+        credential.extend_from_slice(label.as_bytes());
+        let mut signed = b"meshfest/credential/v1\0".to_vec();
+        signed.extend_from_slice(&(credential.len() as u16).to_be_bytes());
+        signed.extend_from_slice(&credential);
+        credential.extend_from_slice(&key(9).sign(&signed).to_bytes());
+        let uri = zeroize::Zeroizing::new(format!(
+            "meshfest://staff/{}/{}",
+            b64(&credential),
+            b64(&[7; 32])
+        ));
+        assert!(links::parse(&uri).is_err());
+
+        let mut n = Node::new(3, true);
+        let offered = offer(&credential, 100u64.to_be_bytes(), hint(&key(2))).unwrap();
+        let job = n.feed(&offered, 1000).unwrap().job.unwrap();
+        assert!(matches!(n.finish(job, 1000), Err(Error::Authority)));
+        // Even if retained opaquely for relaying, this credential cannot authorize
+        // a later omitted-credential message.
+        let omitted = chat(9, 7, 1, false, 0);
+        let job = n.feed(&omitted, 2000).unwrap().job.unwrap();
+        assert!(matches!(n.finish(job, 2000), Err(Error::Authority)));
+
+        let valid = chat(9, 7, 2, true, 0);
+        let mut included = valid.clone();
+        let start = included.len() - 64 - self::credential().len();
+        included.splice(start..included.len() - 64, credential.iter().copied());
+        included[start - 2..start].copy_from_slice(&(credential.len() as u16).to_be_bytes());
+        let payload_len = (included.len() - 26) as u16;
+        included[24..26].copy_from_slice(&payload_len.to_be_bytes());
+        resign(&mut included, 7);
+        let job = n.feed(&included, 3000).unwrap().job.unwrap();
+        assert!(matches!(n.finish(job, 3000), Err(Error::Authority)));
+        let rows =
+            n.db.query("SELECT count(*) FROM history".into(), vec![], 1)
+                .unwrap();
+        assert!(matches!(rows[0].cells[0], SqlValue::Integer { value: 0 }));
+        assert_eq!(
+            n.receive(&valid, 4000).unwrap().result,
+            AcceptResult::Accepted
+        );
+    }
+}
 fn chat(r: u8, s: u8, id: u64, include: bool, pin: u32) -> Vec<u8> {
     let credential = cred(r, s, WALL as u32 - 10, WALL as u32 + 1000);
     let mut body = (WALL as u32).to_be_bytes().to_vec();

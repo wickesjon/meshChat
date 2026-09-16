@@ -52,7 +52,7 @@ Implemented and tested locally as detailed below; required automated peer review
 ## Review and merge
 
 - Branch: `ticket/MC-021-organizer-trust-credentials-and-signed-updates`.
-- Review/PR: pending.
+- Review/PR: [PR #25](https://github.com/wickesjon/meshChat/pull/25).
 - Squash commit title: `MC-021: Organizer trust, credentials and signed updates`.
 - Completion becomes effective only when the reviewed squash commit lands on main.
 
@@ -95,3 +95,11 @@ An initial simulator test-wrapper compile exposed missing direct test dependenci
 This ticket adds internal shared-core protocol behavior and tests. It changes no UniFFI exports, build script, native adapter, package or production dependency, and it only adds owner-specific storage methods without changing existing native storage operations. Generated all-feature Kotlin and Swift bindings are byte-for-byte identical to the previously reviewed all-feature baseline: SHA-256 Kotlin `08a05881acbc7700ea54ef6aeac237a618f2b5f5aa195ffee1b1b40b01ad7330`, Swift `3d168c928f237815a514a2345caf021c3792e4addc6f58f3e8159c5e9307d19e`. Reproduction: build the host library with `--all-features --locked`, then run `uniffi-bindgen generate --library target/debug/meshchat_core.dll --language kotlin` / `swift` with `--no-format`. Comparing a default-feature build to the all-feature baseline initially showed only the intentionally omitted security-probe functions; using identical feature sets confirms exact parity.
 
 Under the approved local-validation policy, the host protocol/security/storage/simulator checks plus required Terra review can satisfy this internal change's merge gate. The reviewer must confirm this applicability assessment. MC-020's immediately preceding native CI run 35141497235 passed all platform jobs, but is not presented as execution of MC-021. Hosted jobs on this PR are supplemental unless review identifies a native effect. Later native organizer feature integration, physical acceptance and MC-022 independent construction assessment remain mandatory.
+
+### Automated peer review and correction
+
+Terra medium reviewed `46ec19838870cb79b5c81bea8be12c9fcf041c23` in [review 5227968925](https://github.com/wickesjon/meshChat/pull/25#pullrequestreview-5227968925), finding one P1: a root-signed credential could bypass display-character validation through radio ingress. The shared credential-authority check now requires `text::validate` with `CredentialLabel`, covering offers, included/cached credentials, imported sessions and current-authority checks. This enforces the existing text contract without changing signed bytes or the wire format.
+
+The added regression first failed on the reviewed implementation, then passed after the fix. Correctly signed bidi, invisible, newline and NUL labels are rejected through QR parsing, offered/omitted and included message paths; they produce no history effect and do not poison later valid same-ID acceptance. Full core debug/release suites now pass 144 tests each (19 organizer cases); full simulator debug/release suites pass 36 each. Release build, clippy, formatting, ticketboard validation and its 12 regressions, and diff checks pass after the fix. Logs: `.work/mc021/review-fix-*.log`. Dependency graph, native exports and build behavior remain unchanged.
+
+The reviewer explicitly confirmed that the internal-Rust native-check exception applies. Follow-up review of the correction is pending; no independent construction assessment is claimed.

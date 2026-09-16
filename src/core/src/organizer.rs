@@ -317,6 +317,7 @@ impl Organizer {
                 && time <= i64::from(c.not_after)
                 && c.not_after <= root.expiry
                 && friends::public_key(c.staff_public_key).is_ok()
+                && text::validate(c.label, text::Kind::CredentialLabel).is_ok()
         })
     }
     fn cache(&mut self, raw: &[u8], root: Option<&Root>, used: bool) {

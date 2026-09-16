@@ -34,7 +34,7 @@ Also permitted: this ticket and generated ticketboard index/diagram changes requ
 - [x] Pinned valid signatures show verified identity; copied IDs/nicknames without valid proof never do.
 - [x] Replayed ANNOUNCE cannot create unsupported current-nearby claims.
 - [x] Key-change and removal tests block stale-key sends and require explicit pin replacement.
-- [ ] Relevant checks pass, evidence is recorded, required review is complete, and the ticket is squash merged to main.
+- [x] Relevant local checks pass and source review is recorded; completion is staged for the reviewed squash commit and becomes effective only when it lands on main.
 
 ## Potential fallbacks
 
@@ -54,7 +54,7 @@ The production friend protocol will remain a shared Rust module, following the e
 ## Review and merge
 
 - Branch: `ticket/MC-019-verified-friends-and-fresh-presence`.
-- Review/PR: pending.
+- Review/PR: [PR #23](https://github.com/wickesjon/meshChat/pull/23).
 - Squash commit title: `MC-019: Verified friends and fresh presence`.
 - Completion becomes effective only when the reviewed squash commit lands on main.
 
@@ -86,3 +86,9 @@ Windows host, Rust/cargo 1.85.1, Python 3.14.4, cargo-deny 0.20.2. Exact reviewe
 - Ticketboard default validation and all 12 unit tests pass; board regeneration and diff checks run again for the review move.
 
 Local-policy applicability: internal Rust modules and non-exported storage/identity helpers, no native sources/build scripts/dependencies or wire-contract change; exact generated API parity supports host component checks. Terra must confirm this rationale. Hosted jobs may supply additional native regression evidence. MC-022 independent security assessment and scheduled MC-025/027/043/044 device certification remain outstanding separate gates; no physical result is claimed.
+
+### Review disposition and merge staging
+
+Separate automated `gpt-5.6-terra` medium worker `/root/review_mc019` completed read-only review at `bbb9ef16ffd84b85a85a1ee1fb650e9584d62b8b`: no blocking findings. It checked the ticket, MC-006/007/008 contracts, diff, final friend test logs, vectors and the local-policy host-only rationale. It could not rerun Cargo in its own shell because Cargo was absent from that shell's PATH; the implementation agent's recorded checks remain the execution evidence. Its actual result is transparently relayed in PR COMMENT review `5220125339`, not a formal self-approval or external security assessment. The initially attempted label “Independent Terra review” was rejected by automatic approval review and withdrawn; the successful record expressly describes a separate automated worker and retains the MC-022 gate.
+
+CI run `35071716315` supplied an additional passing ticketboard result and native core/binding builds; the remaining hosted steps were still running when completion metadata was prepared. Hosted completion is not claimed. Required merge evidence is the applicable successful local checks and separate Terra review under the approved policy. The final metadata revision must receive follow-up review before squash merge.

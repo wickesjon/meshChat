@@ -615,6 +615,35 @@ impl Ingress {
             sequence,
         }))
     }
+    /// Explicit local QR/import work shares the node bucket and both job slots.
+    /// Generation zero is reserved here; transport registration forbids it.
+    pub fn begin_local_work(&mut self, units: u8, now: u64) -> Result<Option<WorkPermit>, Error> {
+        self.advance(now)?;
+        if units == 0 || units > 20 {
+            return Err(Error::Configuration);
+        }
+        let Some(slot) = self.work.iter().position(Option::is_none) else {
+            return Ok(None);
+        };
+        if !charge(now, &mut [(&mut self.crypto, u64::from(units))]) {
+            return Ok(None);
+        }
+        let sequence = self.next()?;
+        self.work[slot] = Some(Work {
+            sequence,
+            generation: 0,
+            signature_hash: None,
+            expires: now + 30_000,
+        });
+        self.counters.reserved_work_units = self
+            .counters
+            .reserved_work_units
+            .saturating_add(u64::from(units));
+        Ok(Some(WorkPermit {
+            instance: self.instance,
+            sequence,
+        }))
+    }
     pub fn finish_work(&mut self, permit: WorkPermit) -> Result<(), Error> {
         if permit.instance != self.instance {
             return Err(Error::Stale);
@@ -625,11 +654,12 @@ impl Ingress {
             .find(|x| x.as_ref().is_some_and(|x| x.sequence == permit.sequence))
             .ok_or(Error::Stale)?;
         let generation = slot.take().unwrap().generation;
-        if self
-            .links
-            .iter()
-            .flatten()
-            .any(|x| x.generation == generation)
+        if generation == 0
+            || self
+                .links
+                .iter()
+                .flatten()
+                .any(|x| x.generation == generation)
         {
             Ok(())
         } else {
@@ -646,6 +676,14 @@ impl Ingress {
         now: u64,
     ) -> Result<Option<WorkPermit>, Error> {
         self.begin_authentication(handle, body, 1, now)
+    }
+    pub(crate) fn pending_deadline(&self, handle: &LinkHandle, body: &[u8]) -> Option<u64> {
+        let hash = digest(body, true);
+        self.pending
+            .iter()
+            .flatten()
+            .find(|p| p.generation == handle.generation && p.hash == hash)
+            .map(|p| p.expires)
     }
     pub(crate) fn begin_authentication(
         &mut self,

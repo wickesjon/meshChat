@@ -14,6 +14,7 @@ pub mod friends;
 pub mod identity;
 pub mod ingress;
 pub mod links;
+pub mod organizer;
 pub mod power;
 pub mod relay;
 pub mod storage;

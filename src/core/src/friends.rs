@@ -42,7 +42,7 @@ fn canonical_coordinate(raw: &[u8], ed: bool) -> bool {
     prime[31] = 127;
     value.iter().rev().cmp(prime.iter().rev()).is_lt()
 }
-fn public_key(raw: &[u8]) -> Result<VerifyingKey, Error> {
+pub(crate) fn public_key(raw: &[u8]) -> Result<VerifyingKey, Error> {
     if !canonical_coordinate(raw, true) {
         return Err(Error::Invalid);
     }
@@ -53,7 +53,7 @@ fn public_key(raw: &[u8]) -> Result<VerifyingKey, Error> {
     }
     Ok(key)
 }
-fn verify(key: &[u8; 32], transcript: &[u8], signature: &[u8]) -> bool {
+pub(crate) fn verify(key: &[u8; 32], transcript: &[u8], signature: &[u8]) -> bool {
     let Ok(public) = public_key(key) else {
         return false;
     };

@@ -106,3 +106,7 @@ path = "../../tests/integration/friends/friends.rs"
 [[test]]
 name = "dm"
 path = "../../tests/integration/dm/dm.rs"
+
+[[test]]
+name = "organizer"
+path = "../../tests/integration/organizer/organizer.rs"

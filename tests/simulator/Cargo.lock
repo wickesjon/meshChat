@@ -466,8 +466,11 @@ dependencies = [
 name = "meshchat-simulator-core"
 version = "0.1.0"
 dependencies = [
+ "ed25519-dalek",
  "meshchat-core",
  "serde_json",
+ "sha2 0.10.9",
+ "zeroize",
 ]
 
 [[package]]

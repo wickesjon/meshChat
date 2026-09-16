@@ -74,7 +74,7 @@ impl Friends {
             word(&s.local[4..6]).min(word(&remote[2..4])),
         ))
     }
-    pub(super) fn receive_capacity(&self, link: &LinkHandle) -> Result<usize, Error> {
+    pub(crate) fn receive_capacity(&self, link: &LinkHandle) -> Result<usize, Error> {
         let s = &self.sessions[self.session(link)?];
         Ok(if s.remote.is_some() {
             usize::from(self.effective_capacities(link)?.1)

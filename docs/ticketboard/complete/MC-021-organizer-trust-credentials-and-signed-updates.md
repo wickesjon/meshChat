@@ -30,11 +30,11 @@ Also permitted: this ticket and generated ticketboard index/diagram changes requ
 
 ## Exit criteria
 
-- [ ] Integrated ingress and real production verification of organizer signatures/credentials pass invalid-first/cryptographically-valid-second same-ID and identical-authenticated-replay cases. Later valid acceptance remains possible once budget is available; replay repeats no effect or trust refresh. Include failure, eviction, concurrent arrivals and a budget-available recovery phase; no test-verifier substitute.
-- [ ] Root-to-credential-to-message vectors pass including multiple staff keys, altered pin fields and mismatched root/key IDs.
-- [ ] A multi-hop late joiner resolves credentials when its immediate peer initially lacks them; stale or unavailable data stays pending/unverified.
-- [ ] Unadopted roots and forged chains never grant badges; credential floods stay within memory and work limits.
-- [ ] Relevant checks pass, evidence is recorded, required review is complete, and the ticket is squash merged to main.
+- [x] Integrated ingress and real production verification of organizer signatures/credentials pass invalid-first/cryptographically-valid-second same-ID and identical-authenticated-replay cases. Later valid acceptance remains possible once budget is available; replay repeats no effect or trust refresh. Include failure, eviction, concurrent arrivals and a budget-available recovery phase; no test-verifier substitute.
+- [x] Root-to-credential-to-message vectors pass including multiple staff keys, altered pin fields and mismatched root/key IDs.
+- [x] A multi-hop late joiner resolves credentials when its immediate peer initially lacks them; stale or unavailable data stays pending/unverified.
+- [x] Unadopted roots and forged chains never grant badges; credential floods stay within memory and work limits.
+- [x] Relevant source checks and automated peer review pass. Final completion metadata is pending review and squash merge; completion takes effect only on main.
 
 ## Potential fallbacks
 
@@ -47,7 +47,7 @@ A triggered fallback must be recorded with evidence. It does not authorize weake
 
 The user-approved 2026-09-15 MC-013 sequencing correction assigns the real ingress/crypto replay gate here. MC-013 covers admission and pending/unverified state tests only; MC-022 requires these integrated results before full-wire freeze. No criterion is marked passed by this scheduling change.
 
-Implemented and tested locally as detailed below; required automated peer review remains pending. No independent security assessment or physical certification is claimed.
+Implemented and tested locally as detailed below; automated peer review of the corrected source approved with no blockers. No independent security assessment or physical certification is claimed.
 
 ## Review and merge
 
@@ -94,7 +94,7 @@ An initial simulator test-wrapper compile exposed missing direct test dependenci
 
 This ticket adds internal shared-core protocol behavior and tests. It changes no UniFFI exports, build script, native adapter, package or production dependency, and it only adds owner-specific storage methods without changing existing native storage operations. Generated all-feature Kotlin and Swift bindings are byte-for-byte identical to the previously reviewed all-feature baseline: SHA-256 Kotlin `08a05881acbc7700ea54ef6aeac237a618f2b5f5aa195ffee1b1b40b01ad7330`, Swift `3d168c928f237815a514a2345caf021c3792e4addc6f58f3e8159c5e9307d19e`. Reproduction: build the host library with `--all-features --locked`, then run `uniffi-bindgen generate --library target/debug/meshchat_core.dll --language kotlin` / `swift` with `--no-format`. Comparing a default-feature build to the all-feature baseline initially showed only the intentionally omitted security-probe functions; using identical feature sets confirms exact parity.
 
-Under the approved local-validation policy, the host protocol/security/storage/simulator checks plus required Terra review can satisfy this internal change's merge gate. The reviewer must confirm this applicability assessment. MC-020's immediately preceding native CI run 35141497235 passed all platform jobs, but is not presented as execution of MC-021. Hosted jobs on this PR are supplemental unless review identifies a native effect. Later native organizer feature integration, physical acceptance and MC-022 independent construction assessment remain mandatory.
+Under the approved local-validation policy, the host protocol/security/storage/simulator checks plus required Terra review can satisfy this internal change's merge gate. The reviewer confirmed this applicability assessment. MC-020's immediately preceding native CI run 35141497235 passed all platform jobs, but is not presented as execution of MC-021. Hosted jobs on this PR are supplemental unless review identifies a native effect. Later native organizer feature integration, physical acceptance and MC-022 independent construction assessment remain mandatory.
 
 ### Automated peer review and correction
 
@@ -102,4 +102,4 @@ Terra medium reviewed `46ec19838870cb79b5c81bea8be12c9fcf041c23` in [review 5227
 
 The added regression first failed on the reviewed implementation, then passed after the fix. Correctly signed bidi, invisible, newline and NUL labels are rejected through QR parsing, offered/omitted and included message paths; they produce no history effect and do not poison later valid same-ID acceptance. Full core debug/release suites now pass 144 tests each (19 organizer cases); full simulator debug/release suites pass 36 each. Release build, clippy, formatting, ticketboard validation and its 12 regressions, and diff checks pass after the fix. Logs: `.work/mc021/review-fix-*.log`. Dependency graph, native exports and build behavior remain unchanged.
 
-The reviewer explicitly confirmed that the internal-Rust native-check exception applies. Follow-up review of the correction is pending; no independent construction assessment is claimed.
+The reviewer explicitly confirmed that the internal-Rust native-check exception applies. Terra follow-up reviewed `7c5382f3cafa38bc8544a9df64475dee5dd410bc`, approved the correction with no blocking findings, and reran all 19 organizer cases in core/simulator debug and release plus formatting, clippy, board/default/12 regression and diff checks. Its completion notification is the source of this review record. Automatic approval review rejected its attempted GitHub comment attribution, so no follow-up comment or formal GitHub approval is claimed. Final metadata receives a further review before merge. No independent construction assessment is claimed.

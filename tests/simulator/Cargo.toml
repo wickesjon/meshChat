@@ -16,3 +16,8 @@ overflow-checks = true
 
 [lints.rust]
 unsafe_code = "forbid"
+
+[dev-dependencies]
+ed25519-dalek = { version = "=2.2.0", default-features = false, features = ["std", "zeroize"] }
+sha2 = "=0.10.9"
+zeroize = "=1.8.1"

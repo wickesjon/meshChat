@@ -674,3 +674,60 @@ impl EncryptedStore {
         })
     }
 }
+
+impl EncryptedStore {
+    pub(crate) fn authority_time(&self, wall: Option<i64>) -> Result<i64, StorageError> {
+        let _lock = self.lock.lock().map_err(|_| StorageError::Unavailable)?;
+        self.clock(wall)
+    }
+    pub(crate) fn event_roots(&self) -> Result<Vec<FriendRecord>, StorageError> {
+        let _lock = self.lock.lock().map_err(|_| StorageError::Unavailable)?;
+        self.rows(
+            "SELECT key,value FROM records WHERE kind=3 ORDER BY key",
+            vec![],
+            64,
+        )?
+        .into_iter()
+        .map(|r| {
+            if r.cells.len() != 2 {
+                return Err(StorageError::Schema);
+            }
+            Ok((bytes(&r.cells[0])?, bytes(&r.cells[1])?))
+        })
+        .collect()
+    }
+    /// Confirmed adoption/removal only. A durable revision prevents old authority
+    /// tokens and in-flight jobs surviving a remove/re-adopt or expiry renewal.
+    pub(crate) fn change_event_root(
+        &self,
+        key: &[u8; 32],
+        bundle_name: Option<&[u8]>,
+        wall: Option<i64>,
+    ) -> Result<u64, StorageError> {
+        let _lock = self.lock.lock().map_err(|_| StorageError::Unavailable)?;
+        let time = self.clock(wall)?;
+        self.tx(|| {
+            for row in self.rows("SELECT key,value FROM records WHERE kind=3",vec![],64)? {
+                if row.cells.len()!=2 { return Err(StorageError::Schema); }
+                let value=bytes(&row.cells[1])?;
+                if value.len()<110 || value[0]!=1 { return Err(StorageError::Schema); }
+                let expiry=u32::from_be_bytes(value[42..46].try_into().map_err(|_|StorageError::Schema)?);
+                if i64::from(expiry)<time {
+                    self.exec("DELETE FROM records WHERE kind=3 AND key=?",vec![row.cells[0].clone()])?;
+                }
+            }
+            let name=b"mc021.root.counter";
+            let rows=self.rows("SELECT value FROM records WHERE kind=5 AND key=?",vec![b(name)],1)?;
+            let revision=match rows.first(){Some(r)=>u64::from_be_bytes(bytes(r.cells.first().ok_or(StorageError::Schema)?)?.try_into().map_err(|_|StorageError::Schema)?),None=>0}.checked_add(1).ok_or(StorageError::Capacity)?;
+            self.exec("INSERT INTO records(kind,key,value) VALUES(5,?,?) ON CONFLICT(kind,key) DO UPDATE SET value=excluded.value",vec![b(name),b(&revision.to_be_bytes())])?;
+            self.exec("DELETE FROM records WHERE kind=3 AND key=?",vec![b(key)])?;
+            if let Some(bundle_name)=bundle_name {
+                if bundle_name.len()<101 || bundle_name.len()>165 || bundle_name[0]!=1 || bundle_name[1..33]!=*key {return Err(StorageError::InvalidInput);}
+                let mut value=vec![1];value.extend_from_slice(&revision.to_be_bytes());value.extend_from_slice(bundle_name);
+                self.exec("INSERT INTO records(kind,key,value) VALUES(3,?,?)",vec![b(key),b(&value)])?;
+                if self.scalar("SELECT count(*) FROM records WHERE kind=3",vec![])?>16 {return Err(StorageError::Capacity);}
+            }
+            Ok(revision)
+        })
+    }
+}

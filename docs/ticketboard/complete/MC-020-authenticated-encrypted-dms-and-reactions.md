@@ -30,11 +30,11 @@ Also permitted: this ticket and generated ticketboard index/diagram changes requ
 
 ## Exit criteria
 
-- [ ] Integrated ingress and real production verification of encrypted CHAT/REACTION pass invalid-first/cryptographically-valid-second same-ID and identical-authenticated-replay cases. Later valid acceptance remains possible once budget is available; replay repeats no effect or trust refresh. Include failure, eviction, concurrent arrivals and a budget-available recovery phase; no test-verifier substitute.
-- [ ] Reference/KAT, sender-forgery, all-zero X25519, malformed-key and header/ciphertext tamper vectors pass.
-- [ ] Relays cannot decrypt; valid DMs and reactions round-trip across the simulator and restart safely in encrypted history.
-- [ ] Epoch skew/collision, replay and changed-key tests fail closed without plaintext downgrade.
-- [ ] Relevant checks pass, evidence is recorded, required review is complete, and the ticket is squash merged to main.
+- [x] Integrated ingress and real production verification of encrypted CHAT/REACTION pass invalid-first/cryptographically-valid-second same-ID and identical-authenticated-replay cases. Later valid acceptance remains possible once budget is available; replay repeats no effect or trust refresh. Include failure, eviction, concurrent arrivals and a budget-available recovery phase; no test-verifier substitute.
+- [x] Reference/KAT, sender-forgery, all-zero X25519, malformed-key and header/ciphertext tamper vectors pass.
+- [x] Relays cannot decrypt; valid DMs and reactions round-trip across the simulator and restart safely in encrypted history.
+- [x] Epoch skew/collision, replay and changed-key tests fail closed without plaintext downgrade.
+- [x] Relevant source checks and automated peer review pass. Final completion metadata is pending review and squash merge; completion takes effect only on main.
 
 ## Potential fallbacks
 
@@ -47,7 +47,7 @@ A triggered fallback must be recorded with evidence. It does not authorize weake
 
 The user-approved 2026-09-15 MC-013 sequencing correction assigns the real ingress/crypto replay gate here. MC-013 covers admission and pending/unverified state tests only; MC-022 requires these integrated results before full-wire freeze. No criterion is marked passed by this scheduling change.
 
-Implemented and tested locally as detailed below. Automated peer review and native platform checks are pending; physical certification and independent construction review are not claimed.
+Implemented and tested locally as detailed below. Automated peer review is recorded below; native platform checks passed; physical certification and independent construction review are not claimed.
 
 ## Review and merge
 
@@ -78,7 +78,7 @@ Orphans retain only opaque pin/record handles: 32 per link, 256 node, 120 second
 
 Windows host: Rust/cargo 1.85.1, Python 3.14.4, cargo-deny 0.20.2, Node 24.15.0/OpenSSL 3.5.5. The reference generator first reproduces the published RFC Auth fixture before generating exact meshChat bytes and malformed/forgery cases; production protected encryption output matches the independent ciphertext. It demonstrates recipient-fabrication/KCI as an expected limitation. No independent security assessment is claimed.
 
-Final local checks after the symmetric zeroization features were enabled all passed:
+Initial review revision `b732eefea17412f8d719a4dcbb161339a46ee62e` passed the following local checks after the symmetric zeroization features were enabled:
 
 - `cargo fmt --all -- --check` and `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`.
 - `cargo test --workspace --all-features --locked`, both debug and `--release`: 123 tests each, including 14 real DM integration cases and three protected-provider/KAT tests.
@@ -91,7 +91,7 @@ Final local checks after the symmetric zeroization features were enabled all pas
 
 An initial simulator wrapper path error in the graph guard was corrected; the shared test now resolves the core manifest correctly from either harness. Final debug/release simulator checks pass. Logs remain under `.work/mc020/`. Source revision is recorded in the PR review/check record to avoid a self-referential hash.
 
-Native platform checks are required because the shared dependency graph changed. Hosted Android/iOS build/FFI/storage regressions must complete on the PR source; no physical phone is needed for those compilation checks. MC-022 independent construction review and all scheduled real-device certification gates remain outstanding separately.
+Native platform checks are required because the shared dependency graph changed. Hosted Android/iOS build/FFI/storage regressions completed on the PR source; no physical phone is needed for those compilation checks. MC-022 independent construction review and all scheduled real-device certification gates remain outstanding separately.
 
 ### First automated peer review and fixes
 
@@ -99,4 +99,14 @@ Separate `gpt-5.6-terra` medium worker reviewed `b732eefea17412f8d719a4dcbb16133
 
 Recovery now validates the persistent wall-clock policy and prunes expired records before applying an orphan. Initial acceptance returns both the replay outcome and target-effect status from its existing transaction; subsequent volatile orphan registration cannot perform a fallible database operation. Regression cases exercise missing/rolled-back clocks with direct committed-state inspection and recovery, and a callback that makes the database unavailable immediately after the real ledger/history COMMIT. Both incoming and outgoing reactions, with and without a target, preserve their acceptance result, outgoing bytes and orphan handle. No wire, dependency or FFI contract changes.
 
-Post-fix validation passes: formatting/clippy, 125 workspace tests each in debug/release, 17 simulator tests each in debug/release, 11 storage-policy regressions, ticketboard validation and diff check. The exact dependency graph is unchanged; the refreshed dependency gate above remains applicable. Follow-up Terra review and native checks on the fixed revision remain pending.
+Post-fix validation passes: formatting/clippy, 125 workspace tests each in debug/release, 17 simulator tests each in debug/release, 11 storage-policy regressions, ticketboard validation and diff check. The exact dependency graph is unchanged; the refreshed dependency gate above remains applicable. The release build also passes. Native checks on the fixed revision passed as recorded below.
+
+
+Separate Terra medium follow-up [review 5227463926](https://github.com/wickesjon/meshChat/pull/24#pullrequestreview-5227463926) reviewed `1a67cfca35c9774b3f898746a0345ebba5a34ce7`, confirmed both blockers fixed, and found no new blocker. Its own targeted `cargo test --test dm --locked` passed all 16 tests. The source implementation and full local results above apply to that revision.
+
+
+### Native checks and final merge record
+
+[CI run 35141497235](https://github.com/wickesjon/meshChat/actions/runs/35141497235) for source `1a67cfca35c9774b3f898746a0345ebba5a34ce7` completed successfully in all four jobs: ticketboard, Rust, Android and iOS. Android passed the shared native library/Kotlin build, app build/lint/tests, packaged-library/alignment checks, BLE and security builds, emulator key lifecycle and native SQLCipher storage regression. iOS passed device/simulator library builds, Swift FFI/CryptoKit parity, unsigned app/BLE/security builds and Swift SQLCipher create/reopen/checks/key-loss/reset. The workflow pins Rust 1.85.1, Android NDK 27.3.13750724 and Xcode 16.4. These are compile, emulator and host-integration results; physical protection/radio certification and independent construction assessment remain separate.
+
+The initial CI run 35140817424 was superseded by the fixes and is not counted as a successful full run. The passing fixed-source run above is the native gate evidence. Final changes after that source revision are ticket status/evidence and generated index metadata only; source, dependency locks, native code and CI configuration are unchanged. The recorded fixed-source tests remain applicable under the local-validation policy. Final metadata receives ticketboard/default validator checks, all 12 validator regressions, diff check and a separate Terra follow-up recorded on PR #24 at the final head. No external security approval is claimed. Pending the final recorded review, squash title is `MC-020: Authenticated encrypted DMs and reactions`.

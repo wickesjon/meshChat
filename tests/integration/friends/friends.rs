@@ -956,9 +956,12 @@ fn independent_openssl_vectors_match_real_sender_verifier_and_proof() {
             .lines()
             .map(|line| {
                 let (name, bytes) = line.split_once('\t').unwrap();
-                (name, database::unhex(bytes))
+                (name.to_string(), database::unhex(bytes))
             })
             .collect();
+    check_binding_vectors(vectors);
+}
+pub fn check_binding_vectors(vectors: std::collections::HashMap<String, Vec<u8>>) {
     let mut s = Setup::new();
     assert_eq!(s.local.as_slice(), vectors["local_hello"]);
     assert_eq!(s.remote.as_slice(), vectors["remote_hello"]);
@@ -970,6 +973,10 @@ fn independent_openssl_vectors_match_real_sender_verifier_and_proof() {
     let result = s.finish(job, 1).unwrap();
     assert!(result.new_history && result.friend.is_some());
     let own = SigningKey::from_bytes(&[41; 32]);
+    assert_eq!(
+        own.verifying_key().as_bytes().as_slice(),
+        vectors["own_public"]
+    );
     let packet = s
         .friends
         .sign_content(

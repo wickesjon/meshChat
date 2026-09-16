@@ -1,0 +1,79 @@
+---
+id: "MC-022"
+title: "Full-wire crypto review and freeze"
+depends_on: ["MC-020","MC-021"]
+kind: "gate"
+branch: "ticket/MC-022-full-wire-crypto-review-and-freeze"
+---
+
+# MC-022 — Full-wire crypto review and freeze
+
+## Objective
+
+Run primitive reference vectors and negative cases against the selected construction and canonical encodings.
+
+## Dependencies
+
+`MC-020`, `MC-021` See the [current ticket index](../README.md#ticket-index). Dependencies must be complete on main before implementation starts.
+
+## Scope
+
+Permitted paths (relative to repository root): `tests/vectors/crypto/**`, `tests/integration/**`, `docs/testing/**`, `docs/mesh-chat-design.md`.
+
+Also permitted: this ticket and generated ticketboard index/diagram changes required by its workflow. No unrelated file changes or work outside the repository. Read the [design](../../mesh-chat-design.md), its §0 corrections, and the [active plan](../implementation-plan.md). A necessary change outside these paths needs an explicit scope decision.
+
+## Implementation details
+
+- Run primitive reference vectors and negative cases against the selected construction and canonical encodings.
+- Verify vectors through Kotlin and Swift bindings and an independent reference where available; distinguish shared-core parity from independent cryptographic review.
+- Obtain independent crypto review of the construction and transcripts before declaring the full wire stable; record findings and disposition.
+
+## Exit criteria
+
+- [x] MC-019/020/021 provide real-verifier ingress invalid-first/valid-second and authenticated-replay evidence, including failure, eviction, concurrency and budget-available recovery; pending-state fixtures alone cannot satisfy this full-wire gate.
+- [ ] All required forgery, replay, binding, key lifecycle and credential-recovery checks pass.
+- [ ] Independent review findings affecting the protocol are resolved, with evidence linked.
+- [ ] Every v1 wire/QR format is frozen and versioned; no undocumented field remains.
+- [ ] Relevant checks pass, evidence is recorded, required review is complete, and the ticket is squash merged to main.
+
+## Potential fallbacks
+
+- If independent review is unavailable, keep the full-wire freeze and public crypto release blocked.
+- If review requires a layout change, update vectors/spec and reopen dependent integrations before release.
+
+A triggered fallback must be recorded with evidence. It does not authorize weaker security, invented validation or expanded scope.
+
+## Evidence
+
+Started from main `835a7966f4edb2dead99f5768ec24b75059a337c`, after PR #25 completed MC-021. MC-020 and MC-021 hard dependencies are complete. Production code, root manifests/lockfile, native application code and workflow configuration are unchanged.
+
+The [construction review packet](../../testing/MC-022-crypto-review-packet.md) inventories the versioned formats, executable checks, security limitations and questions for the independently required assessor. No external assessment has been supplied; no independent security approval or full-wire freeze is claimed. This is a real remaining gate, not deferred physical certification. The ticket must not be completed or merged as complete while that assessment and its findings remain outstanding.
+
+### Implementation
+
+- `tests/integration` is a standalone, test-only UniFFI fixture library. It reuses the existing admitted production friend/DM/organizer endpoint harnesses. Foreign callers supply the committed public binary inputs. Successful checks return family/count markers; assertion failures become a typed test error.
+- Test harness reference functions are shared between Rust and native callers. SQLite test filenames include each module namespace to avoid collisions when the three suites share one process. The SQLite callback double remains plaintext synthetic test evidence, not SQLCipher/hardware evidence.
+- Kotlin/Swift bindings are generated into ignored `.work/mc022`; they are never committed or packaged in the applications. Kotlin uses a standalone test project with pinned Kotlin 2.2.0, JNA 5.17.0 and JUnit 4.13.2. Its invocation is wired into the existing Android JVM test source directory; Swift is invoked by the existing Mac storage check after SQLCipher phases. No shipping FFI API was added.
+- Both languages pass 8 friend, 17 DM and 8 organizer inputs and require typed failure after separately corrupting a signature/ciphertext in each family, followed by successful unchanged fixtures. This is same-core binding parity. Separately, Node/OpenSSL reference generators reproduce all committed public bytes and published RFC KATs.
+- `check_references.py` verifies exact Node output, rejects any new/changed dependency package in the test-only lockfile apart from its own package, and records a revision/dirty-tree/hash inventory under `.work/mc022`. Production dependency versions and root lockfile remain unchanged.
+
+### Local validation
+
+Windows: Rust/cargo 1.85.1; Python 3.14.4; Node 24.15.0/OpenSSL 3.5.5; JDK 17.0.15+6; Kotlin 2.2.0; Gradle 8.13; cargo-deny 0.20.2.
+
+- `cargo test --workspace --all-features --locked`, debug and release: 144 tests each, including actual provider/ingress verification and persistent replay/transaction regressions.
+- `cargo test --manifest-path tests/integration/Cargo.toml --locked`, debug and release: all 57 combined friend/DM/organizer cases pass. Test-facade release build passes.
+- `cargo test --manifest-path tests/simulator/Cargo.toml --locked`, debug and release: 36 tests each pass.
+- Core and test-facade clippy (`--all-targets`, core `--all-features`, `--locked`, `-D warnings`), both formatting checks, ticketboard/default + 12 validator tests and diff check pass.
+- `python -B tests/integration/crypto/check_references.py`: all three reference fixtures reproduce exactly, and test dependency packages match the production lockfile. Public RFC Auth KAT and expected recipient-fabrication limitation reproduce; organizer RFC8032 KAT reproduces.
+- Refreshed cargo-deny advisory/bans/license/source checks pass, with existing unmatched license allowance warnings only. Sandbox network refusal on the first advisory refresh was resolved with the authorized network-enabled check.
+- Direct `python -B tests/integration/crypto/run_native.py kotlin`: passes generated Kotlin compilation, positive vectors and three typed corruption errors/recovery. Initial setup failures (bindgen Cargo lookup and network-unavailable plugin resolution) were corrected/retried. The outer Android task initially exposed three nullable platform API warnings; those are corrected. Final `:app:testDebugUnitTest --tests org.meshchat.ffi.WireVectorsTest` passes through the real Android JVM test task, including its nested generated-binding tests.
+
+Logs and generated input inventory remain in `.work/mc022`. Native Swift execution and Terra peer review are pending. Hosted Mac execution is required for this native-test infrastructure; Windows compilation does not establish Swift success. Physical-device and independent assessment requirements remain unchanged.
+
+## Review and merge
+
+- Branch: `ticket/MC-022-full-wire-crypto-review-and-freeze`.
+- Review/PR: pending.
+- Squash commit title: `MC-022: Full-wire crypto review and freeze`.
+- Completion becomes effective only when the reviewed squash commit lands on main.

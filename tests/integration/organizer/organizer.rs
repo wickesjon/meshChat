@@ -645,23 +645,18 @@ fn openssl_reference_root_credentials_and_exact_staff_packets() {
             .lines()
             .map(|l| {
                 let (n, h) = l.split_once('\t').unwrap();
-                (n, database::unhex(h))
+                (n.to_string(), database::unhex(h))
             })
             .collect();
+    check_binding_vectors(vectors);
+}
+pub fn check_binding_vectors(vectors: std::collections::HashMap<String, Vec<u8>>) {
     let UnconfirmedProposal::Event { bundle, .. } = root(9, 202000) else {
         panic!()
     };
     assert_eq!(bundle.as_slice(), vectors["root_bundle"]);
     assert_eq!(credential(), vectors["credential_a"]);
     assert_eq!(cred(9, 8, 199990, 201000), vectors["credential_b"]);
-    for (name, s, id, include, pin) in [
-        ("chat_a", 7, 1, true, 0),
-        ("chat_b", 8, 2, true, 0),
-        ("omitted_a", 7, 3, false, 0),
-        ("pinned_a", 7, 4, true, 200100),
-    ] {
-        assert_eq!(chat(9, s, id, include, pin), vectors[name]);
-    }
     let mut n = Node::new(3, true);
     for (i, name) in ["chat_a", "chat_b", "omitted_a", "pinned_a"]
         .into_iter()
@@ -675,6 +670,14 @@ fn openssl_reference_root_credentials_and_exact_staff_packets() {
         );
     }
     assert!(n.receive(&vectors["wrong_domain"], 5000).is_none());
+    for (name, s, id, include, pin) in [
+        ("chat_a", 7, 1, true, 0),
+        ("chat_b", 8, 2, true, 0),
+        ("omitted_a", 7, 3, false, 0),
+        ("pinned_a", 7, 4, true, 200100),
+    ] {
+        assert_eq!(chat(9, s, id, include, pin), vectors[name]);
+    }
 }
 #[test]
 fn ambiguous_credentials_require_included_packet_and_expiry_is_strict() {

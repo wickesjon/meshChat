@@ -1,6 +1,6 @@
 # Crypto vectors and MC-022 evidence
 
-The normative [MC-008 contract](../../../docs/decisions/MC-008-crypto-contract.md) is specified, not an implemented cryptographic system. This file contains executable **transcript/size fixtures only** plus requirements for implementation vectors. No ciphertext, private key, signature verification, native parity or independent assessment is claimed by running the fixture below.
+The normative [MC-008 contract](../../../docs/decisions/MC-008-crypto-contract.md) is specified, not an implemented cryptographic system. The original fixture below exercises **transcript/size encoding only**. MC-019 adds the separately described executable friend-signature vectors; HPKE and organizer implementation evidence remain with MC-020/021. No ciphertext, private key, signature verification, native parity or independent assessment is claimed by running the fixture below.
 
 ## Reference sources
 
@@ -98,3 +98,11 @@ Each case must retain full public wire inputs, synthetic test-key provenance, ex
 |Provider/work|Entropy failure before setup, unexpected buffered RNG consumption, locked/invalidation/reset, scratch cleanup and no seed-export API; instrument actual scalar/DH/tag/AEAD/signature calls including cold caches/failures under MC-007 limits|
 
 A valid reference primitive vector does not prove meshChat replay/pin/presence behavior. Independent assessment must review the actual integration and all byte-domain/role bindings; Kotlin/Swift wrappers calling one Rust implementation only establish binding parity.
+
+## MC-019 friend signature interoperability
+
+`friend-v1.tsv` contains public, synthetic CHAT, HELLO and LINK_PROOF bytes produced by `friend_vectors.cjs` using Node 24.15.0 / OpenSSL 3.5.5. Its two deterministic seed recipes are public test identities, not credentials. Regenerate with `node tests/vectors/crypto/friend_vectors.cjs`; stdout must match the TSV line for line. The generator independently constructs the MC-008 transcripts, signs with OpenSSL and verifies each result before emitting it.
+
+`cargo test --test friends --locked` consumes these fixed bytes through production admitted dalek verification and compares the protected-provider CHAT/proof signer byte for byte with OpenSSL. Other cases exercise invalid-first/valid-second acceptance, exact/conflicting replay, transaction refusal, history deletion, ledger capacity, unknown/omitted keys, cache eviction/expiry, concurrent work, budget recovery, strict R/S encodings, hint mismatch/ambiguity, replacement/removal, handshake and proof deadlines, reflection/cross-link replay, duplicate arbitration and nonce-bound freshness. The ambiguity test passes a synthetic full-key bucket to the actual resolver; it does not claim a constructed SHA-256 64-bit collision.
+
+The Python SQLite callback double executes production SQL and transaction boundaries but uses plaintext synthetic databases under `.work/friends-tests`; it does not establish encryption or hardware security. MC-018 retains native SQLCipher evidence. Interoperability tests are not the independently required MC-022 security assessment, native feature wiring or physical certification.

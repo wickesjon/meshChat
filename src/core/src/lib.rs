@@ -9,6 +9,7 @@ uniffi::setup_scaffolding!();
 pub mod channel;
 pub mod codec;
 pub mod framing;
+pub mod friends;
 pub mod identity;
 pub mod ingress;
 pub mod links;

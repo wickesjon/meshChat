@@ -121,12 +121,104 @@ impl RecordKind {
         size && value.len() <= 2048
     }
 }
+type FriendRecord = (Vec<u8>, Vec<u8>);
+
 #[derive(uniffi::Object)]
 pub struct EncryptedStore {
     db: Box<dyn SqlDatabase>,
     lock: Mutex<()>,
 }
 impl EncryptedStore {
+    pub(crate) fn identity_generation(&self) -> Result<Vec<u8>, StorageError> {
+        let rows = self.rows("SELECT generation FROM identity", vec![], 2)?;
+        if rows.len() != 1 {
+            return Err(StorageError::Schema);
+        }
+        bytes(rows[0].cells.first().ok_or(StorageError::Schema)?)
+    }
+
+    pub(crate) fn friend_records(&self) -> Result<Vec<FriendRecord>, StorageError> {
+        let _lock = self.lock.lock().map_err(|_| StorageError::Unavailable)?;
+        let mut records = Vec::new();
+        for offset in [0, 64] {
+            for row in self.rows(
+                "SELECT key,value FROM records WHERE kind=2 ORDER BY key LIMIT 64 OFFSET ?",
+                vec![n(offset)],
+                64,
+            )? {
+                if row.cells.len() != 2 {
+                    return Err(StorageError::Schema);
+                }
+                records.push((bytes(&row.cells[0])?, bytes(&row.cells[1])?));
+            }
+        }
+        Ok(records)
+    }
+
+    /// MC-019 confirmed pin mutation. The durable counter prevents remove/re-add
+    /// or restart from reviving old send handles. Replacement is one transaction.
+    pub(crate) fn change_friend(
+        &self,
+        previous: Option<(&[u8], u64)>,
+        replacement: Option<(&[u8], &str)>,
+    ) -> Result<u64, StorageError> {
+        let _lock = self.lock.lock().map_err(|_| StorageError::Unavailable)?;
+        self.tx(|| {
+            if let Some((key, revision)) = previous {
+                let old = self.rows("SELECT value FROM records WHERE kind=2 AND key=?", vec![b(key)], 1)?;
+                let value = bytes(old.first().and_then(|r| r.cells.first()).ok_or(StorageError::Schema)?)?;
+                if value.len() < 9 || value[0] != 1 || value[1..9] != revision.to_be_bytes() { return Err(StorageError::Schema); }
+            }
+            if let Some((key, _)) = replacement {
+                if key.len() != 64 { return Err(StorageError::InvalidInput); }
+                if previous.is_none_or(|(old, _)| old != key) && self.scalar("SELECT count(*) FROM records WHERE kind=2 AND key=?", vec![b(key)])? != 0 { return Err(StorageError::Schema); }
+            }
+            // Internal metadata kind 5 is outside the public RecordKind API.
+            let counter_key = b"mc019.pin.counter";
+            let rows = self.rows("SELECT value FROM records WHERE kind=5 AND key=?", vec![b(counter_key)], 1)?;
+            let counter = match rows.first() {
+                Some(row) => u64::from_be_bytes(bytes(row.cells.first().ok_or(StorageError::Schema)?)?.try_into().map_err(|_| StorageError::Schema)?),
+                None => 0,
+            }.checked_add(1).ok_or(StorageError::Capacity)?;
+            self.exec("INSERT INTO records(kind,key,value) VALUES(5,?,?) ON CONFLICT(kind,key) DO UPDATE SET value=excluded.value", vec![b(counter_key),b(&counter.to_be_bytes())])?;
+            if let Some((key, _)) = previous { self.exec("DELETE FROM records WHERE kind=2 AND key=?", vec![b(key)])?; }
+            if let Some((key, petname)) = replacement {
+                let mut value = vec![1]; value.extend_from_slice(&counter.to_be_bytes()); value.push(0); value.extend_from_slice(petname.as_bytes());
+                self.exec("INSERT INTO records(kind,key,value) VALUES(2,?,?)", vec![b(key), b(&value)])?;
+                if self.scalar("SELECT count(*) FROM records WHERE kind=2", vec![])? > 128 { return Err(StorageError::Capacity); }
+            }
+            Ok(counter)
+        })
+    }
+
+    pub(crate) fn begin_friend_replacement(
+        &self,
+        key: &[u8],
+        revision: u64,
+    ) -> Result<(), StorageError> {
+        let _lock = self.lock.lock().map_err(|_| StorageError::Unavailable)?;
+        self.tx(|| {
+            let rows = self.rows(
+                "SELECT value FROM records WHERE kind=2 AND key=?",
+                vec![b(key)],
+                1,
+            )?;
+            let mut value = bytes(
+                rows.first()
+                    .and_then(|r| r.cells.first())
+                    .ok_or(StorageError::Schema)?,
+            )?;
+            if value.len() < 10 || value[0] != 1 || value[1..9] != revision.to_be_bytes() {
+                return Err(StorageError::Schema);
+            }
+            value[9] = 1;
+            self.exec(
+                "UPDATE records SET value=? WHERE kind=2 AND key=?",
+                vec![b(&value), b(key)],
+            )
+        })
+    }
+
     fn exec(&self, sql: &str, values: Vec<SqlValue>) -> Result<(), StorageError> {
         self.db.execute(sql.into(), values)
     }

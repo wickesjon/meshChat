@@ -31,7 +31,7 @@ Also permitted: this ticket and generated ticketboard index/diagram changes requ
 ## Exit criteria
 
 - [x] MC-019/020/021 provide real-verifier ingress invalid-first/valid-second and authenticated-replay evidence, including failure, eviction, concurrency and budget-available recovery; pending-state fixtures alone cannot satisfy this full-wire gate.
-- [ ] All required forgery, replay, binding, key lifecycle and credential-recovery checks pass.
+- [x] All required forgery, replay, binding, key lifecycle and credential-recovery checks pass in the implemented automated/native scope; separately owned physical acceptance and independent assessment are not claimed.
 - [ ] Independent review findings affecting the protocol are resolved, with evidence linked.
 - [ ] Every v1 wire/QR format is frozen and versioned; no undocumented field remains.
 - [ ] Relevant checks pass, evidence is recorded, required review is complete, and the ticket is squash merged to main.
@@ -69,7 +69,7 @@ Windows: Rust/cargo 1.85.1; Python 3.14.4; Node 24.15.0/OpenSSL 3.5.5; JDK 17.0.
 - Refreshed cargo-deny advisory/bans/license/source checks pass, with existing unmatched license allowance warnings only. Sandbox network refusal on the first advisory refresh was resolved with the authorized network-enabled check.
 - Direct `python -B tests/integration/crypto/run_native.py kotlin`: passes generated Kotlin compilation, positive vectors and three typed corruption errors/recovery. Initial setup failures (bindgen Cargo lookup and network-unavailable plugin resolution) were corrected/retried. The outer Android task initially exposed three nullable platform API warnings; those are corrected. Final `:app:testDebugUnitTest --tests org.meshchat.ffi.WireVectorsTest` passes through the real Android JVM test task, including its nested generated-binding tests.
 
-Logs and generated input inventory remain in `.work/mc022`. Native Swift execution and Terra peer review are pending. Hosted Mac execution is required for this native-test infrastructure; Windows compilation does not establish Swift success. Physical-device and independent assessment requirements remain unchanged.
+Logs and generated input inventory remain in `.work/mc022`. Corrected-source native Swift execution and Terra peer review passed as recorded below. Physical-device and independent assessment requirements remain unchanged.
 
 ## Review and merge
 
@@ -82,4 +82,14 @@ Logs and generated input inventory remain in `.work/mc022`. Native Swift executi
 
 Terra medium reviewed source `4fb33c84157374a982b2f00f4b732730b9583341` and posted [its findings](https://github.com/wickesjon/meshChat/pull/26#issuecomment-5704376205). It found one P2: checking only fixture-map counts allowed an expected DM vector to be replaced by a renamed invalid input, silently omitting a positive case. The test facade now requires the exact expected key set for every family. A Kotlin regression reproduced the old false success by renaming `chat_2_1` and corrupting its ciphertext at unchanged count; Swift includes the same negative case. This corrects test coverage, not production crypto.
 
-After the fix, all 57 combined harness tests pass in debug and release; release build, clippy, formatting, reference reproduction/lock-package checks, board validation and diff checks pass. Kotlin's two native tests (positive/corruption/recovery and same-count renamed input) are rerun through the actual Android test task. Follow-up review and corrected-source hosted Swift evidence are still required. These automated reviews do not satisfy the separately required independent construction assessment.
+After the fix, all 57 combined harness tests pass in debug and release; release build, clippy, formatting, reference reproduction/lock-package checks, board validation and diff checks pass. Kotlin's two native tests (positive/corruption/recovery and same-count renamed input) pass through the actual Android test task with `--rerun-tasks` (22 tasks executed).
+
+Terra follow-up reviewed exact source `60d4dcbf9b740b3101fc953f803e2c8f27ea8d16` and reported no remaining implementation blockers in [its posted follow-up](https://github.com/wickesjon/meshChat/pull/26#issuecomment-5704432110). It reran all 57 Rust facade tests, both generated Kotlin native tests, reference reproduction, board and diff checks. This is automated peer review, not the independently required construction assessment.
+
+### Hosted native evidence and applicability
+
+[CI run 35149668845](https://github.com/wickesjon/meshChat/actions/runs/35149668845) covers corrected source `60d4dcbf9b740b3101fc953f803e2c8f27ea8d16`. Ticketboard and Rust jobs passed. The [iOS job 104974718186](https://github.com/wickesjon/meshChat/actions/runs/35149668845/job/104974718186) completed successfully: device/simulator library builds, unsigned app/BLE/security builds, Swift FFI/CryptoKit checks, SQLCipher lifecycle phases and the added Swift vector facade. Its log explicitly records `Swift public crypto vectors and corruption/error parity passed` after all three corruption checks, the renamed-input refusal and final positive recovery. Xcode 16.4/Swift 6 mode was used; this is Mac/native evidence, not physical-device evidence.
+
+The Android job passed Rust/Kotlin binding generation, app build/lint/JVM tests (including the new vector runner), packaged library/alignment checks and BLE probe build/lint. The remaining unchanged security-probe/emulator steps were still running when this record was written; no successful full Android job/run is claimed. Under the local-validation policy, those unchanged steps are supplemental for this test-only PR: no production Rust, native application/security adapter, native dependency/package or workflow configuration changed. The actual changed Android JVM hook and Mac storage/vector script have executed successfully. Any later relevant source failure must still be investigated; no runner/test failure is waived.
+
+Final metadata only records these results and the blocker; it does not change source, test runners, libraries or lockfiles. Ticketboard/default validation, its 12 regressions and diff check are rerun, and the metadata receives Terra review. Independent construction/transcript assessment remains unsupplied, full-wire freeze remains blocked, and this ticket stays in `inreview/`. No squash merge or effective completion is authorized by automated success alone.

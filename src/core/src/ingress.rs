@@ -1,6 +1,7 @@
-//! MC-007 admission and bounded state before reassembly, logical work or future crypto.
+//! MC-007 admission and bounded state before reassembly, logical work or crypto.
 //!
-//! No authenticated outcome exists yet: signed/encrypted inputs remain Pending.
+//! Intake never authenticates: signed/encrypted inputs remain Pending until a
+//! protocol owner (such as MC-019 Friends) completes reserved verification work.
 //! Native drivers must check their 512-byte intake bound before allocating FFI arrays.
 //! The borrowed API below copies only after all frame/byte buckets and staging caps pass.
 use crate::{LinkHandle, codec, framing};
@@ -255,6 +256,8 @@ struct Staged {
 struct Work {
     sequence: u64,
     generation: u64,
+    signature_hash: Option<[u8; 32]>,
+    expires: u64,
 }
 
 /// Scoped, non-forgeable handle to already charged staged input; replay is rejected.
@@ -382,6 +385,11 @@ impl Ingress {
             }
         }
         for item in &mut self.pending {
+            if item.as_ref().is_some_and(|x| x.expires <= now) {
+                *item = None;
+            }
+        }
+        for item in &mut self.work {
             if item.as_ref().is_some_and(|x| x.expires <= now) {
                 *item = None;
             }
@@ -595,6 +603,8 @@ impl Ingress {
         self.work[slot] = Some(Work {
             sequence,
             generation: handle.generation,
+            signature_hash: None,
+            expires: now + 30_000,
         });
         self.counters.reserved_work_units = self
             .counters
@@ -625,6 +635,89 @@ impl Ingress {
         } else {
             Err(Error::Stale)
         }
+    }
+    /// Only a verifier inside the core can claim charged, still-pending bytes.
+    /// Identical concurrent arrivals share one attempt; missing-key/budget cases
+    /// retain the original bounded pending record for a later retry.
+    pub(crate) fn begin_signature(
+        &mut self,
+        handle: &LinkHandle,
+        body: &[u8],
+        now: u64,
+    ) -> Result<Option<WorkPermit>, Error> {
+        self.advance(now)?;
+        self.link(handle)?;
+        if body.len() < codec::HEADER_LEN {
+            return Err(Error::Stale);
+        }
+        let hash = digest(body, true);
+        if !self
+            .pending
+            .iter()
+            .flatten()
+            .any(|p| p.generation == handle.generation && p.hash == hash)
+            || self
+                .work
+                .iter()
+                .flatten()
+                .any(|w| w.signature_hash == Some(hash))
+        {
+            return Ok(None);
+        }
+        let permit = self.begin_work(handle, 1, now)?;
+        if let Some(permit) = &permit {
+            let expires = self
+                .pending
+                .iter()
+                .flatten()
+                .find(|p| p.generation == handle.generation && p.hash == hash)
+                .ok_or(Error::Stale)?
+                .expires;
+            let work = self
+                .work
+                .iter_mut()
+                .flatten()
+                .find(|w| w.sequence == permit.sequence)
+                .ok_or(Error::Stale)?;
+            work.signature_hash = Some(hash);
+            work.expires = expires;
+        }
+        Ok(permit)
+    }
+    pub(crate) fn resolve_signature(
+        &mut self,
+        handle: &LinkHandle,
+        body: &[u8],
+        accepted: bool,
+    ) -> Result<(), Error> {
+        let index = self.link(handle)?;
+        let hash = digest(body, true);
+        for item in &mut self.pending {
+            if item.as_ref().is_some_and(|p| p.hash == hash) {
+                *item = None;
+            }
+        }
+        if !accepted {
+            self.reject(handle.generation, hash);
+            return Ok(());
+        }
+        let partition = self.links[index].as_ref().unwrap().partition;
+        let entries = &mut self.accepted[partition * 512..(partition + 1) * 512];
+        let slot = entries.iter().position(Option::is_none).unwrap_or_else(|| {
+            entries
+                .iter()
+                .enumerate()
+                .min_by_key(|(_, x)| x.as_ref().unwrap().arrived)
+                .unwrap()
+                .0
+        });
+        entries[slot] = Some(Accepted {
+            hash,
+            expires: self.now + 900_000,
+            arrived: self.now,
+        });
+        self.counters.peak_accepted = self.counters.peak_accepted.max(count(&self.accepted));
+        Ok(())
     }
     /// Budget the reported native size before checking/copying the supplied bounded slice.
     pub fn enqueue(
@@ -718,7 +811,7 @@ impl Ingress {
             return Err(Error::Output);
         }
         let outcome = match self.enqueue(handle, reported, raw, now)? {
-            Ok(token) => self.process_inner(token, now, output, true)?,
+            Ok(token) => self.process_inner(token, now, output, true, None)?,
             Err(reason) => Outcome::Dropped(reason),
         };
         let sync = match outcome {
@@ -756,7 +849,23 @@ impl Ingress {
         now: u64,
         output: &mut [u8],
     ) -> Result<Outcome, Error> {
-        self.process_inner(token, now, output, false)
+        self.process_inner(token, now, output, false, None)
+    }
+    pub(crate) fn receive_friend(
+        &mut self,
+        handle: &LinkHandle,
+        input: (u64, &[u8]),
+        now: u64,
+        output: &mut [u8],
+        gate: (bool, usize),
+    ) -> Result<Outcome, Error> {
+        if output.len() < 1035 {
+            return Err(Error::Output);
+        }
+        match self.enqueue(handle, input.0, input.1, now)? {
+            Ok(token) => self.process_inner(token, now, output, true, Some(gate)),
+            Err(reason) => Ok(Outcome::Dropped(reason)),
+        }
     }
     fn process_inner(
         &mut self,
@@ -764,6 +873,7 @@ impl Ingress {
         now: u64,
         output: &mut [u8],
         defer_sync: bool,
+        friend_gate: Option<(bool, usize)>,
     ) -> Result<Outcome, Error> {
         if output.len() < 1035 {
             return Err(Error::Output);
@@ -784,6 +894,19 @@ impl Ingress {
         };
         let index = self.link(&handle)?;
         let raw = &staged.bytes[..usize::from(staged.len)];
+        if let Some((hello_only, receive_limit)) = friend_gate {
+            if raw.len() > receive_limit {
+                return Ok(Outcome::Dropped(Drop::Size));
+            }
+            if hello_only
+                && !matches!(
+                    framing::parse_frame(raw, receive_limit),
+                    Ok(framing::Frame::WholeTransport { kind: 2, .. })
+                )
+            {
+                return Ok(Outcome::Dropped(Drop::Malformed));
+            }
+        }
         let hash = digest(raw, false);
         if self
             .rejected
@@ -866,6 +989,12 @@ impl Ingress {
         let packet = codec::parse(body, context).map_err(|_| Drop::Malformed)?;
         let header = packet.header();
         let hash = digest(body, true);
+        if self.rejected.iter().flatten().any(|x| {
+            x.generation == self.links[index].as_ref().unwrap().generation && x.hash == hash
+        }) {
+            self.counters.rejected_duplicates = self.counters.rejected_duplicates.saturating_add(1);
+            return Err(Drop::RejectedVariant);
+        }
         if self.accepted.iter().flatten().any(|x| x.hash == hash) {
             self.counters.accepted_duplicates = self.counters.accepted_duplicates.saturating_add(1);
             return Ok(State::Duplicate);

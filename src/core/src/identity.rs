@@ -123,3 +123,9 @@ impl IdentityKeySession {
         Ok(())
     }
 }
+
+impl IdentityKeySession {
+    pub(crate) fn matches_generation(&self, generation: &[u8; 16]) -> bool {
+        self.generation == *generation && self.material.lock().is_ok_and(|m| m.is_some())
+    }
+}

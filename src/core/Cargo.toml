@@ -91,3 +91,7 @@ path = "../../tests/integration/sync/exchange.rs"
 [[test]]
 name = "identity"
 path = "../../tests/integration/identity/identity.rs"
+
+[[test]]
+name = "friends"
+path = "../../tests/integration/friends/friends.rs"

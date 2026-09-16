@@ -308,7 +308,7 @@ impl Dms {
         immutable[3] = 0;
         let mut subject = vec![2];
         subject.extend_from_slice(&peer);
-        let result = store.accept_dm(
+        let (result, applied) = store.accept_dm(
             HistoryItem {
                 conversation: peer.to_vec(),
                 direct: true,
@@ -325,15 +325,13 @@ impl Dms {
         )?;
         let display = if result == AcceptResult::Accepted {
             self.reaction_or_orphan(
-                store,
                 &job.pin.token(),
-                &peer,
                 job.raw[4..12].try_into().unwrap(),
                 0,
                 &job.link,
                 now,
-                &content,
-            )?
+                applied,
+            )
         } else {
             false
         };
@@ -385,7 +383,7 @@ impl Dms {
         immutable[3] = 0;
         let mut subject = vec![2];
         subject.extend_from_slice(&peer);
-        let result = store.accept_dm(
+        let (result, applied) = store.accept_dm(
             HistoryItem {
                 conversation: peer.to_vec(),
                 direct: true,
@@ -403,7 +401,7 @@ impl Dms {
         if result != AcceptResult::Accepted {
             return Err(Error::Stale);
         }
-        self.reaction_or_orphan(store, pin, &peer, id, 1, link, now, &content)?;
+        self.reaction_or_orphan(pin, id, 1, link, now, applied);
         Ok(Some(Sent {
             raw,
             pin: pin.clone(),
@@ -432,23 +430,20 @@ impl Dms {
         self.orphans.retain(|o| o.expires > now);
         Ok(())
     }
-    #[allow(clippy::too_many_arguments)]
     fn reaction_or_orphan(
         &mut self,
-        store: &EncryptedStore,
         pin: &SendToken,
-        peer: &[u8; 64],
         id: [u8; 8],
         direction: u8,
         link: &LinkHandle,
         now: u64,
-        content: &Content,
-    ) -> Result<bool, Error> {
-        if !matches!(content, Content::Reaction { .. }) {
-            return Ok(true);
-        }
-        if store.recover_dm_reaction(peer, &id, direction)? {
-            return Ok(true);
+        applied: bool,
+    ) -> bool {
+        // The acceptance transaction already determined this. No fallible
+        // persistence operation may discard a committed outgoing ciphertext or
+        // lose the first-acceptance orphan registration.
+        if applied {
+            return true;
         }
         if self.orphans.iter().filter(|o| o.link == *link).count() >= 32 {
             let i = self.orphans.iter().position(|o| o.link == *link).unwrap();
@@ -464,7 +459,7 @@ impl Dms {
             link: link.clone(),
             expires: now + 120_000,
         });
-        Ok(false)
+        false
     }
     /// Reconstructs visible reactions from committed state. Orphans are volatile,
     /// bounded and never revived on restart or refreshed by authenticated replay.
@@ -486,7 +481,7 @@ impl Dms {
                 i += 1;
                 continue;
             }
-            if store.recover_dm_reaction(&peer, &o.id, o.direction)? {
+            if store.recover_dm_reaction(&peer, &o.id, o.direction, wall)? {
                 self.orphans.remove(i);
             } else {
                 i += 1;

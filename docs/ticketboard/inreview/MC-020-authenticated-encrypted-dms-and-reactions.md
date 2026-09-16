@@ -52,7 +52,7 @@ Implemented and tested locally as detailed below. Automated peer review and nati
 ## Review and merge
 
 - Branch: `ticket/MC-020-authenticated-encrypted-dms-and-reactions`.
-- Review/PR: pending.
+- Review/PR: [PR #24](https://github.com/wickesjon/meshChat/pull/24).
 - Squash commit title: `MC-020: Authenticated encrypted DMs and reactions`.
 - Completion becomes effective only when the reviewed squash commit lands on main.
 
@@ -92,3 +92,11 @@ Final local checks after the symmetric zeroization features were enabled all pas
 An initial simulator wrapper path error in the graph guard was corrected; the shared test now resolves the core manifest correctly from either harness. Final debug/release simulator checks pass. Logs remain under `.work/mc020/`. Source revision is recorded in the PR review/check record to avoid a self-referential hash.
 
 Native platform checks are required because the shared dependency graph changed. Hosted Android/iOS build/FFI/storage regressions must complete on the PR source; no physical phone is needed for those compilation checks. MC-022 independent construction review and all scheduled real-device certification gates remain outstanding separately.
+
+### First automated peer review and fixes
+
+Separate `gpt-5.6-terra` medium worker reviewed `b732eefea17412f8d719a4dcbb161339a46ee62e` and posted [review 5227409792](https://github.com/wickesjon/meshChat/pull/24#pullrequestreview-5227409792). It found two blocking reaction-recovery issues: deferred effects could commit before wall-clock validation, and a post-acceptance database error could discard the sole outgoing ciphertext (or incoming orphan registration). This is automated peer review, not MC-022's independent security assessment.
+
+Recovery now validates the persistent wall-clock policy and prunes expired records before applying an orphan. Initial acceptance returns both the replay outcome and target-effect status from its existing transaction; subsequent volatile orphan registration cannot perform a fallible database operation. Regression cases exercise missing/rolled-back clocks with direct committed-state inspection and recovery, and a callback that makes the database unavailable immediately after the real ledger/history COMMIT. Both incoming and outgoing reactions, with and without a target, preserve their acceptance result, outgoing bytes and orphan handle. No wire, dependency or FFI contract changes.
+
+Post-fix validation passes: formatting/clippy, 125 workspace tests each in debug/release, 17 simulator tests each in debug/release, 11 storage-policy regressions, ticketboard validation and diff check. The exact dependency graph is unchanged; the refreshed dependency gate above remains applicable. Follow-up Terra review and native checks on the fixed revision remain pending.

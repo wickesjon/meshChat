@@ -781,3 +781,138 @@ fn held_job_refuses_provider_invalidation_and_own_generation_reset() {
             .is_empty()
     );
 }
+
+#[test]
+fn orphan_clock_refusal_does_not_commit_or_consume_recovery() {
+    for wall in [None, Some(WALL - 301)] {
+        let mut a = Node::new(2, 3);
+        let mut b = Node::new(3, 2);
+        let reaction = a.send(
+            2,
+            Content::Reaction {
+                target: 1u64.to_be_bytes(),
+                remove: false,
+                code: 7,
+            },
+            1,
+            WALL,
+        );
+        b.receive(&reaction, 1);
+        let target = a.send(1, Content::Chat("late target".into()), 1000, WALL);
+        b.receive(&target, 1000);
+        assert_eq!(b.dm.orphan_count(), 1);
+        assert!(
+            b.dm.reactions(
+                &b.store,
+                &mut b.friends,
+                &b.pin,
+                1u64.to_be_bytes(),
+                1001,
+                wall
+            )
+            .is_err()
+        );
+        // Inspect raw committed state: refusal must precede any reaction effect.
+        let rows =
+            b.db.query(
+                "SELECT count(*) FROM records WHERE kind=6".into(),
+                vec![],
+                1,
+            )
+            .unwrap();
+        assert!(matches!(rows[0].cells[0], SqlValue::Integer { value: 0 }));
+        assert_eq!(b.dm.orphan_count(), 1);
+        assert_eq!(b.reactions(1, 1002), vec![(0, 7)]);
+        assert_eq!(b.dm.orphan_count(), 0);
+    }
+}
+
+#[derive(Clone)]
+struct FailAfterAcceptance {
+    db: Database,
+    inserted: Arc<std::sync::atomic::AtomicBool>,
+    failed: Arc<std::sync::atomic::AtomicBool>,
+}
+impl SqlDatabase for FailAfterAcceptance {
+    fn execute(
+        &self,
+        sql: String,
+        values: Vec<SqlValue>,
+    ) -> Result<(), meshchat_core::storage::StorageError> {
+        use std::sync::atomic::Ordering::SeqCst;
+        if self.failed.load(SeqCst) {
+            return Err(meshchat_core::storage::StorageError::Database);
+        }
+        self.db.execute(sql.clone(), values)?;
+        if sql.starts_with("INSERT INTO ledger") {
+            self.inserted.store(true, SeqCst);
+        }
+        if sql == "COMMIT" && self.inserted.swap(false, SeqCst) {
+            self.failed.store(true, SeqCst);
+        }
+        Ok(())
+    }
+    fn query(
+        &self,
+        sql: String,
+        values: Vec<SqlValue>,
+        limit: u32,
+    ) -> Result<Vec<meshchat_core::storage::SqlRow>, meshchat_core::storage::StorageError> {
+        if self.failed.load(std::sync::atomic::Ordering::SeqCst) {
+            return Err(meshchat_core::storage::StorageError::Database);
+        }
+        self.db.query(sql, values, limit)
+    }
+}
+fn fail_after_acceptance(node: &mut Node) {
+    let db = FailAfterAcceptance {
+        db: node.db.clone(),
+        inserted: Default::default(),
+        failed: Default::default(),
+    };
+    node.store = EncryptedStore::open(
+        Box::new(db),
+        node.key.public_identity().unwrap().generation,
+        false,
+        Some(WALL),
+    )
+    .unwrap();
+}
+#[test]
+fn committed_reactions_keep_ciphertext_and_orphans_when_storage_then_fails() {
+    for orphan in [false, true] {
+        let mut a = Node::new(2, 3);
+        let mut b = Node::new(3, 2);
+        if !orphan {
+            let target = a.send(1, Content::Chat("target".into()), 1, WALL);
+            b.receive(&target, 1);
+        }
+        // Both ends lose database access immediately after ledger/history COMMIT.
+        // Outgoing bytes and incoming acceptance/orphan registration still survive.
+        fail_after_acceptance(&mut a);
+        fail_after_acceptance(&mut b);
+        let reaction = a.send(
+            2,
+            Content::Reaction {
+                target: 1u64.to_be_bytes(),
+                remove: false,
+                code: 7,
+            },
+            1000,
+            WALL,
+        );
+        let received = b.receive(&reaction, 1000);
+        assert_eq!(received.result, AcceptResult::Accepted);
+        assert_eq!(received.content.is_none(), orphan);
+        assert_eq!(a.dm.orphan_count(), usize::from(orphan));
+        assert_eq!(b.dm.orphan_count(), usize::from(orphan));
+        // The sender still owns the exact ciphertext for transport retry.
+        assert_eq!(
+            codec::parse(&reaction, codec::Context::Live)
+                .unwrap()
+                .header()
+                .kind,
+            6
+        );
+    }
+}

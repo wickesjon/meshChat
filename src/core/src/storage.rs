@@ -471,6 +471,7 @@ impl EncryptedStore {
         now: Option<i64>,
     ) -> Result<AcceptResult, StorageError> {
         self.accept_record(item, subject, immutable_bytes, now, false)
+            .map(|(result, _)| result)
     }
     /// A target with multiple authenticated meanings or a recorded conflict is
     /// ambiguous even across logical types/directions; never select one by ID.
@@ -529,7 +530,7 @@ impl EncryptedStore {
         immutable_bytes: Vec<u8>,
         now: Option<i64>,
         dm: bool,
-    ) -> Result<AcceptResult, StorageError> {
+    ) -> Result<(AcceptResult, bool), StorageError> {
         let mut item = Zeroizing::new(item);
         Self::validate_item(&item)?;
         let valid = match subject.first() {
@@ -556,9 +557,9 @@ impl EncryptedStore {
             let key=vec![b(&subject),n(item.direction.into()),n(item.logical_type.into()),b(&item.message_id)];
             let rows=self.rows("SELECT digest FROM ledger WHERE subject=? AND direction=? AND logical_type=? AND message_id=?",key.clone(),1)?;
             if let Some(row)=rows.first(){
-                if bytes(row.cells.first().ok_or(StorageError::Schema)?)?==digest.as_slice(){return Ok(AcceptResult::Replay)}
+                if bytes(row.cells.first().ok_or(StorageError::Schema)?)?==digest.as_slice(){return Ok((AcceptResult::Replay, false))}
                 self.exec("UPDATE ledger SET conflict=1 WHERE subject=? AND direction=? AND logical_type=? AND message_id=?",key)?;
-                return Ok(AcceptResult::Conflict)
+                return Ok((AcceptResult::Conflict, false))
             }
             if self.scalar("SELECT count(*) FROM ledger",vec![])?>=100000{return Err(StorageError::Capacity)}
             let mut values=key;values.push(b(&digest));values.push(n(item.timestamp));
@@ -571,9 +572,9 @@ impl EncryptedStore {
                 item.provenance=subject.clone();item.provenance.extend_from_slice(&sequence.to_be_bytes());
             }
             self.insert(&item)?;
-            if dm && item.logical_type==6 { self.apply_dm_reaction(&item.conversation,&item.message_id,item.direction)?; }
+            let applied = if dm && item.logical_type==6 { self.apply_dm_reaction(&item.conversation,&item.message_id,item.direction)? } else { true };
             self.prune_dm_reactions()?;
-            Ok(AcceptResult::Accepted)
+            Ok((AcceptResult::Accepted, applied))
         })
     }
     pub(crate) fn accept_dm(
@@ -582,7 +583,7 @@ impl EncryptedStore {
         subject: Vec<u8>,
         immutable: Vec<u8>,
         now: Option<i64>,
-    ) -> Result<AcceptResult, StorageError> {
+    ) -> Result<(AcceptResult, bool), StorageError> {
         self.accept_record(item, subject, immutable, now, true)
     }
     fn prune_dm_reactions(&self) -> Result<(), StorageError> {
@@ -643,9 +644,14 @@ impl EncryptedStore {
         peer: &[u8],
         id: &[u8],
         direction: u8,
+        now: Option<i64>,
     ) -> Result<bool, StorageError> {
         let _lock = self.lock.lock().map_err(|_| StorageError::Unavailable)?;
-        self.tx(|| self.apply_dm_reaction(peer, id, direction))
+        let time = self.clock(now)?;
+        self.tx(|| {
+            self.prune_at(time)?;
+            self.apply_dm_reaction(peer, id, direction)
+        })
     }
     pub(crate) fn dm_reactions(
         &self,

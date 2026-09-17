@@ -75,7 +75,7 @@ def main():
         ]:
             env = android_linker_env(os.environ.get('ANDROID_HOME'), system, target, compiler)
             run('rustup', 'target', 'add', target)
-            run('cargo', 'build', '--locked', '--lib', '--release', '--target', target, *features, env=env)
+            run('cargo', 'build', '--locked', '-p', 'meshchat-core', '--lib', '--release', '--target', target, *features, env=env)
             destination = OUT / 'android' / abi
             destination.mkdir(parents=True, exist_ok=True)
             shutil.copy2(target_dir / target / 'release' / 'libmeshchat_core.so', destination)
@@ -84,7 +84,7 @@ def main():
             run('rustup', 'target', 'add', target)
             env = os.environ.copy()
             env['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
-            run('cargo', 'build', '--locked', '--lib', '--release', '--target', target, *features, env=env)
+            run('cargo', 'build', '--locked', '-p', 'meshchat-core', '--lib', '--release', '--target', target, *features, env=env)
         for sdk in ['iphoneos', 'iphonesimulator']:
             (OUT / sdk).mkdir(exist_ok=True)
         shutil.copy2(target_dir / 'aarch64-apple-ios/release/libmeshchat_core.a', OUT / 'iphoneos')

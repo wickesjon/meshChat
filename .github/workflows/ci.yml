@@ -60,6 +60,8 @@ jobs:
           git diff --exit-code -- Cargo.lock
       - name: Shared encrypted-storage policy regression
         run: python3 -B tests/integration/storage/run_policy.py
+      - name: Offline organizer console checks
+        run: python3 -B tests/integration/organizer-tools/check_console.py
       - name: Dependency advisory, license, version and source gates
         run: |
           curl --fail --location --retry 3 \
@@ -154,8 +156,9 @@ jobs:
           export TMPDIR="$PWD/.work/tmp"
           export JAVA_TOOL_OPTIONS="-Djava.io.tmpdir=$TMPDIR -Duser.home=$PWD/.work/java-home"
           python3 -B src/core/build_bindings.py android --security-probe
+          cargo test --locked -p meshchat-organizer --test organizer_tools generate_disposable_native_import_fixtures
           python3 -B src/android/security/build_sqlcipher.py
-          bash src/android/gradlew -p src/android/security --no-daemon assembleDebug assembleRelease assembleDebugAndroidTest lintDebug
+          bash src/android/gradlew -p src/android/security --no-daemon assembleDebug assembleRelease assembleDebugAndroidTest lintDebug testDebugUnitTest
           python3 -B tests/bench/security/check_android_apk.py \
             src/android/security/build/outputs/apk/debug/*.apk \
             src/android/security/build/outputs/apk/release/*.apk
@@ -268,6 +271,8 @@ jobs:
           mkdir -p .work/tmp .work/security-module-cache
           export TMPDIR="$PWD/.work/tmp"
           python3 -B src/core/build_bindings.py ios --security-probe
+          cargo test --locked -p meshchat-organizer --test organizer_tools generate_disposable_native_import_fixtures
+          python3 -B tests/integration/organizer-tools/run_apple.py
           for platform in iphonesimulator iphoneos; do
             for configuration in Debug Release; do
               xcodebuild -project src/ios/Security/SecurityProbe.xcodeproj -scheme SecurityProbe \

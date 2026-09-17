@@ -1,0 +1,27 @@
+[package]
+name = "meshchat-organizer"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+meshchat-core = { path = "../core" }
+ed25519-dalek = { version = "=2.2.0", default-features = false, features = ["std", "zeroize"] }
+sha2 = "=0.10.9"
+getrandom = "=0.4.3"
+zeroize = "=1.8.1"
+chacha20poly1305 = { version = "=0.11.0", default-features = false, features = ["alloc", "zeroize"] }
+serde = { version = "=1.0.228", features = ["derive"] }
+serde_json = "=1.0.151"
+qrcode = { version = "=0.14.1", default-features = false }
+
+[dev-dependencies]
+meshchat-core = { path = "../core", features = ["security-probe"] }
+
+[[test]]
+name = "organizer_tools"
+path = "../../tests/integration/organizer-tools/tools.rs"
+
+[lints]
+workspace = true

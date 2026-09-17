@@ -171,6 +171,8 @@ enum IdentityFile: Hashable { case envelope, journal }
         #endif
         var excluded = folder; var values = URLResourceValues(); values.isExcludedFromBackup = true
         try excluded.setResourceValues(values)
+        // Verify the filesystem value, not metadata cached earlier in this run loop.
+        excluded.removeAllCachedResourceValues()
         guard try excluded.resourceValues(forKeys: [.isExcludedFromBackupKey]).isExcludedFromBackup == true else { throw IdentityFailure.provider }
         #if os(iOS)
         try bytes.write(to: path(file), options: [.atomic, .completeFileProtection])

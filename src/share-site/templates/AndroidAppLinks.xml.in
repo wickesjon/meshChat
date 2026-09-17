@@ -1,0 +1,9 @@
+<!-- Merge into the receiving activity only after domain/signing configuration. -->
+<intent-filter xmlns:android="http://schemas.android.com/apk/res/android" android:autoVerify="true">
+    <action android:name="android.intent.action.VIEW" />
+    <category android:name="android.intent.category.DEFAULT" />
+    <category android:name="android.intent.category.BROWSABLE" />
+    <data android:scheme="https" android:host="$domain" />
+    <data android:pathPrefix="/j/" />
+    <data android:pathPrefix="/friend/" />
+</intent-filter>

@@ -96,6 +96,8 @@ private fun Home(model: MeshModel,s: MeshScreenState,permissions: () -> Unit,sca
     var settings by remember { mutableStateOf(false) }
     var join by remember { mutableStateOf(false) }
     var info by remember { mutableStateOf(false) }
+    var share by remember { mutableStateOf(false) }
+    var linkInput by remember { mutableStateOf(false) }
     Scaffold(containerColor=MaterialTheme.colorScheme.background,topBar={Column {
         Row(Modifier.fillMaxWidth().padding(horizontal=20.dp,vertical=16.dp),verticalAlignment=Alignment.CenterVertically) {
             if(s.direct!=null)TextButton(onClick=model::closeDirect) { Text("Back") }
@@ -131,10 +133,14 @@ private fun Home(model: MeshModel,s: MeshScreenState,permissions: () -> Unit,sca
         }
     }
     FriendConfirmation(model,s)
-    if(join)JoinSheet({join=false}) { model.join(it);join=false }
+    ChannelConfirmation(model,s)
+    if(linkInput)ShareInput(model) {linkInput=false}
+    if(share)s.selected?.takeIf {it.private}?.let {ChannelShare(it) {share=false}}
+    if(join)JoinSheet({join=false},scan={join=false;scan()},paste={join=false;linkInput=true}) { model.join(it);join=false }
     if(settings)SettingsSheet(model,s) { settings=false }
     if(info)AlertDialog(onDismissRequest={info=false},title={Text("Channel details")},text={Column(verticalArrangement=Arrangement.spacedBy(12.dp)) {
         Text("Anyone with these words can read this channel. It is not encrypted.");Text(s.selected?.name?.replace('|',' ') ?: "")
+        if(s.selected?.private==true)TextButton(onClick={info=false;share=true}){Text("Share channel")}
         TextButton(onClick=model::mute){Text(if(s.muted)"Unmute channel" else "Mute channel")}
         if(s.selected?.private==true)TextButton(onClick={model.leave();info=false}){Text("Leave channel")}
         TextButton(onClick={model.clearHistory();info=false}){Text("Delete local channel history")}
@@ -182,13 +188,15 @@ internal fun ChannelComposer(anonymous: Boolean,waitSeconds: Int,posted: Long,se
     }
 }
 @Composable
-private fun JoinSheet(close: ()->Unit,join: (String)->Unit) {
+private fun JoinSheet(close: ()->Unit,scan: ()->Unit,paste: ()->Unit,join: (String)->Unit) {
     val words=remember{channelWords()};var a by remember{mutableIntStateOf(0)};var b by remember{mutableIntStateOf(0)};var c by remember{mutableIntStateOf(0)}
     val name="${words.descriptors[a]}|${words.genres[b]}|${words.locations[c]}"
     AlertDialog(onDismissRequest=close,title={Text("Find your channel")},text={Column(verticalArrangement=Arrangement.spacedBy(12.dp)) {
         Text("Choose the same three words as your friends. Anyone with the words can read this channel.")
         WordChoice(words.descriptors,a){a=it};WordChoice(words.genres,b){b=it};WordChoice(words.locations,c){c=it}
         Text(name.replace('|',' '),fontWeight=FontWeight.Bold)
+        OutlinedButton(onClick=scan){Text("Scan QR instead")}
+        TextButton(onClick=paste){Text("Paste a shared link")}
         TextButton(onClick={val r=java.security.SecureRandom();a=r.nextInt(20);b=r.nextInt(20);c=r.nextInt(20)}){Text("Randomize")}
     }},confirmButton={Button(onClick={join(name)}){Text("Join channel")}},dismissButton={TextButton(onClick=close){Text("Cancel")}})
 }

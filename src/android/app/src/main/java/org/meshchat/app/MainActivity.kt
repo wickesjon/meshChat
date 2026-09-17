@@ -17,7 +17,7 @@ class MainActivity : ComponentActivity() {
     private val permissions = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { model.load() }
     private val scanner = registerForActivityResult(ScanContract()) { result ->
         val value=result.contents
-        if(value!=null)model.friendInput(value,scanned=true)
+        if(value!=null)model.shareInput(value,scanned=true)
         else if(result.originalIntent?.getBooleanExtra(com.google.zxing.client.android.Intents.Scan.MISSING_CAMERA_PERMISSION,false)==true)model.scannerUnavailable()
     }
     private val camera = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -26,10 +26,10 @@ class MainActivity : ComponentActivity() {
     private fun scan() {
         scanner.launch(ScanOptions().setDesiredBarcodeFormats(ScanOptions.QR_CODE)
             .setBeepEnabled(false).setBarcodeImageEnabled(false).setOrientationLocked(false)
-            .setPrompt("Scan the public friend code on their screen"))
+            .setPrompt("Scan a channel or public friend code"))
     }
     private fun incoming(intent: Intent?) {
-        if(intent?.action==Intent.ACTION_VIEW)intent.dataString?.let { model.friendInput(it) }
+        if(intent?.action==Intent.ACTION_VIEW)intent.dataString?.let { model.shareInput(it) }
     }
     override fun onNewIntent(intent: Intent) {super.onNewIntent(intent);setIntent(intent);incoming(intent)}
     override fun onCreate(savedInstanceState: Bundle?) {

@@ -20,6 +20,8 @@ Implement channel/friend QR export and scan with white backgrounds/quiet zones, 
 
 Permitted paths (relative to repository root): `src/android/**`, `src/ios/**`, `src/share-site/**`, `tests/integration/sharing/**`, `docs/sharing/**`.
 
+User-approved scope extension (2026-09-17): `src/core/src/native_channels.rs` for a small exported adapter to the existing canonical channel-link parser, and `tests/integration/android-ui/**` for its regression coverage. No wire-format or parsing-rule change is authorized.
+
 Also permitted: this ticket and generated ticketboard index/diagram changes required by its workflow. No unrelated file changes or work outside the repository. Read the [design](../../mesh-chat-design.md), its §0 corrections, and the [active plan](../implementation-plan.md). A necessary change outside these paths needs an explicit scope decision.
 
 ## Implementation details
@@ -30,9 +32,9 @@ Also permitted: this ticket and generated ticketboard index/diagram changes requ
 
 ## Exit criteria
 
-- [ ] Offline in-app scanning resolves the exact intended channel/key proposal without network access.
-- [ ] Association files and fallback page pass local fixture checks; production verification is recorded once domain/store IDs are available.
-- [ ] Share copy does not promise universal HTTPS handling before association has been established.
+- [x] Offline in-app scanning resolves the exact intended channel/key proposal without network access.
+- [x] Association files and fallback page pass local fixture checks; production verification is recorded once domain/store IDs are available.
+- [x] Share copy does not promise universal HTTPS handling before association has been established.
 - [ ] Relevant checks pass, evidence is recorded, required review is complete, and the ticket is squash merged to main.
 
 ## Potential fallbacks
@@ -44,7 +46,9 @@ A triggered fallback must be recorded with evidence. It does not authorize weake
 
 ## Evidence
 
-Not implemented. Record commands, versions, reproducible inputs and results here. For manual/hardware checks include device/OS, duration and report paths. No test or review is claimed yet.
+Implemented from main `81170ad54b481f483f3227f138147e2a4d2ef2d6`; MC-011/028 and reused MC-029 are complete there. See [implementation/validation evidence](../../sharing/MC-031-validation.md) and [sharing/activation guide](../../sharing/README.md). Local core, template, Android build/lint/JVM and emulator checks pass; final cache-regression rerun, iOS checks and required review are pending. The second criterion uses the ticket's explicit missing-identifiers fallback; it does not claim production association.
+
+The domain/store-ID fallback is triggered: no owned domain, production signing certificate, Apple app identifier or store listing has been supplied. Deliver local templates; production association, installation and activation remain blocked pending those values and separate deployment authorization. The frozen parser accepts `meshfest.app` only; template configuration cannot silently change that contract. iOS feature UI parity remains MC-035; this ticket supplies its association templates and integration guide.
 
 ## Review and merge
 

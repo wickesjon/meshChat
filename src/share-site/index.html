@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'none'; connect-src 'none'; base-uri 'none'; form-action 'none'">
+  <title>Open a MeshChat code</title>
+  <link rel="stylesheet" href="/style.css">
+  <script type="module" src="/page.mjs"></script>
+</head>
+<body>
+<main>
+  <p class="eyebrow">MESHCHAT · NEARBY, TOGETHER</p>
+  <h1>Keep the code.<br>Find your people.</h1>
+  <p id="summary" role="status">Open a shared channel or friend link to continue.</p>
+  <section id="proposal" hidden>
+    <h2 id="kind"></h2>
+    <p id="name" class="name"></p>
+    <p id="warning"></p>
+    <a id="open" class="button" rel="noreferrer">Open installed app</a>
+    <p>If nothing opens, keep this page and install the app when online, then return to the same link. This page cannot tell whether the app is installed.</p>
+  </section>
+  <section>
+    <h2>Need the app?</h2>
+    <p id="installation">Store listings are not configured. Installation is unavailable here.</p>
+    <a id="android" class="secondary" hidden rel="noreferrer">Get Android app</a>
+    <a id="ios" class="secondary" hidden rel="noreferrer">Get iOS app</a>
+  </section>
+  <aside>In-app QR scanning works fully offline when both people already have the app. A fresh web page or app installation needs internet. Automatic HTTPS app opening requires a verified website association and compatible app; it is not established by this page.</aside>
+  <noscript>This page needs JavaScript to prepare an app link. You can still scan the original QR inside the app or enter channel words manually.</noscript>
+</main>
+</body>
+</html>

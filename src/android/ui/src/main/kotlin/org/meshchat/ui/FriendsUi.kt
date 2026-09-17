@@ -1,7 +1,5 @@
 package org.meshchat.ui
 
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -12,15 +10,10 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.google.zxing.BarcodeFormat
-import com.journeyapps.barcodescanner.BarcodeEncoder
 import uniffi.meshchat_core.*
 
 @Composable
@@ -64,14 +57,13 @@ internal fun FriendsPage(model: MeshModel, s: MeshScreenState, scan: () -> Unit,
         }
     }
     if(code) s.friendCode?.let { own ->
-        val context=LocalContext.current
-        val bitmap=remember(own.uri) {BarcodeEncoder().encodeBitmap(own.uri,BarcodeFormat.QR_CODE,640,640)}
         AlertDialog(onDismissRequest={code=false},title={Text("My friend code")},text={Column(Modifier.verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(12.dp)) {
             Text(s.nickname,fontWeight=FontWeight.Bold)
-            Image(bitmap.asImageBitmap(),"Your public friend code",Modifier.fillMaxWidth().aspectRatio(1f).background(Color.White).padding(8.dp))
+            ShareQr(own.uri,"Your public friend code")
+            Text("Scanning works fully offline in the app.")
             Text(own.fingerprint,fontSize=12.sp)
             Text("Compare this full fingerprint on both screens in person. Sharing a code does not add anyone automatically.")
-            TextButton(onClick={val clipboard=context.getSystemService(android.content.ClipboardManager::class.java);clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Public friend code",own.uri))}){Text("Copy public friend link")}
+            ShareActions(own.uri)
             OutlinedButton(onClick={code=false;scan()}){Text("Scan a friend's code")}
         }},confirmButton={TextButton(onClick={code=false}){Text("Done")}})
     }

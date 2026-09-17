@@ -80,6 +80,21 @@ private final class FaultDatabase: SqlDatabase, @unchecked Sendable {
             refused { try fault.acceptAuthenticated(item: item(true, 3), subject: subject, immutableBytes: Data([5]), now: now) }
             let normal = try EncryptedStore.open(db: db, generation: generation, create: false, now: now)
             let accepted = try normal.acceptAuthenticated(item: item(true, 3), subject: subject, immutableBytes: Data([5]), now: now); precondition(accepted == .accepted)
+            let publicSubject = Data([3]) + peer
+            var publicPost = item(false, 4)
+            publicPost.direction = 1; publicPost.conversation = Data([9, 9, 9, 9]); publicPost.provenance = publicSubject
+            let publicAccepted = try normal.acceptAuthenticated(item: publicPost, subject: publicSubject, immutableBytes: Data([7]), now: now); precondition(publicAccepted == .accepted)
+            // Upgrade compatibility: retain an outgoing legacy ledger entry.
+            try db.execute(sql: "UPDATE ledger SET direction=1 WHERE subject=?", values: [.bytes(value: publicSubject)])
+            try normal.deleteHistory(conversation: publicPost.conversation, direct: false)
+            let reopened = try EncryptedStore.open(db: db, generation: generation, create: false, now: now)
+            publicPost.direction = 0
+            let publicReplay = try reopened.acceptAuthenticated(item: publicPost, subject: publicSubject, immutableBytes: Data([7]), now: now); precondition(publicReplay == .replay)
+            let publicConflict = try reopened.acceptAuthenticated(item: publicPost, subject: publicSubject, immutableBytes: Data([8]), now: now); precondition(publicConflict == .conflict)
+            let publicHistory = try reopened.history(conversation: publicPost.conversation, direct: false, limit: 10); precondition(publicHistory.isEmpty)
+            var otherDirection = item(true, 3); otherDirection.direction = 1
+            let dmDirection = try reopened.acceptAuthenticated(item: otherDirection, subject: subject, immutableBytes: Data([6]), now: now); precondition(dmDirection == .accepted)
+            print("MC-022 Swift SQLCipher public replay and DM direction separation passed")
             try db.execute(sql: "DROP TABLE ledger", values: []); try db.execute(sql: "DROP TABLE clock", values: []); try db.execute(sql: "PRAGMA user_version=1", values: [])
             refused { try EncryptedStore.open(db: FaultDatabase(db, "CREATE TABLE clock"), generation: generation, create: false, now: now) }
             let version = try db.query(sql: "PRAGMA user_version", values: [], limit: 1)

@@ -1,4 +1,30 @@
 use meshchat_core::{LinkHandle, framing, ingress::*};
+#[path = "../crypto/text_cases.rs"]
+mod text_cases;
+
+#[test]
+fn unsigned_text_rejection_precedes_accepted_dedup_and_valid_variant_recovers() {
+    for forbidden in text_cases::FORBIDDEN {
+        for nickname in [false, true] {
+            let mut ingress = setup(1);
+            let good = text_cases::replace(&fixture("chat"), "e\u{301}", Some("雪 e\u{301}"));
+            let bad = text_cases::replace(
+                &good,
+                if nickname { forbidden } else { "A" },
+                Some(if nickname { "hello" } else { forbidden }),
+            );
+            assert_eq!(
+                receive(&mut ingress, 1, &bad, 0),
+                Outcome::Dropped(Drop::Malformed)
+            );
+            assert_eq!(ingress.counters().unverified, 0);
+            assert_eq!(
+                state(receive(&mut ingress, 1, &good, 1000)),
+                State::Unverified
+            );
+        }
+    }
+}
 
 fn link(generation: u64) -> LinkHandle {
     LinkHandle {

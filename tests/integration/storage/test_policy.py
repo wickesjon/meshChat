@@ -58,6 +58,40 @@ class Policy(unittest.TestCase):
         self.assertEqual(self.s.accept_authenticated(reaction,SUBJECT,b'reaction',NOW),m.AcceptResult.ACCEPTED)
         self.assertTrue(self.s.ambiguous_target(SUBJECT,chat.message_id))
         self.assertEqual(len(self.s.history(PEER,True,100)),2)
+    def test_public_legacy_direction_replay_and_ambiguous_records(self):
+        import hashlib
+        for prefix,size in [(1,32),(3,64)]:
+            for ambiguous in [False,True]:
+                with self.subTest(prefix=prefix,ambiguous=ambiguous):
+                    db=Database();store=m.EncryptedStore.open(db,GEN,True,NOW)
+                    subject=bytes([prefix])+b'k'*size
+                    msg=item();msg.provenance=subject;msg.direction=1
+                    self.assertEqual(store.accept_authenticated(msg,subject,b'original',NOW),m.AcceptResult.ACCEPTED)
+                    self.assertEqual(db.db.execute('SELECT direction FROM ledger').fetchone()[0],0)
+                    self.assertEqual(store.history(CHANNEL,False,10)[0].direction,1)
+                    db.db.execute('UPDATE ledger SET direction=1')
+                    second=hashlib.sha256(b'other' if ambiguous else b'original').digest()
+                    db.db.execute('INSERT INTO ledger SELECT subject,0,logical_type,message_id,?,timestamp,conflict FROM ledger',(second,))
+                    store.delete_history(CHANNEL,False)
+                    store=m.EncryptedStore.open(db,GEN,False,NOW)
+                    msg.direction=0
+                    if ambiguous:
+                        db.fail='UPDATE ledger SET conflict'
+                        with self.assertRaises(m.StorageError.Database):store.accept_authenticated(msg,subject,b'original',NOW)
+                        self.assertEqual(db.db.execute('SELECT sum(conflict) FROM ledger').fetchone()[0],0)
+                        db.fail=None
+                    expected=m.AcceptResult.CONFLICT if ambiguous else m.AcceptResult.REPLAY
+                    self.assertEqual(store.accept_authenticated(msg,subject,b'original',NOW),expected)
+                    self.assertEqual(db.db.execute('SELECT count(*),sum(conflict) FROM ledger').fetchone(),(2,2 if ambiguous else 0))
+                    self.assertEqual(store.history(CHANNEL,False,10),[])
+                    self.assertEqual(db.db.execute('PRAGMA user_version').fetchone()[0],2)
+    def test_dm_replay_identity_keeps_direction_separation(self):
+        msg=item(True)
+        self.assertEqual(self.s.accept_authenticated(msg,SUBJECT,b'incoming',NOW),m.AcceptResult.ACCEPTED)
+        msg.direction=1
+        self.assertEqual(self.s.accept_authenticated(msg,SUBJECT,b'outgoing',NOW),m.AcceptResult.ACCEPTED)
+        self.assertEqual(self.s.accept_authenticated(msg,SUBJECT,b'outgoing',NOW),m.AcceptResult.REPLAY)
+        self.assertEqual(len(self.s.history(PEER,True,10)),2)
     def test_effect_failure_rolls_back_ledger(self):
         self.d.fail='INSERT INTO history'
         with self.assertRaises(m.StorageError.Database):self.s.accept_authenticated(item(True),SUBJECT,b'immutable',NOW)

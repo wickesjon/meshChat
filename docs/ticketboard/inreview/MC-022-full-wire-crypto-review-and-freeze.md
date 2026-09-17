@@ -20,6 +20,8 @@ Run primitive reference vectors and negative cases against the selected construc
 
 Permitted paths (relative to repository root): `tests/vectors/crypto/**`, `tests/integration/**`, `docs/testing/**`, `docs/mesh-chat-design.md`.
 
+User-approved assessment remediation scope, 2026-09-16: `src/core/src/organizer.rs`, `src/core/src/storage.rs`, `src/core/src/friends.rs`, `src/core/src/ingress.rs`, `src/core/src/text.rs`, and clarification-only `docs/decisions/MC-008-crypto-contract.md`, solely for F-01/F-02/A-01 under the [approved remediation proposal](../../testing/MC-022-assessment-remediation.md). No wire/dependency change is authorized.
+
 Also permitted: this ticket and generated ticketboard index/diagram changes required by its workflow. No unrelated file changes or work outside the repository. Read the [design](../../mesh-chat-design.md), its §0 corrections, and the [active plan](../implementation-plan.md). A necessary change outside these paths needs an explicit scope decision.
 
 ## Implementation details
@@ -31,7 +33,7 @@ Also permitted: this ticket and generated ticketboard index/diagram changes requ
 ## Exit criteria
 
 - [x] MC-019/020/021 provide real-verifier ingress invalid-first/valid-second and authenticated-replay evidence, including failure, eviction, concurrency and budget-available recovery; pending-state fixtures alone cannot satisfy this full-wire gate.
-- [x] All required forgery, replay, binding, key lifecycle and credential-recovery checks pass in the implemented automated/native scope; separately owned physical acceptance and independent assessment are not claimed.
+- [ ] All required forgery, replay, binding, key lifecycle and credential-recovery checks pass in the implemented automated/native scope; separately owned physical acceptance and independent assessment are not claimed.
 - [ ] Independent review findings affecting the protocol are resolved, with evidence linked.
 - [ ] Every v1 wire/QR format is frozen and versioned; no undocumented field remains.
 - [ ] Relevant checks pass, evidence is recorded, required review is complete, and the ticket is squash merged to main.
@@ -45,9 +47,9 @@ A triggered fallback must be recorded with evidence. It does not authorize weake
 
 ## Evidence
 
-Started from main `835a7966f4edb2dead99f5768ec24b75059a337c`, after PR #25 completed MC-021. MC-020 and MC-021 hard dependencies are complete. Production code, root manifests/lockfile, native application code and workflow configuration are unchanged.
+Started from main `835a7966f4edb2dead99f5768ec24b75059a337c`, after PR #25 completed MC-021. MC-020 and MC-021 hard dependencies are complete. The initial test-only revision left production unchanged; the approved assessment follow-up below changes only the scoped acceptance/storage owners. Root manifests/lockfile, native application code and workflow configuration remain unchanged.
 
-The [construction review packet](../../testing/MC-022-crypto-review-packet.md) inventories the versioned formats, executable checks, security limitations and questions for the independently required assessor. No external assessment has been supplied; no independent security approval or full-wire freeze is claimed. This is a real remaining gate, not deferred physical certification. The ticket must not be completed or merged as complete while that assessment and its findings remain outstanding.
+The [construction review packet](../../testing/MC-022-crypto-review-packet.md) inventories formats, executable checks and security limitations. The separately assigned automated assessor has supplied [its report](../../testing/MC-022-assessment/report.md); no external human certification is claimed. Its findings must be resolved and retested before completion/full-wire freeze.
 
 ### Implementation
 
@@ -74,7 +76,7 @@ Logs and generated input inventory remain in `.work/mc022`. Corrected-source nat
 ## Review and merge
 
 - Branch: `ticket/MC-022-full-wire-crypto-review-and-freeze`.
-- Review/PR: [PR #26](https://github.com/wickesjon/meshChat/pull/26). External construction assessment remains unsupplied; do not merge as complete.
+- Review/PR: [PR #26](https://github.com/wickesjon/meshChat/pull/26). Assessment findings/retest remain open; do not merge as complete.
 - Squash commit title: `MC-022: Full-wire crypto review and freeze`.
 - Completion becomes effective only when the reviewed squash commit lands on main.
 
@@ -93,3 +95,14 @@ Terra follow-up reviewed exact source `60d4dcbf9b740b3101fc953f803e2c8f27ea8d16`
 The Android job passed Rust/Kotlin binding generation, app build/lint/JVM tests (including the new vector runner), packaged library/alignment checks and BLE probe build/lint. The remaining unchanged security-probe/emulator steps were still running when this record was written; no successful full Android job/run is claimed. Under the local-validation policy, those unchanged steps are supplemental for this test-only PR: no production Rust, native application/security adapter, native dependency/package or workflow configuration changed. The actual changed Android JVM hook and Mac storage/vector script have executed successfully. Any later relevant source failure must still be investigated; no runner/test failure is waived.
 
 Final metadata only records these results and the blocker; it does not change source, test runners, libraries or lockfiles. Ticketboard/default validation, its 12 regressions and diff check are rerun, and the metadata receives Terra review. Independent construction/transcript assessment remains unsupplied, full-wire freeze remains blocked, and this ticket stays in `inreview/`. No squash merge or effective completion is authorized by automated success alone.
+
+### Separate assessment and approved remediation (2026-09-16)
+
+The preceding record describes the pre-assessment revision. At the user's request, a fresh separate AI worker `/root/assess_mc022` assessed the complete construction/transcripts and integration at `ad87cf890459cd43e1e10991085440ebd6d48cb9`, not only the PR diff. The original report and supporting inventories/probes are archived in [MC-022-assessment](../../testing/MC-022-assessment/README.md). Its recommendation was to keep the gate blocked. The user approved the [additional remediation paths and behavior](../../testing/MC-022-assessment-remediation.md). MC-023's unfinished work is separately preserved on its branch at `559dce8`.
+
+- F-01: public signed-message ledger reads now check both legacy directions and new tombstones use canonical direction zero. History direction and DM direction-qualified replay identity are preserved; no schema migration or deletion is used. Conflicting legacy variants refuse new effects transactionally.
+- F-02: otherwise valid signed organizer text remains authenticated when its pin exceeds credential/root lifetime; only pin authority is suppressed. Outgoing construction still refuses invalid pins.
+- A-01: shared raw-text validation is mandatory at friend/organizer authentication acceptance and unsigned clear ingress acceptance. Signed bytes remain unchanged. Native display normalization/badge/confusable handling remains required.
+- A-02: native key-loading/QR work accounting and provider lock/reset invalidation remain explicit integration obligations, not completed device evidence.
+
+New regressions first failed on the assessed revision for replay, pin handling and both signed text owners. Corrected targeted friend/organizer/ingress tests and 13 storage-policy tests pass, including legacy conflicting rows, rollback, history deletion/reopening, retained DM direction separation, eight forbidden-character cases in both text fields and preservation of valid multibyte/non-normalized signed originals. The old test expecting rejection of an entire valid post for excessive pin expiry is corrected to the normative text-preserved/pin-suppressed result. Android/Swift SQLCipher checks now include legacy public replay and DM direction separation; execution at the remediation revision and independent assessor retest remain pending.

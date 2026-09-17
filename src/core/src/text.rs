@@ -48,6 +48,21 @@ pub fn validate(raw: &str, kind: Kind) -> Result<(), Error> {
     }
     Ok(())
 }
+/// Acceptance policy, separate from byte-exact structural parsing. Signed
+/// owners call only after authentication and before durable/trusted effects;
+/// unsigned ingress calls before accepted dedup. Never normalize wire bytes.
+pub(crate) fn validate_payload(payload: crate::codec::Payload<'_>) -> Result<(), Error> {
+    use crate::codec::Payload;
+    match payload {
+        Payload::Chat { nickname, text, .. } => {
+            validate(nickname, Kind::Nickname)?;
+            validate(text, Kind::Message)
+        }
+        Payload::Announce { nickname, .. } => validate(nickname, Kind::Nickname),
+        Payload::EventInfo { name, .. } => validate(name, Kind::EventName),
+        _ => Ok(()),
+    }
+}
 fn capped_nfc(raw: &str) -> String {
     let mut clean = String::new();
     let mut marks = 0;

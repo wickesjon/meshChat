@@ -80,6 +80,20 @@ class StorageInstrumentation : Instrumentation() {
                             override fun query(sql:String,values:List<SqlValue>,limit:UInt)=connection.query(sql,values,limit)
                         }
                         EncryptedStore.open(fault,generation,false,now).use{core->refused{core.acceptAuthenticated(item(true,3),subject,byteArrayOf(5),now)};fault.enabled=false;check(core.acceptAuthenticated(item(true,3),subject,byteArrayOf(5),now)==AcceptResult.ACCEPTED)}
+                        stage="public-replay"
+                        val publicSubject=byteArrayOf(3)+peer
+                        val publicPost=item(false,4).copy(direction=1u,conversation=byteArrayOf(9,9,9,9),provenance=publicSubject)
+                        EncryptedStore.open(connection,generation,false,now).use{core->
+                            check(core.acceptAuthenticated(publicPost,publicSubject,byteArrayOf(7),now)==AcceptResult.ACCEPTED)
+                            connection.execute("UPDATE ledger SET direction=1 WHERE subject=?",listOf(SqlValue.Bytes(publicSubject)))
+                            core.deleteHistory(publicPost.conversation,false)
+                        }
+                        EncryptedStore.open(connection,generation,false,now).use{core->
+                            check(core.acceptAuthenticated(publicPost.copy(direction=0u),publicSubject,byteArrayOf(7),now)==AcceptResult.REPLAY)
+                            check(core.acceptAuthenticated(publicPost.copy(direction=0u),publicSubject,byteArrayOf(8),now)==AcceptResult.CONFLICT)
+                            check(core.history(publicPost.conversation,false,10u).isEmpty())
+                            check(core.acceptAuthenticated(item(true,3).copy(direction=1u),subject,byteArrayOf(6),now)==AcceptResult.ACCEPTED)
+                        }
                         stage="migration";connection.execute("DROP TABLE ledger",emptyList());connection.execute("DROP TABLE clock",emptyList());connection.execute("PRAGMA user_version=1",emptyList())
                         val migration=object:SqlDatabase {
                             override fun execute(sql:String,values:List<SqlValue>){if(sql.startsWith("CREATE TABLE clock"))throw StorageException.Database();connection.execute(sql,values)}

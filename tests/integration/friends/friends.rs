@@ -1,4 +1,6 @@
 mod database;
+#[path = "../crypto/text_cases.rs"]
+mod text_cases;
 use database::Database;
 use ed25519_dalek::{Signer, SigningKey};
 use meshchat_core::{
@@ -13,6 +15,61 @@ use sha2::{Digest, Sha256};
 use std::sync::Arc;
 const WALL: i64 = 200_000;
 const CHANNEL: [u8; 4] = [1, 2, 3, 4];
+
+#[test]
+fn forbidden_authenticated_friend_text_has_no_effect_and_valid_variant_recovers() {
+    for (forbidden, nickname) in text_cases::FORBIDDEN
+        .into_iter()
+        .flat_map(|c| [(c, true), (c, false)])
+    {
+        let mut s = Setup::new();
+        let valid = signed(&s.peer, 995, true, false);
+        let mut bad = text_cases::replace(
+            &valid,
+            if nickname { forbidden } else { "A" },
+            Some(if nickname { "hello" } else { forbidden }),
+        );
+        resign(&s.peer, &mut bad);
+        let job = s.begin(&bad, 1000).1.unwrap();
+        assert!(s.finish(job, 1000).is_none());
+        assert!(
+            s.store
+                .history(CHANNEL.to_vec(), false, 10)
+                .unwrap()
+                .is_empty()
+        );
+        let job = s.begin(&valid, 2000).1.unwrap();
+        assert!(s.finish(job, 2000).unwrap().new_history);
+    }
+}
+
+#[test]
+fn signed_announce_rejects_unsafe_nickname_and_preserves_unicode_originals() {
+    for forbidden in text_cases::FORBIDDEN {
+        let mut s = Setup::new();
+        let mut valid = text_cases::replace(&signed(&s.peer, 996, true, true), "e\u{301}", None);
+        resign(&s.peer, &mut valid);
+        let mut bad = text_cases::replace(&valid, forbidden, None);
+        resign(&s.peer, &mut bad);
+        let job = s.begin(&bad, 1000).1.unwrap();
+        assert!(s.finish(job, 1000).is_none());
+        let job = s.begin(&valid, 2000).1.unwrap();
+        assert!(s.finish(job, 2000).unwrap().friend.is_some());
+    }
+    let mut s = Setup::new();
+    let mut valid = text_cases::replace(
+        &signed(&s.peer, 997, true, false),
+        "e\u{301}",
+        Some("雪 e\u{301}"),
+    );
+    resign(&s.peer, &mut valid);
+    let job = s.begin(&valid, 1000).1.unwrap();
+    assert!(s.finish(job, 1000).unwrap().new_history);
+    assert_eq!(
+        s.store.history(CHANNEL.to_vec(), false, 10).unwrap()[0].body,
+        valid
+    );
+}
 fn identity(n: u8) -> Arc<IdentityKeySession> {
     IdentityKeySession::import_unlocked(vec![n; 64], vec![n; 16]).unwrap()
 }

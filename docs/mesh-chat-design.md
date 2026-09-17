@@ -1,6 +1,6 @@
 # Detailed Design Document — Offline BLE Mesh Chat
 **Working name: "Meshfest" (placeholder)**
-Version 0.8 — Base transport freeze recorded in MC-016; full-wire crypto freeze pending
+Version 0.9 — Base transport freeze MC-016; full-wire freeze MC-022 (effective on its reviewed squash merge)
 
 ---
 
@@ -44,7 +44,7 @@ On 2026-09-14 the user deferred real-device verification until implementation is
 
 The [MC-016 base transport freeze](testing/MC-016-base-freeze.md) records the stable version1 base grammar, compatibility/refusal rules, bounded ingress/relay/SYNC behavior and reproducible host evidence. It becomes effective when its reviewed ticket is squash merged. This does not declare unfinished cryptographic verification, proof authenticity or full-wire security frozen: MC-019/020/021 and the independently assessed MC-022 gate remain mandatory. Published feasibility evidence and simulated native outcomes do not certify physical radio support.
 
-MC-019/020/021 now provide implemented, tested friend/DM/organizer verification. The [MC-022 review packet](testing/MC-022-crypto-review-packet.md) maps the combined wire/QR definitions, executable evidence and assessment questions. Full-wire freeze remains pending the independent construction/transcript assessment and resolution of its findings; reference agreement and Kotlin/Swift parity do not replace it.
+MC-019/020/021 now provide implemented, tested friend/DM/organizer verification. The [MC-022 review packet](testing/MC-022-crypto-review-packet.md) maps the combined wire/QR definitions, executable evidence and assessment questions. The separately assigned automated construction assessor and its independent retest resolved the discovered findings at `695fbc44e472e1f6a5664c9ec0cb3b8a0cc8f792`; applicable Android/Swift native checks pass. The [full-wire freeze record](testing/MC-022-full-wire-freeze.md) becomes effective on MC-022's final reviewed squash merge. This is attributable automated assessment, not human certification; reference agreement and same-core Kotlin/Swift parity remain distinct evidence. Native feature integration, physical certification and MC-037 retain their separate obligations.
 
 MC-004 records documented Android/iOS behavior and permission decisions; MC-005 records protected-key and encrypted-store feasibility; MC-016 gates the base transport; MC-022 gates crypto/full-wire review; MC-036–MC-040 gate integrated security, field evidence and release. Missing devices block the scheduled physical gates; missing required macOS/native tooling still blocks affected build validation. Independent review, store/domain access and publication authorization remain explicit prerequisites at their respective gates. Do not fabricate evidence or weaken security as a fallback.
 

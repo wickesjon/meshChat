@@ -33,10 +33,10 @@ Also permitted: this ticket and generated ticketboard index/diagram changes requ
 ## Exit criteria
 
 - [x] MC-019/020/021 provide real-verifier ingress invalid-first/valid-second and authenticated-replay evidence, including failure, eviction, concurrency and budget-available recovery; pending-state fixtures alone cannot satisfy this full-wire gate.
-- [ ] All required forgery, replay, binding, key lifecycle and credential-recovery checks pass in the implemented automated/native scope; separately owned physical acceptance and independent assessment are not claimed.
-- [ ] Independent review findings affecting the protocol are resolved, with evidence linked.
-- [ ] Every v1 wire/QR format is frozen and versioned; no undocumented field remains.
-- [ ] Relevant checks pass, evidence is recorded, required review is complete, and the ticket is squash merged to main.
+- [x] All required forgery, replay, binding, key lifecycle and credential-recovery checks pass in the implemented automated/native scope; separately owned physical acceptance and independent assessment are not claimed.
+- [x] Independent review findings affecting the protocol are resolved, with evidence linked.
+- [x] Every v1 wire/QR format is frozen and versioned; no undocumented field remains.
+- [x] Relevant checks pass, evidence is recorded, required review is complete, and the ticket is squash merged to main.
 
 ## Potential fallbacks
 
@@ -49,7 +49,7 @@ A triggered fallback must be recorded with evidence. It does not authorize weake
 
 Started from main `835a7966f4edb2dead99f5768ec24b75059a337c`, after PR #25 completed MC-021. MC-020 and MC-021 hard dependencies are complete. The initial test-only revision left production unchanged; the approved assessment follow-up below changes only the scoped acceptance/storage owners. Root manifests/lockfile, native application code and workflow configuration remain unchanged.
 
-The [construction review packet](../../testing/MC-022-crypto-review-packet.md) inventories formats, executable checks and security limitations. The separately assigned automated assessor has supplied [its report](../../testing/MC-022-assessment/report.md); no external human certification is claimed. Its findings must be resolved and retested before completion/full-wire freeze.
+The [construction review packet](../../testing/MC-022-crypto-review-packet.md) inventories formats, executable checks and security limitations. The separately assigned automated assessor has supplied [its report](../../testing/MC-022-assessment/report.md); no external human certification is claimed. Its findings are resolved by the separately archived retest below; completion/full-wire freeze becomes effective only on reviewed squash merge.
 
 ### Implementation
 
@@ -76,7 +76,7 @@ Logs and generated input inventory remain in `.work/mc022`. Corrected-source nat
 ## Review and merge
 
 - Branch: `ticket/MC-022-full-wire-crypto-review-and-freeze`.
-- Review/PR: [PR #26](https://github.com/wickesjon/meshChat/pull/26). Assessment findings/retest remain open; do not merge as complete.
+- Review/PR: [PR #26](https://github.com/wickesjon/meshChat/pull/26). Findings are resolved by the separate retest. Final metadata review and squash merge make completion effective.
 - Squash commit title: `MC-022: Full-wire crypto review and freeze`.
 - Completion becomes effective only when the reviewed squash commit lands on main.
 
@@ -106,3 +106,31 @@ The preceding record describes the pre-assessment revision. At the user's reques
 - A-02: native key-loading/QR work accounting and provider lock/reset invalidation remain explicit integration obligations, not completed device evidence.
 
 New regressions first failed on the assessed revision for replay, pin handling and both signed text owners. Corrected targeted friend/organizer/ingress tests and 13 storage-policy tests pass, including legacy conflicting rows, rollback, history deletion/reopening, retained DM direction separation, eight forbidden-character cases in both text fields and preservation of valid multibyte/non-normalized signed originals. The old test expecting rejection of an entire valid post for excessive pin expiry is corrected to the normative text-preserved/pin-suppressed result. Android/Swift SQLCipher checks now include legacy public replay and DM direction separation; execution at the remediation revision and independent assessor retest remain pending.
+
+### Remediation validation and peer review
+
+Remediation source: `695fbc44e472e1f6a5664c9ec0cb3b8a0cc8f792`. The local tool versions above apply. The following checks pass on that source; earlier counts describe the historical candidate only:
+
+- `cargo test --workspace --all-features --locked` and its `--release` equivalent: 151 tests each.
+- `cargo test --manifest-path tests/integration/Cargo.toml --locked` in debug/release: 63 tests each; simulator manifest in debug/release: 40 tests each.
+- Core all-feature release build, core/facade formatting and all-target clippy with `-D warnings`, 13 shared storage-policy checks, reference reproduction and unchanged dependency-package checks pass.
+- Refreshed cargo-deny advisories, bans, licenses and sources pass; only existing unmatched license allowances warn.
+- `python -B tests/integration/crypto/run_native.py kotlin`: both generated-binding tests pass, including corrupt-input refusal and valid-input recovery. The printed assertion panics are deliberately caught test-facade errors, not uncaught failures.
+
+Logs are retained under `.work/assessments/mc022/` (`core-*-after.log`, `facade-*-after.log`, `sim-*-after.log`, `storage-after.log`, `deny-after.log`, and `kotlin-after.log`). A local Android instrumentation compilation attempt could not start its relevant compile because the Linux-built SQLCipher AAR was absent from the Windows cache. This is unavailable evidence, not a source failure or passing native test; the hosted native run supplies that check.
+
+The separately assigned `gpt-5.6-terra` worker `/root/review_mc022_remediation`, medium reasoning, completed review of exact revision `695fbc44e472e1f6a5664c9ec0cb3b8a0cc8f792` and reported **no implementation blockers**. It checked public legacy replay compatibility, retained DM direction separation, pin suppression with signed-text retention, authenticated/unsigned raw-text acceptance boundaries, rollback/recovery regressions and the diff. It read the recorded core/storage logs; it did not claim independent reruns. Its remaining gates were native SQLCipher execution on this revision and the separate assessor retest. This returned review is recorded here as the repository workflow permits; automatic approval review rejected its attempt to post a GitHub COMMENT, so no posted review URL or formal GitHub approval is claimed. This peer review is separate from the construction assessment.
+
+[Remediation CI run 35167822797](https://github.com/wickesjon/meshChat/actions/runs/35167822797) tests this exact source. Its Rust and ticketboard jobs pass. The [iOS job 105032764433](https://github.com/wickesjon/meshChat/actions/runs/35167822797/job/105032764433) passes all native builds, Swift FFI/curve checks, SQLCipher create/reopen/checks/key-loss/reset phases and the Swift public-vector facade under Xcode 16.4/Swift 6 mode. The log explicitly records `MC-022 Swift SQLCipher public replay and DM direction separation passed` and `Swift public crypto vectors and corruption/error parity passed`. Test wrapping and host execution do not certify device protection. The subsequent Android result and assessor retest are recorded below.
+
+### Independent retest disposition
+
+The separate assessor completed its [retest report](../../testing/MC-022-assessment/retest-report.md) on the exact remediation revision above. F-01, F-02 and A-01 are resolved, and it found no new blocking construction defect. It independently ran eight additional probes (including 156 signed forbidden-code-point nickname cases), 63 committed integration tests and 13 storage checks. It verified all 238 snapshot files against their explicit Git objects with documented CRLF normalization. The unchanged report and original bytes/probes/logs are retained with verified hashes in the [assessment evidence archive](../../testing/MC-022-assessment/README.md).
+
+This separately executed automated construction/transcript assessment fulfills the user's requested assessor role, independently of routine Terra PR review. No human firm, formal proof, complete dependency audit or device certification is claimed. A-02 and native display/egress obligations remain explicit in the [freeze record](../../testing/MC-022-full-wire-freeze.md); physical MC-025/027/043/044, integrated MC-037 and release gates remain unchanged. Native execution is still required before completion.
+
+### Final native result and conditional completion
+
+The [Android job 105032764441](https://github.com/wickesjon/meshChat/actions/runs/35167822797/job/105032764441) also passed at `695fbc44e472e1f6a5664c9ec0cb3b8a0cc8f792`: application/BLE/security builds and lint, generated Kotlin vector tests, packaged native-library/alignment checks, and actual security/storage instrumentation on the isolated API 29 emulator (4096-byte pages). Its log records MC-005 create/reopen/key-loss success and MC-018 create/reopen/checks/key-loss/reset success. The checks phase executes the added legacy public replay/conflict and retained DM direction-separation assertions against SQLCipher. No device protection or radio evidence is inferred. All four jobs in run 35167822797 succeeded.
+
+The [full-wire freeze record](../../testing/MC-022-full-wire-freeze.md) names the combined versioned grammar, unchanged compatibility rules, finding dispositions and remaining integration/device/release obligations. Final changes after the tested/reviewed production revision are documentation and attributable evidence only; no source, tests, dependencies, generated bindings or workflow changes invalidate those results. Ticketboard/default, its 12 regressions and whitespace checks pass after the status move. The completed folder and checked merge criterion are staged solely for the final reviewed squash commit; they become effective only when that commit lands on main. Terra must review this final metadata before merge.

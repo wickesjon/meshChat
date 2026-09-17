@@ -12,7 +12,7 @@ if not args.serial.startswith('emulator-'):
     raise ValueError('An explicit emulator serial is required; never select a phone')
 adb = Path(os.environ['ANDROID_HOME']) / 'platform-tools/adb'
 def run(*command):
-    return subprocess.check_output([str(adb), '-s', args.serial, *command], timeout=240)
+    return subprocess.check_output([str(adb), '-s', args.serial, *command], timeout=600)
 if run('shell','getprop','ro.kernel.qemu').strip() != b'1':
     raise ValueError('Selected device is not an emulator')
 for directory in ['debug', 'androidTest/debug']:

@@ -28,7 +28,17 @@ import java.io.File
 class ChannelUiTest {
     @get:Rule val ui = createAndroidComposeRule<MainActivity>()
     private fun shown(text: String) = ui.onAllNodesWithText(text).fetchSemanticsNodes().isNotEmpty()
-    private fun waitFor(text: String) { ui.waitUntil(20000) { shown(text) } }
+    // CI may use software emulation; protected SQLCipher operations retain their
+    // production KDF cost. This is a functional deadline, not a latency claim.
+    private fun awaitState(condition: () -> Boolean) {
+        ui.waitUntil(120000) {
+            check(!(ui.activity.application as MeshApplication).model.screen.locked) {
+                "Protected app entered its unavailable state"
+            }
+            condition()
+        }
+    }
+    private fun waitFor(text: String) { awaitState { shown(text) } }
     private fun click(text: String) {
         val node=ui.onNodeWithText(text)
         try { node.assertIsDisplayed() } catch (_: AssertionError) { node.performScrollTo() }
@@ -64,7 +74,7 @@ class ChannelUiTest {
         ui.onNodeWithText("Send").assertIsNotEnabled()
         ui.onNode(hasSetTextAction()).performTextReplacement("Synthetic offline draft")
         ui.onNodeWithText("Send").assertIsEnabled().performClick()
-        ui.waitUntil(5000) { ui.onAllNodesWithText("Not sent.",substring=true).fetchSemanticsNodes().isNotEmpty() }
+        awaitState { ui.onAllNodesWithText("Not sent.",substring=true).fetchSemanticsNodes().isNotEmpty() }
         ui.runOnUiThread {
             val keyboard=ui.activity.getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager
             keyboard.hideSoftInputFromWindow(ui.activity.window.decorView.windowToken,0)
@@ -89,14 +99,14 @@ class ChannelUiTest {
         screenshot("dark-chat")
         ui.onNodeWithText("Back").performClick()
         click("Join a word-triple channel");click("Join channel")
-        ui.waitUntil(5000) { (ui.activity.application as MeshApplication).model.screen.selected?.private == true }
+        awaitState { (ui.activity.application as MeshApplication).model.screen.selected?.private == true }
         ui.onNodeWithText("Back").performClick()
         ui.onNodeWithText("Settings").performClick()
         ui.onNode(isToggleable()).performScrollTo().performClick()
         click("Save")
         // The old channel list is already visible when the dialog closes; wait
         // for the asynchronous protected write and new UI snapshot instead.
-        ui.waitUntil(20000) { (ui.activity.application as MeshApplication).model.screen.light }
+        awaitState { (ui.activity.application as MeshApplication).model.screen.light }
         waitFor("Your channels");screenshot("light-channels")
         val snapshot=(ui.activity.application as MeshApplication).model.screen
         assertTrue(snapshot.light);assertEquals(4,snapshot.channels.size)

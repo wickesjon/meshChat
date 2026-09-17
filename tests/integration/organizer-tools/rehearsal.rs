@@ -40,7 +40,7 @@ fn offline_two_staff_updates_cross_a_nonadopting_relay() {
         power::Platform,
         relay::{Relay, Request, Traffic},
     };
-    let root = create_root("Offline rehearsal", 202000, WALL as u32).unwrap();
+    let root = create_root("Offline rehearsal", 202000, 201000, WALL as u32).unwrap();
     let opened = OpenRoot::open(&root.vault, &root.unlock, WALL as u32).unwrap();
     let mut receiver = Node::new(5, Some(&root.event));
     let mut bridge = Node::new(4, None);

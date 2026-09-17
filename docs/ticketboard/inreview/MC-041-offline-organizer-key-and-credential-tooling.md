@@ -59,6 +59,6 @@ Initial validation: four Rust organizer tests pass, including encrypted root/imp
 ## Review and merge
 
 - Branch: `ticket/MC-041-offline-organizer-key-and-credential-tooling`.
-- Review/PR: pending.
+- Review/PR: [PR #35](https://github.com/wickesjon/meshChat/pull/35). Separate `gpt-5.6-terra` medium review of `9b6bb55902020e0b0d459cb13a8497ed93b7b6ae` found one blocker: issuance did not enforce the design's mandatory event-end plus 24-hour bound. The fix requires an explicit event end, authenticates it inside the local vault, bounds root and staff expiry, and adds exact-boundary/overflow tests. No other source findings were reported. Follow-up review and final evidence remain pending. The dependency gate also identified unversioned local core dependencies; these now use the exact workspace package version without changing any dependency version.
 - Squash commit title: `MC-041: Offline organizer key and credential tooling`.
 - Completion becomes effective only when the reviewed squash commit lands on main.

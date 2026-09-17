@@ -41,6 +41,6 @@ class OrganizerImportTest {
             if(x in rows.indices && y in rows.indices && rows[y][x]=='1')0xff000000.toInt() else 0xffffffff.toInt()
         }
         val bitmap=BinaryBitmap(HybridBinarizer(RGBLuminanceSource(side,side,pixels)))
-        assertEquals(fixtures.getValue("staff_a"),MultiFormatReader().decode(bitmap).text)
+        assertTrue("QR must decode to the issued synthetic bundle",fixtures.getValue("staff_a")==MultiFormatReader().decode(bitmap).text)
     }
 }

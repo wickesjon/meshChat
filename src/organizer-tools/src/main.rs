@@ -16,6 +16,8 @@ struct Request {
     #[serde(default)]
     expiry: u32,
     #[serde(default)]
+    event_end: u32,
+    #[serde(default)]
     before: u32,
     #[serde(default)]
     after: u32,
@@ -32,11 +34,11 @@ impl Drop for Request {
 fn dispatch(r: &Request, now: u32) -> Result<Value, Invalid> {
     match r.operation.as_str() {
         "check-root" => {
-            tool::check_root(&r.name, r.expiry, now)?;
+            tool::check_root(&r.name, r.expiry, r.event_end, now)?;
             Ok(json!({"ok":true}))
         }
         "create" => {
-            let root = tool::create_root(&r.name, r.expiry, now)?;
+            let root = tool::create_root(&r.name, r.expiry, r.event_end, now)?;
             Ok(json!({"ok":true,"vault":root.vault,"unlock":&*root.unlock,"event":root.event}))
         }
         "inspect" | "check-staff" | "issue" => {

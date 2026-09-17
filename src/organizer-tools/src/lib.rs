@@ -114,13 +114,14 @@ pub struct CreatedRoot {
 }
 /// The randomly generated 256-bit unlock code is returned once, never persisted.
 /// It is a key, not a password: no human passphrase is accepted by this format.
-pub fn create_root(name: &str, expiry: u32, now: u32) -> Result<CreatedRoot> {
-    check_root(name, expiry, now)?;
+pub fn create_root(name: &str, expiry: u32, event_end: u32, now: u32) -> Result<CreatedRoot> {
+    check_root(name, expiry, event_end, now)?;
     let seed = random::<32>()?;
     let key = random::<32>()?;
     let nonce = random::<12>()?;
     let mut plain = Zeroizing::new(seed.to_vec());
     plain.extend_from_slice(&expiry.to_be_bytes());
+    plain.extend_from_slice(&event_end.to_be_bytes());
     plain.extend_from_slice(name.as_bytes());
     let cipher = ChaCha20Poly1305::new_from_slice(key.as_ref()).map_err(|_| Invalid)?;
     let encrypted = cipher
@@ -141,9 +142,9 @@ pub fn create_root(name: &str, expiry: u32, now: u32) -> Result<CreatedRoot> {
         event: event_uri(&seed, name, expiry)?,
     })
 }
-pub fn check_root(name: &str, expiry: u32, now: u32) -> Result<()> {
+pub fn check_root(name: &str, expiry: u32, event_end: u32, now: u32) -> Result<()> {
     text::validate(name, text::Kind::EventName).map_err(|_| Invalid)?;
-    if expiry <= now {
+    if expiry <= now || event_end == 0 || u64::from(expiry) > u64::from(event_end) + 86_400 {
         return Err(Invalid);
     }
     Ok(())
@@ -168,6 +169,7 @@ pub struct OpenRoot {
     seed: Zeroizing<[u8; 32]>,
     pub name: String,
     pub expiry: u32,
+    pub event_end: u32,
 }
 impl OpenRoot {
     pub fn open(vault: &str, unlock: &str, now: u32) -> Result<Self> {
@@ -176,7 +178,7 @@ impl OpenRoot {
             return Err(Invalid);
         }
         let raw = unhex(vault)?;
-        if raw.len() < VAULT.len() + 12 + 16 + 37 || !raw.starts_with(VAULT) {
+        if raw.len() < VAULT.len() + 12 + 16 + 41 || !raw.starts_with(VAULT) {
             return Err(Invalid);
         }
         let cipher = ChaCha20Poly1305::new_from_slice(&key).map_err(|_| Invalid)?;
@@ -194,18 +196,20 @@ impl OpenRoot {
                 )
                 .map_err(|_| Invalid)?,
         );
-        if plain.len() < 37 {
+        if plain.len() < 41 {
             return Err(Invalid);
         }
         let expiry = u32::from_be_bytes(plain[32..36].try_into().map_err(|_| Invalid)?);
-        let name = std::str::from_utf8(&plain[36..])
+        let event_end = u32::from_be_bytes(plain[36..40].try_into().map_err(|_| Invalid)?);
+        let name = std::str::from_utf8(&plain[40..])
             .map_err(|_| Invalid)?
             .to_owned();
-        check_root(&name, expiry, now)?;
+        check_root(&name, expiry, event_end, now)?;
         Ok(Self {
             seed: Zeroizing::new(plain[..32].try_into().map_err(|_| Invalid)?),
             name,
             expiry,
+            event_end,
         })
     }
     pub fn event(&self) -> Result<String> {
@@ -217,6 +221,7 @@ impl OpenRoot {
             || before > after
             || after <= now
             || after > self.expiry
+            || u64::from(after) > u64::from(self.event_end) + 86_400
             || self.expiry <= now
         {
             return Err(Invalid);

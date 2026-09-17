@@ -64,6 +64,7 @@ class Console:
         create, issue = ttk.Frame(tabs, padding=18), ttk.Frame(tabs, padding=18)
         tabs.add(create, text='Create event'); tabs.add(issue, text='Provision staff')
         self.name = self.field(create, 'Event name (up to 32 UTF-8 bytes)')
+        self.event_end = self.field(create, 'Event ends · UTC · YYYY-MM-DD HH:MM')
         self.expiry = self.field(create, 'Root expiry · UTC · YYYY-MM-DD HH:MM')
         ttk.Label(create, text='The root is saved encrypted. A random unlock code is displayed once.\n'
                   'Record it securely and separately; a lost code cannot be recovered.', wraplength=540).pack(anchor='w', pady=12)
@@ -96,7 +97,8 @@ class Console:
                                  'Existing files are never overwritten. See the offline console guide.', parent=self.window)
 
     def root_request(self, operation):
-        return {'operation': operation, 'name': self.name.get(), 'expiry': timestamp(self.expiry.get())}
+        return {'operation': operation, 'name': self.name.get(), 'expiry': timestamp(self.expiry.get()),
+                'event_end': timestamp(self.event_end.get())}
 
     def check_root(self):
         backend(self.root_request('check-root'))
@@ -105,7 +107,7 @@ class Console:
     def create(self):
         request = self.root_request('create')
         backend({**request, 'operation': 'check-root'})
-        if not messagebox.askokcancel('Confirm event', f"Create {request['name']}?\nRoot expires {self.expiry.get()} UTC.", parent=self.window):
+        if not messagebox.askokcancel('Confirm event', f"Create {request['name']}?\nEvent ends {self.event_end.get()} UTC.\nRoot expires {self.expiry.get()} UTC (at most 24 hours later).", parent=self.window):
             return
         path = filedialog.asksaveasfilename(parent=self.window, title='Save encrypted root', defaultextension='.mcvault')
         if not path:

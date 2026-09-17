@@ -17,7 +17,7 @@ BIN = ROOT / 'target/release' / ('meshchat-organizer.exe' if sys.platform == 'wi
 class OfflineConsoleChecks(unittest.TestCase):
     def test_pipe_issuance_dry_run_and_private_error_redaction(self):
         now = int(time.time())
-        request = {'operation': 'create', 'name': 'Synthetic local event', 'expiry': now + 86400}
+        request = {'operation': 'create', 'name': 'Synthetic local event', 'expiry': now + 86400, 'event_end': now + 7200}
         response = console.backend(request)
         self.assertEqual(len(response['unlock']), 64)
         request = {'operation': 'check-staff', 'vault': response['vault'], 'unlock': response['unlock'],
@@ -28,7 +28,7 @@ class OfflineConsoleChecks(unittest.TestCase):
         self.assertIn('matrix', result)
         self.assertNotIn('unlock', result)
         self.assertNotIn('staff', result)
-        self.assertNotIn(response['unlock'], json.dumps(result))
+        self.assertTrue(response['unlock'] not in json.dumps(result), 'A public response must not contain the unlock code')
         malformed = subprocess.run([str(BIN), '--private-pipe'], input=b'{"unlock":"PRIVATE-MARKER","unknown":true}',
                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=30)
         self.assertNotEqual(malformed.returncode, 0)

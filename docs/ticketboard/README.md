@@ -39,7 +39,7 @@ After edits run `python tests/ticketboard/validate.py --write`; then run `python
 | [MC-020](complete/MC-020-authenticated-encrypted-dms-and-reactions.md) | Authenticated encrypted DMs and reactions | complete | MC-019, MC-008, MC-006, MC-016 |
 | [MC-021](complete/MC-021-organizer-trust-credentials-and-signed-updates.md) | Organizer trust, credentials and signed updates | complete | MC-019, MC-006, MC-016 |
 | [MC-022](backlog/MC-022-full-wire-crypto-review-and-freeze.md) | Full-wire crypto review and freeze | backlog | MC-020, MC-021 |
-| [MC-023](backlog/MC-023-android-gatt-transport.md) | Android GATT transport | backlog | MC-004, MC-016 |
+| [MC-023](inprogress/MC-023-android-gatt-transport.md) | Android GATT transport | inprogress | MC-004, MC-016, MC-019 |
 | [MC-024](backlog/MC-024-android-connection-and-power-integration.md) | Android connection and power integration | backlog | MC-023, MC-014 |
 | [MC-025](backlog/MC-025-android-bench-mesh-and-early-field-gate.md) | Android integrated bench mesh and field gate | backlog | MC-024, MC-015, MC-029, MC-030, MC-031, MC-032, MC-033, MC-042, MC-022 |
 | [MC-026](backlog/MC-026-ios-corebluetooth-driver.md) | iOS CoreBluetooth driver | backlog | MC-004, MC-016 |

@@ -43,10 +43,10 @@ Necessary additional paths under the user's standing repository-local scope appr
 
 ## Exit criteria
 
-- [ ] Counter tests distinguish packets, logical messages and egress sends and cannot imply successful delivery.
-- [ ] Battery estimates are labeled and unsupported OS attribution is never presented as measurement.
-- [ ] Share cards contain only user-approved local aggregates; no background telemetry or leaderboard is introduced.
-- [ ] Relevant checks pass, evidence is recorded, required review is complete, and the ticket is squash merged to main.
+- [x] Counter tests distinguish packets, logical messages and egress sends and cannot imply successful delivery.
+- [x] Battery estimates are labeled and unsupported OS attribution is never presented as measurement.
+- [x] Share cards contain only user-approved local aggregates; no background telemetry or leaderboard is introduced.
+- [x] Relevant checks pass, evidence is recorded, and required source review is complete. Final revision review and squash merge are recorded in PR37; completion is effective only on main.
 
 ## Potential fallbacks
 
@@ -57,7 +57,7 @@ A triggered fallback must be recorded with evidence. It does not authorize weake
 
 ## Evidence
 
-Implemented: bounded shared native counters and explicit session reset; fresh device-level power feedback without fabricated app drain; Android live panel plus selected-category frozen image preview and bounded read-only export; matching SwiftUI component; core/Kotlin/Swift/emulator regressions. Three targeted Rust tests and strict workspace clippy pass. Normal both-ABI Android bindings and production/test Kotlin compilation pass. Full Rust/Android/Mac checks and Terra review are pending; no physical or final acceptance is claimed.
+Implemented: bounded shared native counters and explicit session reset; fresh device-level power feedback without fabricated app drain; Android live panel plus selected-category frozen image preview and bounded read-only export; matching SwiftUI component; core/Kotlin/Swift/emulator regressions. Three targeted Rust tests and strict workspace clippy pass. Normal both-ABI Android bindings and production/test Kotlin compilation pass. Full checks and source review now pass as recorded below; no physical acceptance is claimed.
 
 ## Review and merge
 
@@ -84,3 +84,9 @@ Windows local commands/results (logs and repeatable environment scripts in ignor
 - Explicit synthetic `emulator-5580`, API29 x86_64 image revision8, emulator37.1.11/WHPX: channel baseline, stats, organizer and Beacon runners PASS. Final rebuilt-app baseline/stats repeat PASS. Stats exercises production panel navigation, default-off export choices, reset, actual image encoding/read-only URI, selected-field redaction, capacity refusal and expiry cleanup. The public synthetic card and preview are readable; screenshot timing advances Compose's animation clock before the final capture. No recipient is contacted and no real-device or delivery/energy certification is claimed.
 
 Hosted Android job105358907370 on this production revision is unavailable evidence: downloading the unchanged graphics source returned HTTP503 before app checks. Local validated aligned dependencies and package/native/emulator checks above cover the changed Android consumer under the approved local-validation policy. This does not claim that hosted job passed. Protected storage/identity and their test inputs are unchanged from MC-030; that ticket retains the actual lifecycle/security results. Shared core storage tests run again above. Mac checks remain required for this revision and are still pending.
+
+### Final native evidence and pending merge
+
+[Mac job105358907354](https://github.com/wickesjon/meshChat/actions/runs/35267705136/job/105358907354) PASS on production SHA `caaead54f0eb0bd6afd78cb6ee8907e0060dd3b8`: Xcode16.4/Swift6.1.2 on macOS15 arm64; regenerated Rust/Swift consumers, stats/FFI trace, Supporter, unsigned app Debug/Release simulator builds, BLE/security Debug/Release device and simulator builds, organizer import, security curves and encrypted SQLCipher storage integration. Hosted Rust and ticketboard also PASS. Subsequent changes only record evidence and advance the Android test animation clock; no native production or Swift test inputs changed.
+
+The final Android test APK/lint rebuild and settled stats emulator repeat PASS. All three synthetic captures were inspected: panel and selected preview are legible without a transitioning Settings overlay, and the exported card includes only the selected aggregate categories. `cargo fmt --all -- --check`, `git diff --check`, ticketboard validation and its 12 unit tests PASS. Applicable local/native gates and separate source review are satisfied under the local-validation policy; final exact-revision review will be recorded in PR37. This ticket is staged in complete for its reviewed squash; completion is effective only when it lands on main. Physical and independent security gates remain unchanged.

@@ -58,7 +58,7 @@ After edits run `python tests/ticketboard/validate.py --write`; then run `python
 | [MC-039](backlog/MC-039-release-operations-store-readiness-and-user-docs.md) | Release operations, store readiness and user docs | backlog | MC-034, MC-035, MC-037, MC-038 |
 | [MC-040](backlog/MC-040-v1-release-acceptance-gate.md) | v1 release acceptance gate | backlog | MC-039 |
 | [MC-041](complete/MC-041-offline-organizer-key-and-credential-tooling.md) | Offline organizer key and credential tooling | complete | MC-021 |
-| [MC-042](backlog/MC-042-honest-contribution-and-power-feedback.md) | Honest contribution and power feedback | backlog | MC-028, MC-024 |
+| [MC-042](complete/MC-042-honest-contribution-and-power-feedback.md) | Honest contribution and power feedback | complete | MC-028, MC-024 |
 | [MC-043](backlog/MC-043-android-physical-key-and-storage-verification.md) | Android physical key and storage verification | backlog | MC-017, MC-018, MC-029, MC-030, MC-031, MC-032, MC-033, MC-042 |
 | [MC-044](backlog/MC-044-ios-physical-key-and-storage-verification.md) | iOS physical key and storage verification | backlog | MC-017, MC-018, MC-035 |
 | [MC-045](complete/MC-045-defer-physical-acceptance.md) | Defer physical acceptance until integrated candidates | complete | MC-001, MC-007 |

@@ -950,7 +950,7 @@ The app has a structural advantage over most cooperative systems: **receiving an
 
 ### 16.1 Remove the disincentive (most of the battle)
 
-- **Prove the battery cost, don't claim it:** an in-app meter shows mesh drain. Where the OS exposes per-app battery attribution it shows the *measured* figure ("Mesh used ~2% in the last hour, measured"); where attribution is unavailable it shows a clearly-labeled *estimate* from the §11 model ("estimated"), never presenting a model figure as a measurement. Trust in a number beats any "battery friendly!" copy. The Auto power default (§11.4) reinforces the story: "the app manages its own power draw based on your battery" is a stronger pitch than either always-full-power or always-throttled.
+- **Report power honestly:** show device battery readings separately from app consumption and expose the active power policy. An app-specific drain number requires supported attribution (labeled measured) or a calibrated model (labeled estimated). The current adapters provide neither, so MC-042 explicitly shows app consumption unavailable and omits the number. Missing or older-than-one-minute device readings are unavailable; device charge loss is never attributed to the app. Auto power remains the default (§11.4).
 - **Teach the airplane-mode trick** (onboarding + a contextual tip when signal bars die): airplane mode with BT re-enabled kills the expensive cell-tower hunting and keeps the mesh alive — the phone lasts *longer* than in normal no-signal operation. If users internalize this one trick, the app flips from "battery drain" to "battery saver" in their mental model.
 
 ### 16.2 Make turning it off carry a felt (and honest) cost
@@ -961,9 +961,10 @@ The app has a structural advantage over most cooperative systems: **receiving an
 
 ### 16.3 Make contributing feel good — gamification with guardrails
 
-- Live contribution stat: "Your phone carried 1,240 messages for ~85 people today."
-- Locally-earned titles: **Data Mule** (relayed between disjoint peer clusters — detectable from local connection history), **Night Shift** (relaying 2–6am), **Backbone** (top-decile relay volume vs. own history).
-- **"Mesh Wrapped"** end-of-event share card (image export) — doubles as the morning-after viral loop.
+- Live contribution is literal local activity: received GATT frames, reassembled logical packet copies, scheduled frames, successful native frame completions, completed outgoing objects and completed live CHAT relay copies per egress connection. Retries/fragments and repeated packets are separate units. None establish delivery or unique messages/people.
+- Contribution progress uses completed live CHAT relay copies. The transport has no authenticated unique-person count, disjoint-cluster topology, local-night provenance or retained percentile baseline; do not award Data Mule/Night Shift/Backbone claims from those unsupported inferences. No comparative title or reward is inferred from raw traffic volume.
+- Session retention is explicit: counters live only with the protected transport owner, survive ordinary radio stop/start, and reset on explicit counter reset, process restart or owner/identity replacement. Reset never changes transport budgets, history or trust. No daily/lifetime claim is made without matching retained evidence.
+- A contribution image uses a frozen preview with user-selected aggregate categories, followed by explicit sharing. It contains only the selected numeric counters, session duration and delivery/coverage qualifications; no identities, message text, channel words, device battery or free-form metadata. Android temporary exports are bounded to eight images with one-day cleanup on export; iOS transfers the selected image through the native share sheet.
 - **Guardrail:** all stats are locally measured and private by default. **No leaderboards over the mesh** — broadcast rankings invite Sybil/fake-relay gaming that pollutes the network for points, and cost airtime. Self-shared brag cards deliver the social payoff without the attack surface.
 
 ### 16.4 Explicitly ruled out: transferable rewards

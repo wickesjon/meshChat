@@ -138,3 +138,7 @@ path = "../../tests/bench/beacon/native.rs"
 [[test]]
 name = "native_organizer"
 path = "../../tests/integration/android-ui/organizer.rs"
+
+[[test]]
+name = "native_stats"
+path = "../../tests/integration/stats/native.rs"

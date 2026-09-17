@@ -58,7 +58,7 @@ Implementation is underway. Native acceptance and independent ticket review rema
 ## Review and merge
 
 - Branch: `ticket/MC-035-ios-feature-parity-and-lifecycle-ui`.
-- Review/PR: pending.
+- Review/PR: https://github.com/wickesjon/meshChat/pull/38 — ready PR, validation and follow-up review pending.
 - Squash commit title: `MC-035: iOS feature parity and lifecycle UI`.
 - Completion becomes effective only when the reviewed squash commit lands on main.
 
@@ -77,3 +77,5 @@ Additional exact test registration path under standing scope approval: `tests/in
 Core revision `8a205b7`: local Rust 1.85.1 read-only formatting check, strict workspace/all-target/all-feature clippy, complete workspace debug and release suites, release build and 14 storage policy checks pass. An existing native-transport fixture reused a process-ID-based temporary database name on Windows; removing only its ignored `.work/friends-tests/*-native_transport-database-*.sqlite*` files resolved the schema setup failures, and all 14 native transport tests and the full rerun pass. No production storage fallback was added. Hosted Rust also passes in run `35273161582`.
 
 Mac native builds exposed and corrected Swift state declaration/actor annotations, two unnecessary throwing annotations, and an existing diagnostic SYNC event expectation. The separate synthetic native acceptance host now compiles the production SwiftUI/model/SQLCipher/core/driver with test-only wrapping and framed-radio inputs. Its generated project and evidence stay under `.work/ios-ui/`, and no test switches or fallback protection are in the production entry point. Native test execution and final device/simulator builds remain pending.
+
+Initial separate Terra medium review of `ba7d9befe418b6bab772408c430755d75630c3ba` found P2: own and peer DM rows may share an ID, so SwiftUI cannot key only by that ID. Corrected with direction-plus-ID keys and a native UI collision/removal regression. Review outcome was FAIL/pending until the fix is reviewed and native checks pass; no other code-level finding was reported. Author also removed an unintended exported history helper so only the canonical Rust requester can call the stored-channel intake. Targeted catch-up/channel tests pass after that API restriction. Follow-up review will cover the final revision.

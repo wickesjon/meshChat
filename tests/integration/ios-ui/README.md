@@ -23,7 +23,8 @@ and retains screenshots containing only disposable public test data. Generated
 staff credentials are not screenshots or uploaded fixtures.
 
 The result bundle and build/test log stay under `.work/ios-ui/`; a passing result
-requires both tests to pass. Compilation alone is not acceptance. These checks
+requires all three tests to pass, including opposite-direction message-ID
+collision rendering/removal. Compilation alone is not acceptance. These checks
 do not certify physical Secure Enclave operation, camera scanning, Bluetooth
 interoperability, background restoration or battery performance. MC-027/044
 retain those real-device gates.

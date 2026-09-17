@@ -229,7 +229,6 @@ impl NativeChannels {
             .map_err(|_| ChannelError::Unavailable)
     }
 }
-#[uniffi::export]
 impl NativeChannels {
     pub(crate) fn accept_stored(
         &self,
@@ -260,6 +259,9 @@ impl NativeChannels {
         self.save(&store, raw, false, wall)?;
         Ok(true)
     }
+}
+#[uniffi::export]
+impl NativeChannels {
     #[uniffi::constructor]
     pub fn new(identity: PublicIdentity, now: u64) -> Result<Self, ChannelError> {
         if identity.generation.len() != 16 || now > u64::MAX - 900_000 {

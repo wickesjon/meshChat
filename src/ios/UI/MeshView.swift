@@ -4,6 +4,15 @@ import UIKit
 private let animals = Array(meshAnimals.dropFirst())
 private let reactions = meshReactions
 
+private struct DirectRowKey: Hashable { let own: Bool; let id: Data }
+private extension DirectMessage { var rowKey: DirectRowKey { DirectRowKey(own: own, id: id) } }
+
+struct DirectRows<Content: View>: View {
+    let rows: [DirectMessage]
+    @ViewBuilder let content: (DirectMessage) -> Content
+    var body: some View { ForEach(rows, id: \.rowKey, content: content) }
+}
+
 private struct AvatarPicker: View {
     @Binding var value: UInt8
     var body: some View {
@@ -214,7 +223,7 @@ private struct ChatView: View {
             }.padding()
             ScrollView { LazyVStack(alignment: .leading, spacing: 18) {
                 if isDirect {
-                    ForEach(state.directRows, id: \.id) { row in VStack(alignment: .leading, spacing: 6) {
+                    DirectRows(rows: state.directRows) { row in VStack(alignment: .leading, spacing: 6) {
                         Text(row.own ? "You" : state.direct?.nickname ?? "Pinned friend").font(.caption)
                         Text(verbatim: row.text)
                         if state.delayed.contains(where: { $0.suffix(8) == row.id }) { Text("Received through nearby history").font(.caption) }

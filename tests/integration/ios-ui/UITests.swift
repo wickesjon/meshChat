@@ -1,6 +1,14 @@
 import XCTest
 
 final class MeshUITests: XCTestCase {
+    @MainActor func testOppositeDirectionMessageIDsRemainDistinct() {
+        let app = XCUIApplication(); app.launchArguments = ["--row-identities"]; app.launch()
+        XCTAssertTrue(app.staticTexts["Own collision"].waitForExistence(timeout: 20))
+        XCTAssertTrue(app.staticTexts["Peer collision"].exists)
+        app.buttons["Remove own row"].tap()
+        XCTAssertFalse(app.staticTexts["Own collision"].exists)
+        XCTAssertTrue(app.staticTexts["Peer collision"].exists)
+    }
     @MainActor func testProductionFeatureIntegration() {
         let app = XCUIApplication(); app.launchArguments = ["--integration"]; app.launch()
         let result = app.staticTexts["integration-result"]

@@ -343,13 +343,16 @@ fn store_failure_clock_and_two_concurrent_jobs_recover() {
 
 #[test]
 fn independent_vectors_padding_boundaries_malformed_plaintext_and_forgery() {
-    let vectors: Vec<_> = include_str!("../../vectors/crypto/dm-v1.tsv")
+    let vectors = include_str!("../../vectors/crypto/dm-v1.tsv")
         .lines()
         .map(|l| {
             let (k, v) = l.split_once('\t').unwrap();
-            (k, database::unhex(v))
+            (k.to_string(), database::unhex(v))
         })
         .collect();
+    check_binding_vectors(vectors);
+}
+pub fn check_binding_vectors(vectors: std::collections::HashMap<String, Vec<u8>>) {
     for (name, raw) in vectors {
         let mut receiver = if name.starts_with("chat_3_") {
             Node::new(2, 3)

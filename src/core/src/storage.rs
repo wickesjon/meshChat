@@ -554,11 +554,30 @@ impl EncryptedStore {
         let digest = Sha256::digest(&immutable_bytes);
         self.tx(||{
             self.prune_at(time)?;
-            let key=vec![b(&subject),n(item.direction.into()),n(item.logical_type.into()),b(&item.message_id)];
-            let rows=self.rows("SELECT digest FROM ledger WHERE subject=? AND direction=? AND logical_type=? AND message_id=?",key.clone(),1)?;
-            if let Some(row)=rows.first(){
-                if bytes(row.cells.first().ok_or(StorageError::Schema)?)?==digest.as_slice(){return Ok((AcceptResult::Replay, false))}
-                self.exec("UPDATE ledger SET conflict=1 WHERE subject=? AND direction=? AND logical_type=? AND message_id=?",key)?;
+            // Public signatures identify the same broadcast in either local
+            // direction. Preserve DM direction separation and history metadata.
+            // Read BOTH legacy public directions; no migration deletes evidence.
+            let public=matches!(subject.first(),Some(1|3));
+            let direction=if public {0} else {item.direction};
+            let key=vec![b(&subject),n(direction.into()),n(item.logical_type.into()),b(&item.message_id)];
+            let (query,lookup,limit)=if public {
+                ("SELECT digest FROM ledger WHERE subject=? AND logical_type=? AND message_id=? AND direction IN (0,1)",
+                 vec![b(&subject),n(item.logical_type.into()),b(&item.message_id)],2)
+            } else {
+                ("SELECT digest FROM ledger WHERE subject=? AND direction=? AND logical_type=? AND message_id=?",key.clone(),1)
+            };
+            let rows=self.rows(query,lookup.clone(),limit)?;
+            if !rows.is_empty(){
+                let mut same=true;
+                for row in &rows { same &= bytes(row.cells.first().ok_or(StorageError::Schema)?)?==digest.as_slice(); }
+                if same{return Ok((AcceptResult::Replay, false))}
+                // Legacy rows with different digests are already ambiguous;
+                // never select a preferred direction and issue another effect.
+                if public {
+                    self.exec("UPDATE ledger SET conflict=1 WHERE subject=? AND logical_type=? AND message_id=? AND direction IN (0,1)",lookup)?;
+                } else {
+                    self.exec("UPDATE ledger SET conflict=1 WHERE subject=? AND direction=? AND logical_type=? AND message_id=?",key)?;
+                }
                 return Ok((AcceptResult::Conflict, false))
             }
             if self.scalar("SELECT count(*) FROM ledger",vec![])?>=100000{return Err(StorageError::Capacity)}

@@ -50,8 +50,9 @@ impl Database {
         let folder = root.join(".work/friends-tests");
         std::fs::create_dir_all(&folder).unwrap();
         Self::reopen(folder.join(format!(
-            "{}-{}.sqlite",
+            "{}-{}-{}.sqlite",
             std::process::id(),
+            module_path!().replace("::", "-"),
             NEXT.fetch_add(1, Ordering::Relaxed)
         )))
     }

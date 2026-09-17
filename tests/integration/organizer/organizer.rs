@@ -13,7 +13,204 @@ use meshchat_core::{
 };
 use sha2::{Digest, Sha256};
 use std::sync::Arc;
+#[path = "../crypto/text_cases.rs"]
+mod text_cases;
 const WALL: i64 = 200_000;
+
+#[test]
+fn returned_own_post_is_replay_after_reopen_and_history_deletion() {
+    for (restart, prune_history) in [(false, false), (true, false), (true, true)] {
+        let mut a = Node::new(2, true);
+        let session = a
+            .org
+            .import_staff(
+                &mut a.ingress,
+                &a.store,
+                staff(&credential(), 7),
+                1,
+                Some(WALL),
+            )
+            .unwrap()
+            .unwrap();
+        let raw = a
+            .org
+            .sign(
+                &mut a.ingress,
+                &a.friends,
+                &a.store,
+                &session,
+                &a.link,
+                chat(9, 7, 991, true, WALL as u32 + 100),
+                2,
+                Some(WALL),
+            )
+            .unwrap()
+            .unwrap();
+        // Exercise legacy direction-1 records, not just canonical new writes.
+        a.db.execute("UPDATE ledger SET direction=1".into(), vec![])
+            .unwrap();
+        if prune_history {
+            a.store
+                .delete_history(codec::EVENT_CHANNEL.to_vec(), false)
+                .unwrap();
+        }
+        if restart {
+            let path = a.db.path.clone();
+            drop(a);
+            a = Node::new(2, false);
+            a.db = Database::reopen(path);
+            a.store = EncryptedStore::open(Box::new(a.db.clone()), vec![2; 16], false, Some(WALL))
+                .unwrap();
+        }
+        let returned = a.receive(&raw, 1000).unwrap();
+        assert_eq!(returned.result, AcceptResult::Replay);
+        let rows =
+            a.db.query("SELECT count(*) FROM history".into(), vec![], 1)
+                .unwrap();
+        assert!(
+            matches!(rows[0].cells[0], SqlValue::Integer { value } if value == i64::from(!prune_history))
+        );
+        let rows =
+            a.db.query("SELECT count(*) FROM ledger".into(), vec![], 1)
+                .unwrap();
+        assert!(matches!(rows[0].cells[0], SqlValue::Integer { value: 1 }));
+        let mut conflict = raw.clone();
+        conflict[39] = b'j';
+        resign(&mut conflict, 7);
+        assert_eq!(
+            a.receive(&conflict, 2000).unwrap().result,
+            AcceptResult::Conflict
+        );
+        let rows =
+            a.db.query("SELECT conflict FROM ledger".into(), vec![], 1)
+                .unwrap();
+        assert!(matches!(rows[0].cells[0], SqlValue::Integer { value: 1 }));
+    }
+}
+
+#[test]
+fn out_of_policy_pin_preserves_valid_signed_text_without_pin_authority() {
+    for (expiry, expected_pin) in [
+        (0, false),
+        (199999, false),
+        (200000, true),
+        (201000, true),
+        (201001, false),
+        (202001, false),
+    ] {
+        let mut n = Node::new(3, true);
+        let raw = chat(9, 7, 992, true, expiry);
+        let accepted = n.receive(&raw, 1000).unwrap();
+        assert_eq!(accepted.result, AcceptResult::Accepted);
+        assert_eq!(
+            n.org
+                .current(&n.store, &accepted.authority, Some(WALL))
+                .unwrap(),
+            (true, expected_pin)
+        );
+        assert_eq!(
+            n.store
+                .history(codec::EVENT_CHANNEL.to_vec(), false, 10)
+                .unwrap()[0]
+                .body,
+            raw
+        );
+    }
+}
+
+#[test]
+fn forbidden_authenticated_organizer_text_has_no_effect_and_valid_variant_recovers() {
+    for (forbidden, nickname) in text_cases::FORBIDDEN
+        .into_iter()
+        .flat_map(|c| [(c, true), (c, false)])
+    {
+        let mut n = Node::new(3, true);
+        let valid = chat(9, 7, 993, true, 0);
+        let mut bad = text_cases::replace(
+            &valid,
+            if nickname { forbidden } else { "A" },
+            Some(if nickname { "hello" } else { forbidden }),
+        );
+        resign(&mut bad, 7);
+        let job = n.feed(&bad, 1000).unwrap().job.unwrap();
+        assert!(n.finish(job, 1000).unwrap().is_none());
+        assert!(
+            n.store
+                .history(codec::EVENT_CHANNEL.to_vec(), false, 10)
+                .unwrap()
+                .is_empty()
+        );
+        assert_eq!(
+            n.receive(&valid, 2000).unwrap().result,
+            AcceptResult::Accepted
+        );
+    }
+}
+
+#[test]
+fn organizer_outgoing_rejects_unsafe_text_and_receiving_preserves_unicode() {
+    let mut a = Node::new(2, true);
+    let session = a
+        .org
+        .import_staff(
+            &mut a.ingress,
+            &a.store,
+            staff(&credential(), 7),
+            1,
+            Some(WALL),
+        )
+        .unwrap()
+        .unwrap();
+    for (i, forbidden) in text_cases::FORBIDDEN.into_iter().enumerate() {
+        let bad = text_cases::replace(&chat(9, 7, 1000 + i as u64, true, 0), "A", Some(forbidden));
+        assert!(matches!(
+            a.org.sign(
+                &mut a.ingress,
+                &a.friends,
+                &a.store,
+                &session,
+                &a.link,
+                bad,
+                2 + i as u64,
+                Some(WALL)
+            ),
+            Err(Error::Invalid)
+        ));
+    }
+    assert!(
+        a.store
+            .history(codec::EVENT_CHANNEL.to_vec(), false, 10)
+            .unwrap()
+            .is_empty()
+    );
+    let raw = text_cases::replace(&chat(9, 7, 999, true, 0), "e\u{301}", Some("雪 e\u{301}"));
+    let signed = a
+        .org
+        .sign(
+            &mut a.ingress,
+            &a.friends,
+            &a.store,
+            &session,
+            &a.link,
+            raw,
+            1000,
+            Some(WALL),
+        )
+        .unwrap()
+        .unwrap();
+    let mut b = Node::new(3, true);
+    assert_eq!(
+        b.receive(&signed, 1000).unwrap().result,
+        AcceptResult::Accepted
+    );
+    assert_eq!(
+        b.store
+            .history(codec::EVENT_CHANNEL.to_vec(), false, 10)
+            .unwrap()[0]
+            .body,
+        signed
+    );
+}
 fn key(n: u8) -> SigningKey {
     SigningKey::from_bytes(&[n; 32])
 }
@@ -645,23 +842,18 @@ fn openssl_reference_root_credentials_and_exact_staff_packets() {
             .lines()
             .map(|l| {
                 let (n, h) = l.split_once('\t').unwrap();
-                (n, database::unhex(h))
+                (n.to_string(), database::unhex(h))
             })
             .collect();
+    check_binding_vectors(vectors);
+}
+pub fn check_binding_vectors(vectors: std::collections::HashMap<String, Vec<u8>>) {
     let UnconfirmedProposal::Event { bundle, .. } = root(9, 202000) else {
         panic!()
     };
     assert_eq!(bundle.as_slice(), vectors["root_bundle"]);
     assert_eq!(credential(), vectors["credential_a"]);
     assert_eq!(cred(9, 8, 199990, 201000), vectors["credential_b"]);
-    for (name, s, id, include, pin) in [
-        ("chat_a", 7, 1, true, 0),
-        ("chat_b", 8, 2, true, 0),
-        ("omitted_a", 7, 3, false, 0),
-        ("pinned_a", 7, 4, true, 200100),
-    ] {
-        assert_eq!(chat(9, s, id, include, pin), vectors[name]);
-    }
     let mut n = Node::new(3, true);
     for (i, name) in ["chat_a", "chat_b", "omitted_a", "pinned_a"]
         .into_iter()
@@ -675,6 +867,14 @@ fn openssl_reference_root_credentials_and_exact_staff_packets() {
         );
     }
     assert!(n.receive(&vectors["wrong_domain"], 5000).is_none());
+    for (name, s, id, include, pin) in [
+        ("chat_a", 7, 1, true, 0),
+        ("chat_b", 8, 2, true, 0),
+        ("omitted_a", 7, 3, false, 0),
+        ("pinned_a", 7, 4, true, 200100),
+    ] {
+        assert_eq!(chat(9, s, id, include, pin), vectors[name]);
+    }
 }
 #[test]
 fn ambiguous_credentials_require_included_packet_and_expiry_is_strict() {
@@ -700,7 +900,14 @@ fn ambiguous_credentials_require_included_packet_and_expiry_is_strict() {
     }
     let raw = chat(9, 7, 7, true, 201001);
     let job = n.feed(&raw, 7000).unwrap().job.unwrap();
-    assert!(n.finish(job, 7000).is_err());
+    let accepted = n.finish(job, 7000).unwrap().unwrap();
+    assert_eq!(accepted.result, AcceptResult::Accepted);
+    assert_eq!(
+        n.org
+            .current(&n.store, &accepted.authority, Some(WALL))
+            .unwrap(),
+        (true, false)
+    );
 }
 #[test]
 fn full_ledger_refuses_organizer_effect_and_local_work_shares_slots() {

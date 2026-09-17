@@ -1,6 +1,6 @@
 # Crypto vectors and MC-022 evidence
 
-The normative [MC-008 contract](../../../docs/decisions/MC-008-crypto-contract.md) is specified, not an implemented cryptographic system. The original fixture below exercises **transcript/size encoding only**. MC-019 adds the separately described executable friend-signature vectors; HPKE and organizer implementation evidence remain with MC-020/021. No ciphertext, private key, signature verification, native parity or independent assessment is claimed by running the fixture below.
+The normative [MC-008 contract](../../../docs/decisions/MC-008-crypto-contract.md) defines the construction implemented in MC-019/020/021. The original fixture below exercises **transcript/size encoding only**; later sections separately describe executable friend, DM and organizer evidence. No ciphertext, private key, signature verification, native parity or independent assessment is claimed by running the original encoding fixture alone. The [MC-022 review packet](../../../docs/testing/MC-022-crypto-review-packet.md) records the test-only native binding runner and the still-pending independent assessment/full-wire freeze.
 
 ## Reference sources
 

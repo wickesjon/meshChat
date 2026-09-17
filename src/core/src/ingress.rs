@@ -1155,7 +1155,11 @@ impl Ingress {
             self.counters.peak_pending = self.counters.peak_pending.max(count(&self.pending));
             return Ok(State::Pending);
         }
-        // Only structurally accepted unverified/opaque data here; never a trusted partition.
+        // Clear unsigned content must satisfy text rejection policy before any
+        // accepted effect/dedup. Signed text is checked by its authenticating
+        // owner; encrypted and unknown payloads remain opaque at this layer.
+        crate::text::validate_payload(packet.payload()).map_err(|_| Drop::Malformed)?;
+        // Only accepted unverified/opaque data here; never a trusted partition.
         let partition = self.links[index].as_ref().unwrap().partition;
         let entries = &mut self.accepted[partition * 512..(partition + 1) * 512];
         let slot = entries.iter().position(Option::is_none).unwrap_or_else(|| {

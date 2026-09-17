@@ -145,8 +145,16 @@ func transportTrace() throws {
     let waiting = try b.updatePower(setting: nil, batteryPercent: 41, charging: false, visiblePeers: 4, now: 66000)
     precondition(waiting.saver)
     let normal = try b.updatePower(setting: nil, batteryPercent: 41, charging: false, visiblePeers: 4, now: 66001)
+    try b.configureBeacon(manual: false, autoWhileCharging: true)
+    let beacon = try b.updatePower(setting: nil, batteryPercent: 80, charging: true, visiblePeers: 4, now: 66002)
+    precondition(beacon.beacon && beacon.infra && beacon.linkLimit == 8)
+    let unplugged = try b.updatePower(setting: nil, batteryPercent: 80, charging: false, visiblePeers: 4, now: 66003)
+    precondition(!unplugged.beacon && !unplugged.infra)
+    let beaconStatus = try b.beaconStatus(now: 66003)
+    precondition(!beaconStatus.active && beaconStatus.allocatedCacheBytes <= 320 * 1024)
+
     precondition(!normal.saver && normal.linkLimit == 6)
-    let observations = try b.observations(now: 66001)
+    let observations = try b.observations(now: 66003)
     precondition(observations.isEmpty)
 }
 try transportTrace()

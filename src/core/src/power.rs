@@ -86,7 +86,9 @@ impl Policy {
         let battery_exit =
             self.mode == Mode::Beacon && !input.charging && input.battery_percent <= 30;
         if battery_exit {
-            self.setting = Setting::Normal;
+            if self.setting == Setting::Beacon {
+                self.setting = Setting::Normal;
+            }
             self.mode = Mode::Normal;
             self.candidate = None;
         }
@@ -109,6 +111,12 @@ impl Policy {
             }
             Setting::Auto => Mode::Normal,
         };
+        // Charging-mode transitions are immediate. Ordinary Auto Saver/Normal
+        // changes retain the existing minute of hysteresis.
+        if self.setting == Setting::Auto && (desired == Mode::Beacon || self.mode == Mode::Beacon) {
+            self.mode = desired;
+            self.candidate = None;
+        }
         if desired == self.mode {
             self.candidate = None;
         } else if let Some((mode, since)) = self.candidate.filter(|(m, _)| *m == desired) {

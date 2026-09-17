@@ -141,7 +141,7 @@ class GattDriver(
         val observations = core.observations(clock()).associateBy { it.link }
         peers.values.map { p ->
             val observation = observations[p.link]
-            ConnectionInfo(p.id, p.address, p.born, observation?.firstValidMs, observation?.novelty?.toInt())
+            ConnectionInfo(p.id, p.address, p.born, observation?.firstValidMs, observation?.novelty?.toInt(), observation?.peerCount?.toInt())
         }
     }
     fun power(setting: TransportPowerSetting?, battery: Int, charging: Boolean, visible: Int): TransportPower? = guarded(null) {
@@ -152,6 +152,8 @@ class GattDriver(
         effects(result.effects)
         result
     }
+    fun beacon(manual: Boolean, auto: Boolean) = guarded(Unit) { core.configureBeacon(manual, auto) }
+    fun beaconStatus(): BeaconStatus? = guarded(null) { core.beaconStatus(clock()) }
     fun tick() = guarded(Unit) {
         val now = clock()
         peers.values.filter { it.link == null && now >= it.born + 30_000uL }.map { it.id }.forEach(::close)

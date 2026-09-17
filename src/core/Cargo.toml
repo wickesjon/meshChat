@@ -130,3 +130,7 @@ path = "../../tests/integration/android-ui/messaging.rs"
 [[test]]
 name = "cosmetics"
 path = "../../tests/integration/billing/cosmetics.rs"
+
+[[test]]
+name = "native_beacon"
+path = "../../tests/bench/beacon/native.rs"

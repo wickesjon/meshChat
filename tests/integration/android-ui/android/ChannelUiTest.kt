@@ -109,7 +109,7 @@ class ChannelUiTest {
         ui.onNodeWithText("Back").performClick()
         waitFor("Your channels")
         ui.onNodeWithText("Settings").performClick()
-        ui.onNode(isToggleable()).performScrollTo().performClick()
+        ui.onNodeWithContentDescription("Light theme").performScrollTo().performClick()
         click("Save")
         // The old channel list is already visible when the dialog closes; wait
         // for the asynchronous protected write and new UI snapshot instead.

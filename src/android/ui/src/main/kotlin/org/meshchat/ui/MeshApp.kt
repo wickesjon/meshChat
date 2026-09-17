@@ -41,6 +41,7 @@ fun MeshApp(model: MeshModel, permissions: () -> Unit, scan: () -> Unit = {}, bu
                     Button(onClick=model::load) { Text("Reopen") }; ResetAction(model)
                 }
                 !s.onboarded -> Onboarding(model,s,permissions)
+                s.beaconRequested || s.beacon?.active == true -> BeaconScreen(s,model::exitBeacon,model::startRadio)
                 else -> Home(model,s,permissions,scan,buySupporter,restoreSupporter)
             }
         }
@@ -225,7 +226,7 @@ private fun SettingsSheet(model: MeshModel,s: MeshScreenState,buySupporter: ()->
     var color by remember{mutableStateOf(s.nicknameRgb?.toString(16)?.padStart(6,'0') ?: "")}
     AlertDialog(onDismissRequest=close,title={Text("Make it yours")},text={Column(Modifier.verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(12.dp)) {
         OutlinedTextField(nick,{if(it.toByteArray().size<=80)nick=it},label={Text("Nickname")},singleLine=true)
-        ProfilePicker(avatar){avatar=it};Row(verticalAlignment=Alignment.CenterVertically){Text("Light theme",Modifier.weight(1f));Switch(light,{light=it;theme=if(it)"daylight" else "afterhours"})}
+        ProfilePicker(avatar){avatar=it};Row(verticalAlignment=Alignment.CenterVertically){Text("Light theme",Modifier.weight(1f));Switch(light,{light=it;theme=if(it)"daylight" else "afterhours"},modifier=Modifier.semantics { contentDescription="Light theme" })}
         Text("Theme")
         Themes.all.forEach { t -> TextButton(enabled=!t.paid || s.supporter,onClick={theme=t.id;light=t.light}) {
             Text("${if(theme==t.id)"Selected: " else ""}${t.title}${if(t.paid)" · Supporter" else ""}")
@@ -240,6 +241,14 @@ private fun SettingsSheet(model: MeshModel,s: MeshScreenState,buySupporter: ()->
         Text(s.billingStatus)
         Button(onClick=buySupporter,enabled=s.supporterPrice!=null && !s.supporter) { Text(s.supporterPrice?.let { "Supporter · $it · one-time" } ?: "Purchases unavailable") }
         TextButton(onClick=restoreSupporter) { Text("Restore Supporter") }
+        Text("Beacon Mode · Android")
+        Text("Beacon Mode uses more power; keep your phone charged. It ends at 30% battery when unplugged. No delivery or coverage guarantee.")
+        Button(onClick={model.beacon(true,s.autoBeacon);close()}) { Text("Start Beacon Mode") }
+        Row(verticalAlignment=Alignment.CenterVertically) {
+            Text("Auto-beacon while charging",Modifier.weight(1f))
+            Switch(s.autoBeacon,{model.beacon(false,it)},modifier=Modifier.semantics { contentDescription="Auto-beacon while charging" })
+        }
+        Text("Automatic mode returns to ordinary operation when unplugged.")
         Text("Nearby connection power")
         TransportPowerSetting.entries.forEach { value ->
             Row(Modifier.fillMaxWidth().heightIn(min=48.dp).clickable { model.power(value) },verticalAlignment=Alignment.CenterVertically) {

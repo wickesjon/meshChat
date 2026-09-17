@@ -1,7 +1,7 @@
 package org.meshchat.transport
 
 /** Bounded local observations. Addresses/RSSI/digests are selection hints, not identities. */
-data class ConnectionInfo(val id: Long, val address: String, val born: ULong, val validAt: ULong?, val novelty: Int?)
+data class ConnectionInfo(val id: Long, val address: String, val born: ULong, val validAt: ULong?, val novelty: Int?, val peerCount: Int? = null)
 data class Selection(val close: List<Long>, val connect: String?)
 
 class ConnectionPolicy(private val clock: () -> ULong) {
@@ -47,7 +47,7 @@ class ConnectionPolicy(private val clock: () -> ULong) {
     }
     fun attempted(address: String) { record(address)?.let { it.tried = true; it.retryAt = clock() + 5_000uL } }
     fun disconnected(address: String) { seen[address]?.let { it.retryAt = maxOf(it.retryAt, clock() + 5_000uL) } }
-    fun plan(peers: List<ConnectionInfo>, limit: Int): Selection {
+    fun plan(peers: List<ConnectionInfo>, limit: Int, beacon: Boolean = false): Selection {
         val now = clock()
         val idle = peers.filter { (it.validAt == null || it.validAt > it.born + 20_000uL) && now - it.born >= 20_000uL }
         idle.forEach { peer ->
@@ -83,7 +83,8 @@ class ConnectionPolicy(private val clock: () -> ULong) {
         if (candidates.isEmpty()) return Selection(emptyList(), null)
         val reserve = minOf(2, (limit - 1).coerceAtLeast(0))
         // Keep the best locally observed stable slots; ties preserve older links.
-        val explorers = peers.sortedWith(compareByDescending<ConnectionInfo> { it.novelty ?: -1 }
+        val explorers = peers.sortedWith(compareByDescending<ConnectionInfo> { beacon && it.peerCount in 0..1 }
+            .thenByDescending { it.novelty ?: -1 }
             .thenByDescending { seen[it.address]?.rssi ?: -128 }.thenBy { it.born }).takeLast(reserve)
         val ranked = explorers.sortedWith(compareBy<ConnectionInfo> { it.novelty ?: -1 }
             .thenBy { seen[it.address]?.rssi ?: -128 }.thenBy { it.id })
@@ -108,12 +109,13 @@ class ScanPolicy(private val clock: () -> ULong) {
     fun discovered() { isolatedAt = clock() }
     fun failed() { failures = minOf(failures + 1, 5); retryAt = clock() + minOf(60_000uL, 5_000uL * (1uL shl (failures - 1))) }
     fun received() { failures = 0 }
-    fun mode(isSaver: Boolean, visible: Int, foreground: Boolean, permitted: Boolean): ScanMode {
+    fun mode(isSaver: Boolean, visible: Int, foreground: Boolean, permitted: Boolean, beacon: Boolean = false): ScanMode {
         val now = clock()
         if (foreground && !wasForeground) { isolatedAt = now; phaseAt = now }
         wasForeground = foreground
         if (saver != isSaver) { saver = isSaver; phaseAt = now }
         if (!permitted || now < retryAt) return ScanMode.OFF
+        if (beacon) return ScanMode.BURST
         if (isSaver) return if ((now - phaseAt) % 60_000uL < 10_000uL) {
             if (visible == 0) ScanMode.BURST else ScanMode.BALANCED
         } else ScanMode.OFF

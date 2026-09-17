@@ -284,6 +284,9 @@ impl Cache {
     /// data before resizing; increasing cannot resurrect expired cached payloads.
     pub fn set_mode(&mut self, mode: Mode, now: u64) -> Result<(), Error> {
         self.advance(now)?;
+        if self.mode == mode {
+            return Ok(());
+        }
         let (count, bytes, age) = limits(mode);
         for r in self.records.iter_mut().flatten() {
             if r.len > 0 {

@@ -91,6 +91,7 @@ class StaffKeyVaultTest {
         val candidate="candidate".toByteArray()
         assertThrows(uniffi.meshchat_core.OrganizerException.Authority::class.java) {vault.importConfirmed(ByteArray(16),candidate) {error("background import")}}
         assertTrue(candidate.all {it==0.toByte()})
+        assertThrows(uniffi.meshchat_core.OrganizerException.Authority::class.java) {vault.access(ByteArray(16)) {error("background private access")}}
         val stale=vault.requestForeground();vault.background();vault.resumeForeground(stale)
         assertFalse(vault.submitForeground {error("stale resume reopened submission")})
         vault.resumeForeground(vault.requestForeground());assertTrue(vault.submitForeground {true})

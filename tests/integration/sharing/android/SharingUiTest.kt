@@ -109,7 +109,7 @@ class SharingUiTest {
         awaitState {model.screen.channelProposal==null}
         for(bad in listOf(uri+"?join=1",uri+"/",uri+"#x","meshfest://j/madeup-house-cave","meshfest://staff/x/y")) {
             model.shareInput(bad,true)
-            awaitState {model.screen.error?.startsWith("Check the channel or friend link")==true}
+            awaitState {model.screen.error?.startsWith("Check the channel, friend or public event link")==true}
             assertNull(model.screen.channelProposal);assertNull(model.screen.proposal)
             assertEquals(count+1,model.screen.channels.size)
         }

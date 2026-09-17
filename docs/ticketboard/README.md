@@ -46,7 +46,7 @@ After edits run `python tests/ticketboard/validate.py --write`; then run `python
 | [MC-027](backlog/MC-027-cross-platform-radio-interoperability.md) | Cross-platform radio interoperability | backlog | MC-026, MC-023, MC-022, MC-035 |
 | [MC-028](complete/MC-028-android-shell-and-channel-chat.md) | Android shell and channel chat | complete | MC-018, MC-023, MC-011, MC-024, MC-022 |
 | [MC-029](complete/MC-029-android-friends-and-encrypted-messaging-ui.md) | Android friends and encrypted messaging UI | complete | MC-028, MC-020 |
-| [MC-030](inreview/MC-030-android-organizer-ui-and-staff-provisioning.md) | Android organizer UI and staff provisioning | inreview | MC-028, MC-021, MC-041 |
+| [MC-030](complete/MC-030-android-organizer-ui-and-staff-provisioning.md) | Android organizer UI and staff provisioning | complete | MC-028, MC-021, MC-041 |
 | [MC-031](complete/MC-031-offline-sharing-and-installed-app-link-support.md) | Offline sharing and installed-app link support | complete | MC-011, MC-028 |
 | [MC-032](complete/MC-032-supporter-entitlements-and-accessible-cosmetics.md) | Supporter entitlements and accessible cosmetics | complete | MC-028, MC-006 |
 | [MC-033](complete/MC-033-android-phone-beacon-mode.md) | Android phone Beacon Mode | complete | MC-024, MC-018, MC-028 |

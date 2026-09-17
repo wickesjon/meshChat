@@ -147,7 +147,7 @@ func transportTrace() throws {
     let normal = try b.updatePower(setting: nil, batteryPercent: 41, charging: false, visiblePeers: 4, now: 66001)
     precondition(!normal.saver && normal.linkLimit == 6)
     let observations = try b.observations(now: 66001)
-    precondition(observations.isEmpty())
+    precondition(observations.isEmpty)
 }
 try transportTrace()
 print("MC-023 Swift real HELLO/proof, capacity refusal, stale callback and timeout passed")

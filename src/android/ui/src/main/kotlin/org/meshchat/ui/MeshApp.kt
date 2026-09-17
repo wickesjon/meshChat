@@ -17,6 +17,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -26,10 +27,9 @@ import androidx.compose.ui.unit.sp
 import uniffi.meshchat_core.*
 
 @Composable
-fun MeshApp(model: MeshModel, permissions: () -> Unit, scan: () -> Unit = {}) {
+fun MeshApp(model: MeshModel, permissions: () -> Unit, scan: () -> Unit = {}, buySupporter: ()->Unit = {}, restoreSupporter: ()->Unit = {}) {
     val s = model.screen
-    val colors = if (s.light) lightColorScheme(primary=Color(0xFF176B50), background=Color(0xFFFAF9F6), surface=Color.White, onSurface=Color(0xFF22232A))
-        else darkColorScheme(primary=Color(0xFF5DCAA5), background=Color(0xFF16161A), surface=Color(0xFF1F1F25), surfaceVariant=Color(0xFF1F1F25), outline=Color(0xFF3A3A41), onSurface=Color(0xFFF1EFE8), onBackground=Color(0xFFF1EFE8), onSurfaceVariant=Color(0xFFB4B2A9), error=Color(0xFFF09595))
+    val colors = meshColors(Themes.selected(s.theme,s.supporter))
     MaterialTheme(colorScheme=colors) {
         Surface(Modifier.fillMaxSize(), color=colors.background) {
             when {
@@ -41,11 +41,21 @@ fun MeshApp(model: MeshModel, permissions: () -> Unit, scan: () -> Unit = {}) {
                     Button(onClick=model::load) { Text("Reopen") }; ResetAction(model)
                 }
                 !s.onboarded -> Onboarding(model,s,permissions)
-                else -> Home(model,s,permissions,scan)
+                else -> Home(model,s,permissions,scan,buySupporter,restoreSupporter)
             }
         }
     }
 }
+internal fun meshColors(t:ThemeTokens):ColorScheme = (if(t.light)lightColorScheme() else darkColorScheme()).copy(
+    primary=Color(t.accent),onPrimary=Color(t.onAccent),primaryContainer=Color(t.surface),onPrimaryContainer=Color(t.text),
+    secondary=Color(t.accent),onSecondary=Color(t.onAccent),secondaryContainer=Color(t.surface),onSecondaryContainer=Color(t.text),
+    tertiary=Color(t.accent),onTertiary=Color(t.onAccent),tertiaryContainer=Color(t.surface),onTertiaryContainer=Color(t.text),
+    background=Color(t.background),onBackground=Color(t.text),surface=Color(t.surface),onSurface=Color(t.text),
+    surfaceVariant=Color(t.surface),onSurfaceVariant=Color(t.secondary),outline=Color(t.secondary),outlineVariant=Color(t.secondary),
+    surfaceContainer=Color(t.surface),surfaceContainerHigh=Color(t.surface),surfaceContainerHighest=Color(t.surface),
+    surfaceContainerLow=Color(t.surface),surfaceContainerLowest=Color(t.background),surfaceBright=Color(t.surface),surfaceDim=Color(t.background),
+    surfaceTint=Color.Transparent,error=Color(t.error),onError=Color(t.background),errorContainer=Color(t.surface),onErrorContainer=Color(t.error),
+    inverseSurface=Color(t.text),inverseOnSurface=Color(t.surface),inversePrimary=Color(t.background))
 @Composable
 private fun Onboarding(model: MeshModel,s: MeshScreenState,permissions: () -> Unit) {
     var step by rememberSaveable { mutableIntStateOf(0) }
@@ -91,7 +101,7 @@ private fun ProfilePicker(value: UByte,changed: (UByte)->Unit) {
 }
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun Home(model: MeshModel,s: MeshScreenState,permissions: () -> Unit,scan: () -> Unit) {
+private fun Home(model: MeshModel,s: MeshScreenState,permissions: () -> Unit,scan: () -> Unit,buySupporter: ()->Unit,restoreSupporter: ()->Unit) {
     var tab by rememberSaveable { mutableIntStateOf(0) }
     var settings by remember { mutableStateOf(false) }
     var join by remember { mutableStateOf(false) }
@@ -137,7 +147,7 @@ private fun Home(model: MeshModel,s: MeshScreenState,permissions: () -> Unit,sca
     if(linkInput)ShareInput(model) {linkInput=false}
     if(share)s.selected?.takeIf {it.private}?.let {ChannelShare(it) {share=false}}
     if(join)JoinSheet({join=false},scan={join=false;scan()},paste={join=false;linkInput=true}) { model.join(it);join=false }
-    if(settings)SettingsSheet(model,s) { settings=false }
+    if(settings)SettingsSheet(model,s,buySupporter,restoreSupporter) { settings=false }
     if(info)AlertDialog(onDismissRequest={info=false},title={Text("Channel details")},text={Column(verticalArrangement=Arrangement.spacedBy(12.dp)) {
         Text("Anyone with these words can read this channel. It is not encrypted.");Text(s.selected?.name?.replace('|',' ') ?: "")
         if(s.selected?.private==true)TextButton(onClick={info=false;share=true}){Text("Share channel")}
@@ -158,7 +168,10 @@ private fun ColumnScope.Chat(model: MeshModel,s: MeshScreenState) {
             Row(Modifier.fillMaxWidth().combinedClickable(onClick={},onLongClick={reaction=message}),horizontalArrangement=Arrangement.spacedBy(12.dp)) {
                 Avatar(message.avatar)
                 Column(Modifier.weight(1f)) {
-                    Row(verticalAlignment=Alignment.CenterVertically) { Text(message.nickname,Modifier.weight(1f),maxLines=1,overflow=TextOverflow.Ellipsis,fontWeight=FontWeight.Bold,color=if(channel.anonymous)MaterialTheme.colorScheme.onSurface else nicknameColor(message.sender));Text(if(message.own)"You" else if(message.verifiedPetname!=null)"Verified friend" else if(message.signed)"Signed device" else "Unverified",fontSize=10.sp,color=MaterialTheme.colorScheme.onSurfaceVariant) }
+                    val tokens=Themes.selected(s.theme,s.supporter)
+                    val rawColor=message.nicknameRgb?.toLong()?.or(0xff000000L) ?: (nicknameColor(message.sender).toArgb().toLong() and 0xffffffffL)
+                    Row(verticalAlignment=Alignment.CenterVertically) { Text(message.nickname,Modifier.weight(1f),maxLines=1,overflow=TextOverflow.Ellipsis,fontWeight=FontWeight.Bold,color=if(channel.anonymous)MaterialTheme.colorScheme.onSurface else Color(Themes.readableNickname(rawColor,tokens)));Text(if(message.own)"You" else if(message.verifiedPetname!=null)"Verified friend" else if(message.signed)"Signed device" else "Unverified",fontSize=10.sp,color=MaterialTheme.colorScheme.onSurfaceVariant) }
+                    if(!channel.anonymous && message.supporterHint)Text("Supporter flair · unverified",fontSize=11.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)
                     message.claimWarning?.let {Text(it,fontSize=11.sp,color=MaterialTheme.colorScheme.error)}
                     if(message.confusable)Text("Name resembles yours; identity is unverified",fontSize=11.sp,color=MaterialTheme.colorScheme.error)
                     if(!channel.anonymous)Text(message.sender.takeLast(2).joinToString(""){"%02x".format(it.toInt() and 255)},fontSize=10.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)
@@ -206,11 +219,27 @@ private fun WordChoice(words: List<String>,selected: Int,choose: (Int)->Unit) {
     Box{OutlinedButton(onClick={open=true},modifier=Modifier.fillMaxWidth().heightIn(min=48.dp)){Text(words[selected])};DropdownMenu(expanded=open,onDismissRequest={open=false}){words.forEachIndexed{index,word->DropdownMenuItem(text={Text(word)},onClick={choose(index);open=false})}}}
 }
 @Composable
-private fun SettingsSheet(model: MeshModel,s: MeshScreenState,close: ()->Unit) {
+private fun SettingsSheet(model: MeshModel,s: MeshScreenState,buySupporter: ()->Unit,restoreSupporter: ()->Unit,close: ()->Unit) {
     var nick by remember{mutableStateOf(s.nickname)};var avatar by remember{mutableStateOf(s.avatar)};var light by remember{mutableStateOf(s.light)}
+    var theme by remember{mutableStateOf(Themes.selected(s.theme,s.supporter).id)}
+    var color by remember{mutableStateOf(s.nicknameRgb?.toString(16)?.padStart(6,'0') ?: "")}
     AlertDialog(onDismissRequest=close,title={Text("Make it yours")},text={Column(Modifier.verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(12.dp)) {
         OutlinedTextField(nick,{if(it.toByteArray().size<=80)nick=it},label={Text("Nickname")},singleLine=true)
-        ProfilePicker(avatar){avatar=it};Row(verticalAlignment=Alignment.CenterVertically){Text("Light theme",Modifier.weight(1f));Switch(light,{light=it})}
+        ProfilePicker(avatar){avatar=it};Row(verticalAlignment=Alignment.CenterVertically){Text("Light theme",Modifier.weight(1f));Switch(light,{light=it;theme=if(it)"daylight" else "afterhours"})}
+        Text("Theme")
+        Themes.all.forEach { t -> TextButton(enabled=!t.paid || s.supporter,onClick={theme=t.id;light=t.light}) {
+            Text("${if(theme==t.id)"Selected: " else ""}${t.title}${if(t.paid)" · Supporter" else ""}")
+        } }
+        if(s.supporter) {
+            OutlinedTextField(color,{if(it.length<=6 && it.all { c -> c in "0123456789abcdefABCDEF" })color=it},label={Text("Nickname color · six hex digits")},singleLine=true)
+            TextButton(onClick={color=""}) { Text("Use automatic nickname color") }
+            Text("Receivers may adjust colors for readability. Suffix and trust labels stay separate.")
+        }
+        Text(if(s.supporter)"Supporter · ready offline" else "Supporter · optional")
+        Text("Extra themes, nickname color and up to 30 private channel slots. Messaging, friends and relaying stay free.")
+        Text(s.billingStatus)
+        Button(onClick=buySupporter,enabled=s.supporterPrice!=null && !s.supporter) { Text(s.supporterPrice?.let { "Supporter · $it · one-time" } ?: "Purchases unavailable") }
+        TextButton(onClick=restoreSupporter) { Text("Restore Supporter") }
         Text("Nearby connection power")
         TransportPowerSetting.entries.forEach { value ->
             Row(Modifier.fillMaxWidth().heightIn(min=48.dp).clickable { model.power(value) },verticalAlignment=Alignment.CenterVertically) {
@@ -218,7 +247,7 @@ private fun SettingsSheet(model: MeshModel,s: MeshScreenState,close: ()->Unit) {
             }
         }
         TextButton(onClick=model::stop){Text("Stop nearby connection")};ResetAction(model)
-    }},confirmButton={Button(onClick={model.updateProfile(nick,avatar,light);close()},enabled=nick.isNotBlank()&&nick.toByteArray().size<=20){Text("Save")}},dismissButton={TextButton(onClick=close){Text("Cancel")}})
+    }},confirmButton={Button(onClick={model.updateProfile(nick,avatar,light,theme,color.toUIntOrNull(16));close()},enabled=nick.isNotBlank()&&nick.toByteArray().size<=20&&(color.isEmpty()||color.length==6)){Text("Save")}},dismissButton={TextButton(onClick=close){Text("Cancel")}})
 }
 @Composable
 private fun ResetAction(model: MeshModel) {

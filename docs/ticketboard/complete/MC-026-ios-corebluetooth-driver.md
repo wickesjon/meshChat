@@ -30,9 +30,9 @@ Also permitted: this ticket and generated ticketboard index/diagram changes requ
 
 ## Exit criteria
 
-- [ ] Automated native-adapter tests cover all base frame kinds in both roles, readiness callbacks and directional runtime limits; relevant Mac/Xcode builds and regressions pass. MC-027 retains physical exchange acceptance.
-- [ ] Injected background, suspension, disconnect, restoration and foreground catch-up transitions produce the expected bounded state in automated tests; real OS execution and timing remain MC-027 acceptance.
-- [ ] Unsupported discovery/force-quit cases are distinguished from regressions.
+- [x] Automated native-adapter tests cover all base frame kinds in both roles, readiness callbacks and directional runtime limits; relevant Mac/Xcode builds and regressions pass. MC-027 retains physical exchange acceptance.
+- [x] Injected background, suspension, disconnect, restoration and foreground catch-up transitions produce the expected bounded state in automated tests; real OS execution and timing remain MC-027 acceptance.
+- [x] Unsupported discovery/force-quit cases are distinguished from regressions.
 - [ ] Relevant checks pass, evidence is recorded, required review is complete, and the ticket is squash merged to main.
 
 ## Potential fallbacks
@@ -46,7 +46,7 @@ A triggered fallback must be recorded with evidence. It does not authorize weake
 
 Scheduling approved 2026-09-14 in [the validation policy](../../decisions/local-validation-policy.md#physical-acceptance-scheduling--approved-2026-09-14). All physical driver/lifecycle/discovery scenarios transfer to MC-027 after feature integration; missing Mac/Xcode is still a native build blocker.
 
-Implementation is in progress within the approved scope. Native automated evidence and review will be recorded here; physical acceptance remains MC-027.
+Implementation and required native automated checks pass within the approved scope. Completion is staged for the reviewed squash commit and becomes effective on main only. Physical acceptance remains MC-027.
 
 ## Review and merge
 
@@ -106,3 +106,13 @@ Hosted run `35179676215` failed Swift host compilation because a nested test hel
 Terra follow-up review PASS on `6698c70f9dc3a91bf11c5c7d34fcc15ec91d7a73`: restoration and terminal-expiry fixes accepted, no remaining review findings. Revised local debug/release suites pass (166 tests each), formatting/clippy/release build pass, regenerated Android bindings and both release ABIs build, BLE Debug/Release/lint and package ABI/ELF/ZIP alignment checks pass. All 24 JVM tests were explicitly rerun (`testDebugUnitTest --rerun-tasks`) against the revised library. The first release attempt encountered persisted PID-named test databases; archiving that ignored fixture directory and rerunning with fresh databases passed without source changes.
 
 Hosted run `35180151353` on that revision passed Rust (including storage policy and cargo-deny), ticketboard, Swift 6 host FFI/production-driver regressions and the iOS skeleton. The BLE Xcode build exposed a Swift 6 concurrency error from carrying a Foundation notification into a main-actor closure. The callback now extracts its Sendable name before actor entry. A fresh Xcode run is required; skipped security/storage stages are not claimed passed. Android runner provisioning failed with `ECONNRESET` while downloading Java, before source checks; applicable local Android results above supply that evidence under the approved policy.
+
+## Final validation and review evidence
+
+Production revision: `f825ae2e4fbfdfec7f664c4f4caec9041bd6e558`. Terra medium follow-up PASS on that exact revision, with no remaining findings. The reviewer confirmed the notification-name fix and accurate distinction between prior failures and reruns. Final completion-metadata review is recorded in PR #29 before merge.
+
+[Hosted run 35181168961](https://github.com/wickesjon/meshChat/actions/runs/35181168961) passes the entire Mac job (`105073417784`), Rust and ticketboard jobs on that production revision. Xcode 16.4 / Swift 6.1.2 compile the production driver/FFI tests with Swift 6 warnings as errors and execute both-role/base-kind/readiness/lifecycle traces. The app skeleton builds Debug/Release; BLE and security projects build Debug/Release for both `iphoneos` and `iphonesimulator`; security curves interoperability and encrypted-storage Swift integration pass. These results resolve both earlier Swift failures. Unsigned native compilation and controlled driver callbacks are not physical radio/OS execution evidence.
+
+Local Windows validation on the unchanged Rust/Android source from `6698c70` supplies the relevant Android regression gate: `python -B src/core/build_bindings.py android`; BLE `assembleDebug assembleRelease lintDebug`; explicit `testDebugUnitTest --rerun-tasks` (24 tests, zero failures/errors); packaged Rust/JNA ABI/ELF validation and `zipalign -c -P 16 4` for both APKs. Rust formatting, all-target/all-feature clippy, 166 debug and 166 release tests and release build pass. The final hosted Rust job additionally passes the storage-policy and cargo-deny gates. Tool versions are recorded above; source changes after these local checks affect only the Swift notification callback and evidence documentation.
+
+The shared FFI/native effects are covered by both actual native consumers and the host suites. The current hosted Android run is supplemental to the successful local relevant checks; no skipped emulator or physical scenario is called passed. Android protected-provider/SQLCipher implementation and security-probe build configuration are unchanged by MC-026. MC-027/044 retain physical radio/protected-storage acceptance and MC-037 retains independent integrated assessment. Completion staging changes only this ticket and generated board files; default validation, all 12 ticketboard unit tests and diff checking are rerun for that staging.

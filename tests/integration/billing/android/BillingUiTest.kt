@@ -47,6 +47,7 @@ class BillingUiTest {
         when(InstrumentationRegistry.getArguments().getString("phase")) {
             "purchase" -> purchase()
             "reopen-refund" -> reopenRefund()
+            "link-cap" -> linkCap()
             else -> error("Explicit isolated emulator phase required")
         }
     }
@@ -124,15 +125,20 @@ class BillingUiTest {
             screenshot("theme-${theme.id}")
         }
         evidence(StoreResult.NOT_OWNED)
+    }
+    private fun linkCap() {
+        assertFalse(model.screen.supporter)
+        assertEquals(33,model.screen.channels.size)
         // Link confirmation uses the same cap; the proposal remains reviewable.
-        ui.runOnUiThread {model.shareInput("meshfest://j/melodic-techno-valley")}
+        val w=channelWords()
+        val uri="meshfest://j/${w.descriptors.last()}-${w.genres.last()}-${w.locations.last()}"
+        ui.runOnUiThread {model.shareInput(uri)}
         awaitState {model.screen.channelProposal!=null}
         val name=checkNotNull(model.screen.channelProposal).name
-        if(model.screen.channels.none {it.name==name}) {
-            ui.runOnUiThread {model.confirmChannel(name)}
-            awaitState {model.screen.error?.startsWith("Private channel slots are full") == true}
-            assertNotNull(model.screen.channelProposal)
-        }
+        assertTrue(model.screen.channels.none {it.name==name})
+        ui.runOnUiThread {model.confirmChannel(name)}
+        awaitState {model.screen.error?.startsWith("Private channel slots are full") == true}
+        assertNotNull(model.screen.channelProposal)
         ui.runOnUiThread {model.cancelChannelProposal()}
     }
 }

@@ -12,7 +12,9 @@ struct SupporterSettings: View {
 
     var body: some View {
         Section("Appearance") {
-            Picker("Theme", selection: $theme) {
+            Picker("Theme", selection: Binding(
+                get: { ThemeTokens.selected(theme, active: store.active).id },
+                set: { theme = $0 })) {
                 ForEach(ThemeTokens.all.filter { !$0.paid || store.active }) { t in
                     Text(t.title).tag(t.id)
                 }
@@ -24,7 +26,8 @@ struct SupporterSettings: View {
                         #if canImport(UIKit)
                         var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
                         if UIColor(value).getRed(&r, green: &g, blue: &b, alpha: &a) {
-                            nicknameRGB = (UInt32(r * 255) << 16) | (UInt32(g * 255) << 8) | UInt32(b * 255)
+                            func byte(_ value: CGFloat) -> UInt32 { UInt32(max(0, min(1, value)) * 255) }
+                            nicknameRGB = (byte(r) << 16) | (byte(g) << 8) | byte(b)
                         }
                         #endif
                     }), supportsOpacity: false)

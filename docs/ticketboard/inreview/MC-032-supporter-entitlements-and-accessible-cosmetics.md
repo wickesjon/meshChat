@@ -56,11 +56,15 @@ A triggered fallback must be recorded with evidence. It does not authorize weake
 
 ## Evidence
 
-Preliminary implementation in progress; no PR, review or completion is claimed.
+Implementation is reviewable; final native checks and review remain pending. Durable behavior, reproduction and activation prerequisites: [MC-032 evidence](../../billing/MC-032-supporter.md).
 
-- Android: four JUnit checks cover entitlement transitions, new-slot limits, all five palettes and nickname fallbacks, and rejection of altered, wrong-key, oversized and malformed synthetic receipts. The Google Play adapter compiles against pinned Billing 9.1.0. JDK 17.0.15+6, Gradle 8.13, Kotlin 2.2.0 and AGP 8.11.1; local log `.work/mc032/policy.log`. Temporary init-script test wiring stays in ignored `.work/mc032/` because app build scope is still pending. Reproduction after scope approval must use committed build/test wiring before review.
-- iOS: entitlement policy, StoreKit adapter and policy regression source are written but not yet compiled or run. A Mac native check is required and remains blocked on validation wiring approval.
-- Remaining: app integration and protected persistence, canonical CHAT/ANNOUNCE cosmetic adapters, anonymous suppression, UI/slot/restore regression, native builds/lint/emulator checks, evidence documentation, actual Terra review and squash merge.
+- Source `36eb017`: Rust 1.85.1 formatting, strict clippy, 189 debug + 189 release tests, release build, fourteen protected-storage policy checks, cargo-deny 0.20.2 advisory/license/source/version gates pass. Three new core checks cover canonical fields, hostile anonymous suppression and untrusted flair. Wire/cryptographic formats are unchanged.
+- Android normal bindings/arm64+x86_64 libraries, app Debug/Release, test APK, lint and all sixteen JVM tests pass with committed wiring. Four billing JVM checks cover entitlement transitions, slots, five palettes and nickname fallback, and altered/wrong-key/oversized/malformed synthetic receipts. JDK 17.0.15+6, Gradle 8.13, Kotlin 2.2.0, AGP 8.11.1, API36/build-tools35.0.0. Billing 9.1.0's old Fragment transitive dependency initially failed ActivityResult lint; pinning Fragment1.8.9 resolves it without suppressing the check.
+- API29 x86_64 emulator37.1.11 on WHPX: channel3, friend/DM3, sharing2 and billing purchase/cache-restart/refund2 phases pass. Real SQLCipher/provider adapters are used. All thirty private slots survive downgrade, a thirty-first addition refuses, all themes render, and unverified remote flair retains unverified trust. Six synthetic screenshots inspected. Native ELF/ZIP16KiB alignment passes; runtime pages are4KiB, not16KiB certification.
+- Mac job [35202498634](https://github.com/wickesjon/meshChat/actions/runs/35202498634) on `36eb017` has passed new Swift cache/disabled-StoreKit/theme checks, shared FFI cosmetics and app Debug/Release compilation; remaining probe steps were running when recorded. Later verified-revocation/SwiftUI edge handling requires a new native check before merge.
+- Supplemental hosted Android on `36eb017` failed before app compilation on HTTP503 while downloading a native build dependency; it is unavailable evidence, not a passed check. Local equivalent relevant builds/tests pass.
+- Prior main run35199522003 failed a real friend-test timeout at `FriendUiTest.kt:84`: its retained320×640 screenshot showed the confirmed friend below the unscrolled LazyColumn viewport. The fixture now explicitly scrolls after the pin exists in model state. Small-viewport rerun and final link-cap regression remain pending when recorded.
+- Ticketboard default validation, twelve board tests, native palette parity and whitespace checks pass. Logs: `.work/mc032/`. No real store sandbox, physical certification, publication or independent-security-assessment result is claimed.
 
 ## Review and merge
 

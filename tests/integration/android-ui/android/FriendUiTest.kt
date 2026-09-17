@@ -81,7 +81,11 @@ class FriendUiTest {
         screenshot("confirmation");click("Pin verified identity")
         awaitState {model.screen.friends.size==1 && model.screen.proposal==null}
         assertEquals("Local Bob",model.screen.friends.single().petname)
-        click("Friends");waitFor("Local Bob");screenshot("friends")
+        click("Friends")
+        // The pin is already confirmed in model state above. A small CI viewport
+        // can leave its LazyColumn item uncomposed below the entry controls.
+        ui.onNode(hasScrollToNodeAction()).performScrollToNode(hasText("Local Bob"))
+        waitFor("Local Bob");screenshot("friends")
         // Denial callback retains manual entry. The runner revokes camera access;
         // no test relaxes the app's camera or replacement requirements.
         click("Scan a friend's code")

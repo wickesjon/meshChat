@@ -22,8 +22,12 @@ final class StoreEntitlements: ObservableObject {
         updates = Task { [weak self] in
             for await result in Transaction.updates {
                 guard let self else { return }
-                if case .verified(let transaction) = result, transaction.productID == self.productID {
-                    if await self.refresh() { await transaction.finish() }
+                if case .verified(let transaction) = result, transaction.productID == self.productID,
+                   transaction.productType == .nonConsumable {
+                    if transaction.revocationDate != nil {
+                        self.refreshRevision &+= 1
+                        if self.apply(.notOwned) { await transaction.finish() }
+                    } else if await self.refresh() { await transaction.finish() }
                 }
             }
         }
@@ -71,10 +75,9 @@ final class StoreEntitlements: ObservableObject {
             case .success(let result):
                 if case .verified(let transaction) = result,
                    transaction.productID == productID,
-                   transaction.productType == .nonConsumable,
-                   transaction.revocationDate == nil {
+                   transaction.productType == .nonConsumable {
                     refreshRevision &+= 1
-                    if apply(.owned) { await transaction.finish() }
+                    if apply(transaction.revocationDate == nil ? .owned : .notOwned) { await transaction.finish() }
                 } else { _ = apply(.unavailable) }
             case .pending: _ = apply(.pending)
             case .userCancelled: status = "Purchase cancelled. Saved access is unchanged."

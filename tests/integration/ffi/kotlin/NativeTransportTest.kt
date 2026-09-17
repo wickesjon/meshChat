@@ -7,7 +7,7 @@ import org.junit.Test
 import uniffi.meshchat_core.*
 
 /** Synthetic plaintext SQL double; this is binding/transport evidence only. */
-private class TransportDatabase(root: File) : SqlDatabase, AutoCloseable {
+class TransportDatabase(root: File) : SqlDatabase, AutoCloseable {
     private val folder = File(root, ".work/mc023/kotlin").apply { mkdirs() }
     private val file = File.createTempFile("transport-", ".sqlite", folder).apply { delete() }
     private val process = ProcessBuilder(

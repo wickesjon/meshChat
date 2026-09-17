@@ -377,7 +377,13 @@ impl NativeTransport {
         let mut out = TransportEffects::default();
         if let Err(error) = s.enqueue(&link, &hello, relay::Traffic::Transport(2), 1, &mut out) {
             s.close(&link, &mut out)?;
-            return Err(error);
+            return Err(match error {
+                TransportError::Refused { reason, .. } => TransportError::Refused {
+                    reason,
+                    effects: out,
+                },
+                other => other,
+            });
         }
         Ok(TransportConnection { link, effects: out })
     }

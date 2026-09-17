@@ -24,4 +24,35 @@ Before activation, MC-039 must record actual store identifiers and signing/packa
 
 ## Validation record
 
-Implementation validation is in progress. The ticket and final PR will record exact tested and reviewed revisions. Reproduction uses the normal Rust gates, `python -B src/core/build_bindings.py android`, app Debug/Release builds, lint and JVM tests, `tests/integration/android-ui/run_emulator.py` followed by sharing/friend and billing runners on an explicitly named emulator. `tests/integration/billing/run_android.py` is synthetic purchase/cache/restart/refund/slot/theme/flair evidence, not a store sandbox result. The iOS CI job compiles/runs the native cache/disabled-adapter/theme checks and Swift core consumer, and builds the app in Debug/Release on pinned Xcode 16.4.
+The final ticket/PR records tested and reviewed revisions. Reproduction from the repository root (with the workspace tool/cache environment from the Windows build guide):
+
+```text
+cargo fmt --all -- --check
+cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+cargo test --workspace --all-features --locked
+cargo test --workspace --all-features --locked --release
+cargo build --workspace --all-features --locked --release
+python -B tests/integration/storage/run_policy.py
+cargo-deny --all-features --locked --config src/core/deny.toml check
+python -B src/core/build_bindings.py android
+src/android/gradlew.bat -p src/android --no-daemon --max-workers=2 :app:assembleDebug :app:assembleRelease :app:assembleDebugAndroidTest :app:lintDebug :app:testDebugUnitTest
+python -B tests/integration/android-ui/check_apk.py src/android/app/build/outputs/apk/debug/app-debug.apk src/android/app/build/outputs/apk/release/app-release-unsigned.apk
+python -B tests/integration/billing/test_themes.py
+python -B tests/integration/android-ui/run_emulator.py --serial emulator-5580
+python -B tests/integration/android-ui/run_friends_emulator.py --serial emulator-5580
+python -B tests/integration/sharing/run_android.py --serial emulator-5580
+python -B tests/integration/billing/run_android.py --serial emulator-5580
+python -B tests/ticketboard/validate.py
+python -B -m unittest discover -s tests/ticketboard -q
+git diff --check
+```
+
+`zipalign -c -P 16 4` also passes for both app APKs. Rust1.85.1 passes189 debug+189 release checks, strict lint/build and fourteen storage-policy checks; cargo-deny0.20.2 passes with only the two existing unused-license allowances. Android uses JDK17.0.15+6, Gradle8.13, Kotlin2.2.0, AGP8.11.1, SDK36/build-tools35.0.0; all sixteen JVM tests and app variants/lint pass. Reused native SQLCipher4.17.0 and Compose graphics builds are unchanged inputs with passing packaging/alignment; dependency reconstruction is not claimed as a new local build.
+
+The named emulator is API29 x86_64 revision8, emulator37.1.11 on WHPX, adb37.0.1. Baseline channel3, friend3, sharing2 and billing purchase+reopen/refund flows pass at normal and320×640/density160 viewports. The explicit link-confirmation cap phase also passes against the downgraded thirty-channel cache. SQLCipher and provider-backed settings remain active. Six synthetic theme/flair screenshots were inspected; they stay ignored under `.work/mc032/screenshots/`. The image/runtime page size is4KiB; static16KiB ELF/ZIP alignment is not runtime16KiB certification. No physical camera, radio, OEM/background, endurance or hardware-protection result is claimed.
+
+Debug APK SHA-256: `c35bb2e49b1aa85b361c0b7ee88ca9c394af3c085a0ca7c2088eb54b24ef26bc`. Release unsigned: `3a7253671e7d0d133e1e77125ac0bcf04603017f242fa4ae40f5df7b98b71081`. Later fixture/evidence changes do not change these production APKs.
+
+The iOS workflow uses Xcode16.4(16F6), Swift6.1.2 on macOS15 arm64. It executes `swiftc -swift-version 6 -warnings-as-errors` for the production cache, disabled StoreKit adapter and theme regression, native Swift FFI consumer including cosmetic/trust separation and anonymous suppression, and app Debug/Release simulator builds. The initial full [Mac job](https://github.com/wickesjon/meshChat/actions/runs/35202498634/job/105140343010) passes at `36eb017`. The [final production-source job](https://github.com/wickesjon/meshChat/actions/runs/35203433056/job/105143386605) at `dd07139` passes binding generation, Swift FFI, Supporter regression, app Debug/Release and BLE builds. The only subsequent production changes were the iOS billing/UI files covered by those passing checks; security-probe/core inputs match the earlier full pass. Remaining repeated probe steps are supplemental, not falsely reported complete. StoreKit live purchase/restore/refund sandbox behavior remains untested under the declared fallback.
+
+Prior main run35199522003 failed `FriendUiTest.kt:84` because a confirmed friend's LazyColumn row was below a320×640 viewport and the test waited without scrolling. Its retained failure screenshot showed the actual pinned state and controls. The fixture now scrolls to the already-confirmed row; the three friend phases pass at that exact local viewport. MC-032's initial hosted Android job105140343019 failed before app compilation on an HTTP503 native-dependency download. That is unavailable hosted provisioning evidence, not a passed build; the relevant local equivalent checks pass under the approved local-validation policy. Physical and independent-assessment gates are unchanged.

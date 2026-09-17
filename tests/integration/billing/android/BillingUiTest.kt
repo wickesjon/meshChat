@@ -117,11 +117,12 @@ class BillingUiTest {
         val existing=model.screen.channels.first {it.private}.name
         ui.runOnUiThread {model.join(existing)}
         awaitState {model.screen.selected?.name==existing}
-        ui.onNodeWithText("Send").assertExists()
+        ui.onNodeWithText("Send").assertIsDisplayed()
         for(theme in Themes.all) {
             if(theme.paid)evidence(StoreResult.OWNED)
             ui.runOnUiThread {model.updateProfile(model.screen.nickname,model.screen.avatar,theme.light,theme.id)}
             awaitState {model.screen.theme==theme.id}
+            ui.onNodeWithText("Send").assertIsDisplayed()
             screenshot("theme-${theme.id}")
         }
         evidence(StoreResult.NOT_OWNED)

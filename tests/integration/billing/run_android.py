@@ -7,6 +7,7 @@ import subprocess
 ROOT = Path(__file__).resolve().parents[3]
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--serial', required=True)
+parser.add_argument('--phase', choices=['purchase', 'reopen-refund', 'link-cap'])
 args = parser.parse_args()
 if not args.serial.startswith('emulator-'):
     raise ValueError('Explicit emulator serial required')
@@ -21,7 +22,8 @@ if run('shell', 'getprop', 'ro.kernel.qemu').strip() != b'1':
     raise ValueError('Never inject synthetic billing results on a physical phone')
 out = ROOT/'.work/mc032/screenshots'
 out.mkdir(parents=True, exist_ok=True)
-for phase in ['purchase', 'reopen-refund']:
+phases = [args.phase] if args.phase else ['purchase', 'reopen-refund', 'link-cap']
+for phase in phases:
     run('shell', 'input', 'keyevent', '224');run('shell', 'input', 'keyevent', '82')
     run('shell', 'am', 'force-stop', 'org.meshchat.app')
     result = run('shell', 'am', 'instrument', '-w', '-r', '-e', 'phase', phase,
@@ -34,4 +36,4 @@ for phase in ['purchase', 'reopen-refund']:
             (out/(name+'.png')).write_bytes(data)
     if 'OK (1 test)' not in result or 'FAILURES' in result or 'INSTRUMENTATION_CODE: -1' not in result:
         raise RuntimeError('Billing phase failed: '+phase)
-print('PASS: synthetic entitlement/cache/restart/refund/slot/theme/flair app flows; real store sandbox and device certification pending')
+print('PASS: synthetic billing phases '+', '.join(phases)+'; real store sandbox and device certification pending')

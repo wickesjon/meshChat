@@ -169,7 +169,12 @@ class EncryptedStorage(private val identity:IdentityProvider,private val vault:S
      * database/session are closed before returning; callbacks never hold keys. */
     fun messageEgress(core: NativeTransport, send: TransportSend, submit: () -> Boolean): Boolean = IdentityProvider.withOperation {
         if (core.messageNeedsAuthorization(send.link, send.token)) {
-            operation { if(!core.authorizeOrganizerEgress(it,send.link,send.token,System.currentTimeMillis()/1000)) core.authorizeMessageEgress(it, send.link, send.token) }
+            val organizer=operation {
+                val guarded=core.authorizeOrganizerEgress(it,send.link,send.token,System.currentTimeMillis()/1000)
+                if(!guarded)core.authorizeMessageEgress(it, send.link, send.token)
+                guarded
+            }
+            if(organizer)return@withOperation staff?.submitForeground(submit) ?: false
         }
         submit()
     }
@@ -193,7 +198,7 @@ class EncryptedStorage(private val identity:IdentityProvider,private val vault:S
     }
     fun organizerTick(core:NativeTransport,now:ULong):TransportEffects = operation {
         val wall=System.currentTimeMillis()/1000
-        val card=try {staffCard()} catch (_:IdentityProviderException) {null}
+        val card=try {if(staff?.signingAllowed()==true)staffCard() else null} catch (_:IdentityProviderException) {null}
         core.organizerTick(it,card?.takeIf {c->wall in c.notBefore.toLong()..c.notAfter.toLong()}?.credential,now,wall)
     }
     fun postEvent(core:NativeTransport,nickname:String,text:String,avatar:UByte,pin:UInt?,cookie:ULong,now:ULong):MessageSubmission = operation { store ->

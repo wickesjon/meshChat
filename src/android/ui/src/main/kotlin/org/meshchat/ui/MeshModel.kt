@@ -259,7 +259,7 @@ class MeshModel(private val context: Context) {
         if(pendingStaff!=null && now()-staffCandidateAt>=60000uL)clearOrganizerCandidate()
         val events=coreWork {storage.events(it)}
         var staffStatus:String?=null
-        val staff=try {storage.staffCard()} catch (_:IdentityProviderException) {staffStatus="Staff key unavailable. Forget it and explicitly reprovision.";null}
+        val staff=try {if(staffVault.signingAllowed())storage.staffCard() else null} catch (_:IdentityProviderException) {staffStatus="Staff key unavailable. Forget it and explicitly reprovision.";null}
         val wall=System.currentTimeMillis()/1000
         val ready=staff!=null && wall in staff.notBefore.toLong()..staff.notAfter.toLong() && events.any { card -> card.active && java.security.MessageDigest.getInstance("SHA-256").digest(card.event.key).copyOf(8).contentEquals(staff.rootId) }
         if(staff!=null&&!ready)staffStatus="Staff authority expired, not yet active, or its event is not adopted. Posting is disabled."
@@ -498,8 +498,13 @@ class MeshModel(private val context: Context) {
     }
     private fun clearOrganizerCandidate() {pendingEvent=null;pendingStaff?.fill(0);pendingStaff=null;pendingStaffCard=null}
     fun cancelOrganizer() = work {clearOrganizerCandidate();refresh()}
-    fun backgrounded() = work {
-        clearOrganizerCandidate();transport?.forgetStaffOperations();if(loaded)refresh()
+    fun foregrounded() {
+        val revision=staffVault.requestForeground()
+        work {staffVault.resumeForeground(revision);load()}
+    }
+    fun backgrounded() {
+        staffVault.background() // Immediate, independent of the model queue.
+        work {clearOrganizerCandidate();transport?.forgetStaffOperations();if(loaded)refresh()}
     }
     fun staffInput(value:String) = work {
         clearOrganizerCandidate()

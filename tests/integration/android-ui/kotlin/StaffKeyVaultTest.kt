@@ -76,4 +76,24 @@ class StaffKeyVaultTest {
         assertThrows(IdentityProviderException::class.java) {vault.importConfirmed(generation,"candidate".toByteArray()) {}}
         vault.forget();assertFalse(vault.present())
     }
+    @Test fun background_gate_closes_before_queued_cleanup_and_serializes_submission() {
+        val vault=StaffKeyVault(Files(),Protection())
+        val entered=java.util.concurrent.CountDownLatch(1);val release=java.util.concurrent.CountDownLatch(1)
+        val closed=java.util.concurrent.CountDownLatch(1)
+        val sender=Thread {assertTrue(vault.submitForeground {entered.countDown();check(release.await(5,java.util.concurrent.TimeUnit.SECONDS));true})}
+        sender.start();assertTrue(entered.await(5,java.util.concurrent.TimeUnit.SECONDS))
+        val background=Thread {vault.background();closed.countDown()};background.start()
+        assertFalse(closed.await(50,java.util.concurrent.TimeUnit.MILLISECONDS))
+        release.countDown();sender.join(5000);background.join(5000)
+        assertEquals(0L,closed.count)
+        // Model cleanup can still be blocked: the native-submit gate is already closed.
+        assertFalse(vault.submitForeground {error("background submission reached native code")})
+        val candidate="candidate".toByteArray()
+        assertThrows(uniffi.meshchat_core.OrganizerException.Authority::class.java) {vault.importConfirmed(ByteArray(16),candidate) {error("background import")}}
+        assertTrue(candidate.all {it==0.toByte()})
+        val stale=vault.requestForeground();vault.background();vault.resumeForeground(stale)
+        assertFalse(vault.submitForeground {error("stale resume reopened submission")})
+        vault.resumeForeground(vault.requestForeground());assertTrue(vault.submitForeground {true})
+    }
+
 }

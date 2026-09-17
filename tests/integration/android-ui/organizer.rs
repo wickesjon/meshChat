@@ -167,12 +167,17 @@ fn pump(a: &Device, b: &Device, bl: &LinkHandle, start: u64) -> Vec<Vec<u8>> {
 }
 #[test]
 fn native_signed_updates_cross_nonadopting_bridge_and_expire() {
+    for staff_seed in [7, 8] {
+        signed_update_trace(staff_seed);
+    }
+}
+fn signed_update_trace(staff_seed: u8) {
     let a = Device::new(1);
     let relay = Device::new(2);
     let b = Device::new(3);
     a.adopt();
     b.adopt();
-    let session = a.staff(7);
+    let session = a.staff(staff_seed);
     let (_, rl) = connect(&a, &relay, 1000);
     let (rb, bl) = connect(&relay, &b, 1000);
     let sent = a
@@ -317,4 +322,76 @@ fn generate_native_organizer_fixtures() {
         root(8, wall + 7200)
     );
     std::fs::write(directory.join("events.tsv"), content).unwrap();
+}
+
+#[test]
+fn same_id_variants_have_distinct_ui_keys_and_discovery_never_adopts() {
+    let a = Device::new(11);
+    let b = Device::new(12);
+    let (_, bl) = connect(&a, &b, 0);
+    let make = |kind: u8, body: &[u8]| {
+        let mut raw = vec![0; 1024];
+        let len = meshchat_core::codec::serialize(
+            meshchat_core::codec::Header {
+                kind,
+                flags: 0,
+                ttl: 7,
+                message_id: [5; 8],
+                sender_id: [1; 8],
+                channel_id: meshchat_core::codec::EVENT_CHANNEL,
+            },
+            body,
+            meshchat_core::codec::Context::Live,
+            &mut raw,
+        )
+        .unwrap();
+        raw.truncate(len);
+        raw
+    };
+    // Same ID from two ordinary variants must remain separately accessible.
+    for (i, text) in [b"first".as_slice(), b"second".as_slice()]
+        .into_iter()
+        .enumerate()
+    {
+        let mut body = 200000u32.to_be_bytes().to_vec();
+        body.extend_from_slice(&[1, 1, b'A', 0, 0, 0, 0]);
+        body.extend_from_slice(&(text.len() as u16).to_be_bytes());
+        body.extend_from_slice(text);
+        let raw = make(1, &body);
+        let encoder = meshchat_core::framing::Encoder::logical(&raw, 146, i as u16).unwrap();
+        let mut frame = [0; 146];
+        let len = encoder.frame(0, &mut frame).unwrap();
+        b.core
+            .receive(
+                bl.clone(),
+                len as u64,
+                frame[..len].to_vec(),
+                1000 + i as u64 * 30000,
+            )
+            .unwrap();
+    }
+    let mut discovery = vec![9; 8];
+    discovery.push(4);
+    discovery.extend_from_slice(b"Expo");
+    let raw = make(5, &discovery);
+    let encoder = meshchat_core::framing::Encoder::logical(&raw, 146, 3).unwrap();
+    let mut frame = [0; 146];
+    let len = encoder.frame(0, &mut frame).unwrap();
+    b.core
+        .receive(bl.clone(), len as u64, frame[..len].to_vec(), 33000)
+        .unwrap();
+    assert_eq!(
+        b.core.event_discoveries(33000).unwrap(),
+        vec!["Expo".to_string()]
+    );
+    let rows = b.rows(33000, 200000);
+    assert_eq!(rows.len(), 2);
+    assert_eq!(rows[0].id, rows[1].id);
+    assert_ne!(rows[0].content_key, rows[1].content_key);
+    assert!(
+        b.core
+            .event_cards(b.store.clone(), 200000)
+            .unwrap()
+            .is_empty()
+    );
 }

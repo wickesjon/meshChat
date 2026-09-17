@@ -61,6 +61,7 @@ pub struct StaffCard {
 }
 #[derive(Clone, Debug, uniffi::Record)]
 pub struct EventMessage {
+    pub content_key: Vec<u8>,
     pub id: Vec<u8>,
     pub nickname: String,
     pub text: String,
@@ -505,7 +506,13 @@ impl NativeTransport {
             .drawer
             .retain(|(_, at)| now.saturating_sub(*at) < 900_000);
         for (raw, _) in &s.organizer.drawer {
-            if rows.iter().any(|r| r.id == raw[4..12]) {
+            if rows.iter().any(|r| {
+                r.content_key == {
+                    let mut b = raw.clone();
+                    b[3] = 0;
+                    Sha256::digest(&b).to_vec()
+                }
+            }) {
                 continue;
             }
             if let Some(row) = message(raw, false, None, false) {
@@ -688,7 +695,10 @@ fn message(raw: &[u8], own: bool, label: Option<String>, pinned: bool) -> Option
         ..
     } = p.payload()
     {
+        let mut immutable = raw.to_vec();
+        immutable[3] = 0;
         Some(EventMessage {
+            content_key: Sha256::digest(&immutable).to_vec(),
             id: p.header().message_id.to_vec(),
             nickname: nickname.into(),
             text: text.into(),

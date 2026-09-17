@@ -65,9 +65,9 @@ internal fun ColumnScope.EventChat(model:MeshModel,s:MeshScreenState,scan:()->Un
     val verified=s.eventRows.filter {it.staffLabel!=null}
     val unverified=s.eventRows.filter {it.staffLabel==null}
     LazyColumn(Modifier.weight(1f).fillMaxWidth(),contentPadding=PaddingValues(16.dp),verticalArrangement=Arrangement.spacedBy(14.dp)) {
-        items(verified.sortedByDescending {it.pinned},key={it.id.joinToString()+"verified"}) {row->EventRow(row)}
+        items(verified.sortedByDescending {it.pinned},key={it.contentKey.joinToString()+"verified"}) {row->EventRow(row)}
         if(adopted&&unverified.isNotEmpty())item {TextButton(onClick={expanded=!expanded}) {Text("${if(expanded)"Hide" else "Show"} unverified messages (${unverified.size})")};Text("Unverified or awaiting a credential. No staff or pin authority.")}
-        if(!adopted||expanded)items(unverified,key={it.id.joinToString()+"unverified"}) {row->EventRow(row)}
+        if(!adopted||expanded)items(unverified,key={it.contentKey.joinToString()+"unverified"}) {row->EventRow(row)}
         if(s.eventRows.isEmpty())item {Text("No event updates yet.")}
     }
     if(s.staffReady) {

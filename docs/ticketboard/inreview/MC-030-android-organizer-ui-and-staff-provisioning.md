@@ -72,6 +72,12 @@ Initial component tests: native transport signed update through a non-adopting b
 ## Review and merge
 
 - Branch: `ticket/MC-030-android-organizer-ui-and-staff-provisioning`.
-- Review/PR: pending.
+- Review/PR: [PR #36](https://github.com/wickesjon/meshChat/pull/36).
 - Squash commit title: `MC-030: Android organizer UI and staff provisioning`.
 - Completion becomes effective only when the reviewed squash commit lands on main.
+
+### Initial review and corrective validation
+
+Terra medium reviewed `76889c6ff48c687b85d2724b3af0e98fd1a5ce67` and found one P1: queued model background cancellation could lag native staff-fragment submission. The correction closes a synchronized foreground gate immediately at lifecycle notification and checks it at actual native submission. Resume uses a revision so stale queued foreground work cannot reopen the gate after a newer background notification. A concurrent JVM regression covers in-flight submission, immediate closure before model cleanup, refused private access/import, and stale resume. The author also corrected event row identity/dedup to use the immutable content digest, preserving distinct same-ID variants; a native regression covers those rows and untrusted EVENT_INFO discovery without adoption.
+
+Initial full Rust/Android checks and all three organizer emulator phases passed. Synthetic verified/reopened/unverified screenshots were inspected. Hosted iOS job 105342013580 in run 35262674458 passed all Swift/native and storage checks. Corrected source changes the exported event row record, so regenerated Android and Swift consumers and a follow-up review are required before merge; this initial result is not substituted for them.

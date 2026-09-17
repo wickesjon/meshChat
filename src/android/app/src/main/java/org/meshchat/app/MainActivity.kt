@@ -54,6 +54,6 @@ class MainActivity : ComponentActivity() {
         return super.dispatchTouchEvent(event)
     }
     override fun onStop() {model.backgrounded();super.onStop()}
-    override fun onResume() { super.onResume(); model.load();billing.refresh() }
+    override fun onResume() { super.onResume(); model.foregrounded();billing.refresh() }
     override fun onDestroy() { billing.close();super.onDestroy() }
 }

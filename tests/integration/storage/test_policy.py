@@ -131,6 +131,16 @@ class Policy(unittest.TestCase):
             if direct:self.s.accept_authenticated(item(True,99999),SUBJECT,b'new',NOW)
             else:self.s.append_unverified(item(False,99999),NOW)
             self.assertEqual(self.d.db.execute('SELECT count(*) FROM history WHERE direct=?',(int(direct),)).fetchone()[0],cap)
+    def test_arrival_order_is_shared_by_public_history_and_expiry_stays_timestamp_based(self):
+        for index in range(101):self.s.append_unverified(item(False,index,NOW-index),NOW)
+        rows=self.s.history(CHANNEL,False,100)
+        self.assertEqual(rows[0].message_id,(100).to_bytes(8,'big'))
+        self.assertEqual(rows[-1].message_id,(1).to_bytes(8,'big'))
+        self.s.prune(NOW+172750)
+        # Age expiry still follows each timestamp, independently of arrival ID.
+        remaining=self.s.history(CHANNEL,False,100)
+        self.assertEqual(len(remaining),51)
+        self.assertEqual(remaining[0].message_id,(50).to_bytes(8,'big'))
     def test_ledger_full_refuses_without_eviction(self):
         self.d.db.executemany('INSERT INTO ledger(subject,direction,logical_type,message_id,digest,timestamp) VALUES(?,0,1,?,?,?)',[(SUBJECT,i.to_bytes(8,'big'),b'd'*32,NOW) for i in range(100000)])
         with self.assertRaises(m.StorageError.Capacity):self.s.accept_authenticated(item(True,100001),SUBJECT,b'new',NOW)

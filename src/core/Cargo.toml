@@ -122,3 +122,7 @@ path = "../../tests/integration/organizer/organizer.rs"
 [[test]]
 name = "native_transport"
 path = "../../tests/integration/transport/native.rs"
+
+[[test]]
+name = "native_messaging"
+path = "../../tests/integration/android-ui/messaging.rs"

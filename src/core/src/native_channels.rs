@@ -50,6 +50,9 @@ pub struct ChannelMessage {
     pub arrival: i64,
     pub reactions: Vec<u16>,
     pub own_reaction: Option<u8>,
+    pub verified_petname: Option<String>,
+    pub signed: bool,
+    pub claim_warning: Option<String>,
 }
 #[derive(Clone, Debug, uniffi::Record)]
 pub struct ChannelWords {
@@ -354,7 +357,7 @@ impl NativeChannels {
         let held = store
             .history(h.channel_id.to_vec(), false, 100)
             .map_err(|_| ChannelError::Unavailable)?;
-        // History uses the local timestamp plus insertion id. A backward wall
+        // History uses local insertion order. A backward wall
         // clock adjustment must not place a new arrival before an older one.
         let wall = held.first().map_or(wall, |row| wall.max(row.timestamp));
         if held.iter().any(|x| {
@@ -418,6 +421,26 @@ impl NativeChannels {
         name: String,
         own_nickname: String,
     ) -> Result<Vec<ChannelMessage>, ChannelError> {
+        self.history_impl(store, name, own_nickname, None)
+    }
+}
+impl NativeChannels {
+    pub(crate) fn authenticated_history(
+        &self,
+        store: Arc<EncryptedStore>,
+        name: String,
+        nickname: String,
+        pins: &[crate::friends::Pin],
+    ) -> Result<Vec<ChannelMessage>, ChannelError> {
+        self.history_impl(store, name, nickname, Some(pins))
+    }
+    fn history_impl(
+        &self,
+        store: Arc<EncryptedStore>,
+        name: String,
+        own_nickname: String,
+        pins: Option<&[crate::friends::Pin]>,
+    ) -> Result<Vec<ChannelMessage>, ChannelError> {
         self.store(&store)?;
         let c = parse(&name)?;
         let anonymous = c == Channel::Public(Public::Confessions);
@@ -430,9 +453,29 @@ impl NativeChannels {
             let Ok(p) = codec::parse(&row.body, Context::Live) else {
                 continue;
             };
-            if p.header().channel_id != c.id() || p.header().flags & 7 != 0 {
+            if p.header().channel_id != c.id() {
                 continue;
             }
+            let signed = p.header().flags & 7 == 2
+                && pins.is_some()
+                && !anonymous
+                && row.provenance.len() == 33
+                && row.provenance[0] == 1;
+            if p.header().flags & 7 != 0 && !signed {
+                continue;
+            }
+            let candidates = pins
+                .unwrap_or(&[])
+                .iter()
+                .filter(|pin| {
+                    signed && !pin.replacing() && pin.tuple()[..32] == row.provenance[1..]
+                })
+                .collect::<Vec<_>>();
+            let verified_petname = if candidates.len() == 1 {
+                Some(candidates[0].petname().to_string())
+            } else {
+                None
+            };
             if let Payload::Chat {
                 timestamp,
                 avatar,
@@ -454,7 +497,23 @@ impl NativeChannels {
                     confusable: !anonymous
                         && row.direction == 0
                         && text::confusable_with_own(&nickname, &own_nickname).unwrap_or(false),
-                    nickname,
+                    claim_warning: if !signed && !anonymous && row.direction == 0 {
+                        pins.unwrap_or(&[])
+                            .iter()
+                            .find(|pin| {
+                                use sha2::Digest;
+                                sha2::Sha256::digest(&pin.tuple()[..32])[..8]
+                                    == p.header().sender_id
+                                    || text::confusable_with_own(&nickname, pin.petname())
+                                        .unwrap_or(false)
+                            })
+                            .map(|p| format!("Claims to be {} - not verified", p.petname()))
+                    } else {
+                        None
+                    },
+                    nickname: verified_petname.clone().unwrap_or(nickname),
+                    verified_petname,
+                    signed,
                     text: text::display(value, text::Kind::Message)
                         .map_err(|_| ChannelError::Invalid)?
                         .rendered,

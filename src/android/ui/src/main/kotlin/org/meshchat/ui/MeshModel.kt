@@ -20,8 +20,13 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.atomic.AtomicBoolean
 
+data class DirectThread(val keys: ByteArray, val petname: String, val archived: Boolean = false)
+data class DirectRow(val message: DirectMessage, val sendState: String)
 data class ChatRow(val message: ChannelMessage, val sendState: String)
 data class MeshScreenState(
+    val friends: List<FriendCard> = emptyList(), val friendCode: FriendProposal? = null,
+    val proposal: FriendProposal? = null, val proposalScanned: Boolean = false, val replacingFriend: FriendCard? = null,
+    val direct: DirectThread? = null, val directRows: List<DirectRow> = emptyList(), val archives: List<FriendProposal> = emptyList(),
     val loading: Boolean = true, val onboarded: Boolean = false, val locked: Boolean = false,
     val nickname: String = "", val avatar: UByte = 1u, val light: Boolean = false,
     val channels: List<ChannelInfo> = emptyList(), val selected: ChannelInfo? = null,
@@ -43,6 +48,14 @@ class MeshModel(private val context: Context) {
     private val identity = IdentityProvider.android(context, vault)
     private val storage = EncryptedStorage(identity, vault)
     private var owner: NativeChannels? = null
+    private var transport: NativeTransport? = null
+    private var cards = emptyList<FriendCard>()
+    private var myCode: FriendProposal? = null
+    private var proposal: FriendProposal? = null
+    private var proposalScanned = false
+    private var replacingFriend: FriendCard? = null
+    private var direct: DirectThread? = null
+    private var archives = emptyList<FriendProposal>()
     private var radio: AndroidGattRadio? = null
     private var starting = false
     private var epoch = 0L
@@ -74,6 +87,9 @@ class MeshModel(private val context: Context) {
         try { queue.execute {
             if (overflow.getAndSet(false)) { unavailable(); return@execute }
             try { action() }
+            catch (_: MessagingException.Invalid) { report("Check the friend code or message. No friend was added.") }
+            catch (_: MessagingException.Stale) { report("This friend identity changed or is awaiting replacement. Scan and confirm its code again.") }
+            catch (_: MessagingException.Busy) { report("Not sent. Connect to nearby people or wait for queue space, then retry.") }
             catch (_: ChannelException.Limited) { report("You can post again when the countdown ends.") }
             catch (_: ChannelException.Invalid) { report("Check the channel words and text byte limits. Unsupported invisible characters are not allowed.") }
             catch (_: IdentityProviderException) { unavailable() }
@@ -106,9 +122,9 @@ class MeshModel(private val context: Context) {
         power = setting("ui-power-v1")?.let { TransportPowerSetting.valueOf(it) } ?: TransportPowerSetting.AUTO
         joined = (setting("ui-channels-v1")?.split('\n') ?: joined).take(32).map { channelInfo(it).name }.distinct().toMutableList()
         muted.clear(); muted.addAll(setting("ui-muted-v1")?.split('\n')?.filter { it in joined } ?: emptyList())
-        owner = NativeChannels(info.identity, now()); loaded = true
+        owner = NativeChannels(info.identity, now()); initializeMessaging(); loaded = true
         previews.clear(); unread.clear()
-        for (name in joined) previews[name] = storage.channelHistory(checkNotNull(owner), name, profile).lastOrNull()?.text ?: "Quiet so far"
+        for (name in joined) previews[name] = coreWork { storage.messagingHistory(it, checkNotNull(owner), name, profile) }.lastOrNull()?.text ?: "Quiet so far"
         refresh()
     }
     /** Called only from the final explicit onboarding action. */
@@ -117,14 +133,14 @@ class MeshModel(private val context: Context) {
         profile = channelNickname(nickname); avatar = chosenAvatar
         val info = if (replacement) identity.load() else identity.create()
         if (!replacement) storage.create()
-        owner = NativeChannels(info.identity, now()); loaded = true; persist(); refresh()
+        owner = NativeChannels(info.identity, now()); initializeMessaging(); loaded = true; persist(); refresh()
         replacement = false
     }
     fun updateProfile(nickname: String, chosenAvatar: UByte, useLight: Boolean) = work {
-        profile = channelNickname(nickname); avatar = chosenAvatar; light = useLight; persist(); refresh()
+        profile = channelNickname(nickname); avatar = chosenAvatar; light = useLight; persist(); myCode = storage.friendCode(profile); refresh()
     }
     fun power(value: TransportPowerSetting) = work { power = value; persist(); radio?.powerSetting(value); refresh() }
-    fun select(name: String?) = work { notice = null; selected = name?.let { channelInfo(it).name }; selected?.let { unread[it] = 0 }; refresh() }
+    fun select(name: String?) = work { notice = null; direct = null; selected = name?.let { channelInfo(it).name }; selected?.let { unread[it] = 0 }; refresh() }
     fun join(name: String) = work {
         val channel = channelInfo(name)
         if (channel.name !in joined) {
@@ -145,7 +161,7 @@ class MeshModel(private val context: Context) {
         selected?.let { storage.deleteHistory(channelInfo(it).id, false) }; refresh()
     }
     fun resetIdentity() = work {
-        stopRadio(); owner?.close(); owner = null; identity.reset(); storage.create()
+        stopRadio(); clearMessaging(); owner?.close(); owner = null; identity.reset(); storage.create()
         profile = ""; selected = null; receipts.clear(); loaded = false
         joined = mutableListOf("#general", "#event updates", "#confessions"); muted.clear(); avatar = 1u; light = false
         previews.clear(); unread.clear()
@@ -155,7 +171,7 @@ class MeshModel(private val context: Context) {
         publish(MeshScreenState(loading = false, error = "Identity reset. Choose a new nickname to finish setup."))
     }
     private fun unavailable() {
-        stopRadio(); owner?.close(); owner = null; loaded = false; profile = ""; selected = null
+        stopRadio(); clearMessaging(); owner?.close(); owner = null; loaded = false; profile = ""; selected = null
         publish(MeshScreenState(loading = false, locked = true,
             error = "Protected data is unavailable. Unlock your device and reopen. If keys were lost, reset identity and local data."))
     }
@@ -163,10 +179,15 @@ class MeshModel(private val context: Context) {
         if (!loaded) return
         notice = error
         val n = checkNotNull(owner)
-        val rows = selected?.let { storage.channelHistory(n, it, profile) } ?: emptyList()
+        val rows = selected?.let { name -> coreWork { storage.messagingHistory(it, n, name, profile) } } ?: emptyList()
+        cards = coreWork { storage.friendCards(it, now()) }
+        val dmRows = direct?.let { thread -> coreWork { storage.directHistory(it, thread.keys, now()) } } ?: emptyList()
         selected?.let { previews[it] = rows.lastOrNull()?.text ?: "Quiet so far" }
         val wait = selected?.let { n.waitMs(it, false, now()) } ?: 0uL
-        publish(MeshScreenState(loading = false, onboarded = true, nickname = profile, avatar = avatar, light = light,
+        publish(MeshScreenState(friends = cards, friendCode = myCode, proposal = proposal, proposalScanned = proposalScanned,
+            replacingFriend = replacingFriend, direct = direct, archives = archives.filter { old -> cards.none { it.keys.contentEquals(old.keys) } },
+            directRows = dmRows.map { DirectRow(it, receipts[key(it.id)] ?: if(it.own) "Stored locally - delivery unknown" else "Encrypted") },
+            loading = false, onboarded = true, nickname = profile, avatar = avatar, light = light,
             channels = joined.map(::channelInfo), selected = selected?.let(::channelInfo),
             rows = rows.map { ChatRow(it, receipts[key(it.id)] ?: if(it.own) "Stored locally · delivery unknown" else "Unverified") },
             peers = links.size, status = status, error = error, waitSeconds = ((wait + 999uL) / 1000uL).toInt(), muted = selected in muted,
@@ -178,7 +199,10 @@ class MeshModel(private val context: Context) {
         if (links.isEmpty() || radio == null) { refresh("Not sent. Connect to nearby people, then retry."); return@work }
         if (pending.size >= 32) { refresh("Not sent. The send queue is full; try again shortly."); return@work }
         val bytes = checkNotNull(owner).compose(name, profile, avatar, text, (System.currentTimeMillis()/1000).toUInt(), now())
-        if (submit(bytes)) { posted++; refresh() }
+        if (channelInfo(name).private && cards.isNotEmpty()) {
+            if (submitProtected { core, token -> storage.sendSigned(core, bytes, token, now()) }) posted++
+            refresh()
+        } else if (submit(bytes)) { posted++; refresh() }
     }
     fun react(message: ChannelMessage, code: UByte) = work {
         val name = selected ?: return@work
@@ -201,12 +225,12 @@ class MeshModel(private val context: Context) {
     fun startRadio() = work {
         if (!loaded || radio != null || starting) return@work
         notice = null; starting = true
-        val instance = generateSequence { random.nextLong().toULong() }.first { it != 0uL }
-        val transport = storage.transport(instance, now()); val generation = ++epoch
+        val transport = checkNotNull(transport); val generation = ++epoch
         val started = MeshTransportService.start(context, transport, { id, event -> work { if (generation == epoch) this.event(id, event) } },
             { engine -> work { if (generation == epoch) { starting = false; radio = engine; engine.powerSetting(power); announceAt = 0uL; refresh() } else engine.stop() } },
-            { state -> work { if (generation == epoch) radioState(state) } })
-        if (!started) { starting = false; transport.close(); status = "Allow Bluetooth access, then try connecting again." }
+            { state -> work { if (generation == epoch) radioState(state) } },
+            { send, submit -> storage.messageEgress(transport, send, submit) })
+        if (!started) { starting = false; status = "Allow Bluetooth access, then try connecting again." }
         else status = "Starting nearby connections…"
         refresh()
     }
@@ -240,7 +264,10 @@ class MeshModel(private val context: Context) {
     private fun event(id: Long, event: TransportEvent) {
         val n = owner ?: return
         when(event) {
-            is TransportEvent.Admitted -> { links[id] = event.link; announceAt = 0uL }
+            is TransportEvent.Admitted -> {
+                links[id] = event.link; announceAt = 0uL
+                radio?.operation { core -> storage.proof(core, event.link, now()) }
+            }
             is TransportEvent.Closed -> {
                 links.remove(id); n.disconnected(event.link, now())
                 val complete = pending.filterValues { (_, waiting) -> waiting.remove(id); waiting.isEmpty() }.keys.toList()
@@ -253,6 +280,9 @@ class MeshModel(private val context: Context) {
                 // content becomes a plaintext UI item or trusted badge here.
                 if (event.intake != TransportIntake.DUPLICATE && event.intake != TransportIntake.DEFERRED_SYNC) {
                     val bytes = event.bytes
+                    if (event.intake == TransportIntake.PENDING) {
+                        coreWork { storage.authenticate(it, event.link, bytes, now()) }
+                    }
                     if (bytes.size >= 26 && bytes[1].toInt() !in listOf(2,3,7)) {
                         for (other in links.keys.filter { it != id }) radio?.send(other, bytes, TransportTraffic.FORWARDED, cookie++)
                     }
@@ -274,17 +304,95 @@ class MeshModel(private val context: Context) {
         }
         refresh()
     }
+    private fun initializeMessaging() {
+        transport?.close()
+        val instance=generateSequence { random.nextLong().toULong() }.first { it!=0uL }
+        transport=storage.transport(instance,now()); myCode=storage.friendCode(profile); archives=storage.archives()
+    }
+    private fun clearMessaging() {
+        transport?.close(); transport=null; cards=emptyList(); myCode=null; proposal=null
+        proposalScanned=false; replacingFriend=null; direct=null; archives=emptyList()
+    }
+    /** Read/auth work shares the radio monitor with ticks, native callbacks and
+     * protected sends; timestamp collection occurs inside that serialization. */
+    private fun <T> coreWork(action: (NativeTransport)->T): T {
+        val active=radio ?: return action(checkNotNull(transport))
+        var result: Result<T>?=null
+        active.operation { core -> result=runCatching { action(core) }; TransportEffects(emptyList(),emptyList()) }
+        return (result ?: throw MessagingException.Busy()).getOrThrow()
+    }
+    private fun submitProtected(action: (NativeTransport, ULong)->MessageSubmission): Boolean {
+        val active=radio ?: return false
+        if(pending.size>=32) {notice="Not sent. The send queue is full.";return false}
+        val token=cookie++;var result: MessageSubmission?=null
+        active.operation { core -> action(core,token).also { result=it }.effects }
+        val sent=result ?: return false
+        val id=key(sent.id)
+        if(receipts.size>=100)receipts.remove(receipts.keys.first())
+        receipts[id]=if(sent.queued) "Queued - delivery unknown" else "Stored locally - not sent"
+        if(sent.queued)pending[token]=id to links.filterValues {it in sent.queuedLinks}.keys.toMutableSet()
+        return sent.queued
+    }
+    fun friendInput(uri: String, scanned: Boolean = false) = work {
+        proposal=null; proposalScanned=false
+        val decoded=friendProposal(uri)
+        if(replacingFriend!=null && !scanned) {report("Replacement requires a fresh scan of the new device's code.");return@work}
+        proposal=decoded;proposalScanned=scanned;notice=null;refresh()
+    }
+    fun cancelProposal() = work {proposal=null;proposalScanned=false;refresh()}
+    fun scannerUnavailable() = work {report("Camera access is unavailable. Paste a friend link and verify its source in person. Replacement still requires a fresh scan.")}
+    fun confirmFriend(petname: String) = work {
+        val decoded=proposal ?: return@work
+        if(replacingFriend!=null && !proposalScanned) {report("Scan the replacement device's code first.");return@work}
+        stopRadio()
+        storage.confirmFriend(checkNotNull(transport),decoded.uri,channelNickname(petname),replacingFriend?.handle,now())
+        proposal=null;proposalScanned=false;replacingFriend=null;archives=storage.archives()
+        refresh("Friend pinned. Show them your code so it is mutual. Reconnect when ready.")
+    }
+    fun changeFriend(friend: FriendCard, replace: Boolean) = work {
+        stopRadio()
+        if(!storage.archiveFriend(friend)) {report("Old conversation list is full. Delete an old conversation before changing this friend.");return@work}
+        storage.changeFriend(checkNotNull(transport),friend.handle,replace,now())
+        archives=storage.archives();proposal=null;proposalScanned=false;direct=null
+        replacingFriend=if(replace)friend else null
+        refresh(if(replace)"Sending to the old identity is suspended. Scan the new device, then compare both fingerprints." else "Friend removed. Old history is kept separately. Reconnect when ready.")
+    }
+    fun openDirect(friend: FriendCard) = work { notice=null;selected=null;direct=DirectThread(friend.keys,friend.petname);refresh() }
+    fun openArchive(friend: FriendProposal) = work {notice=null;selected=null;direct=DirectThread(friend.keys,friend.nickname,true);refresh()}
+    fun closeDirect() = work {direct=null;refresh()}
+    fun deleteOldConversation() = work {
+        val old=direct ?: return@work
+        if(!old.archived)return@work
+        storage.deleteArchive(old.keys);archives=storage.archives();direct=null;refresh()
+    }
+    fun sendDirect(value: String) = work {
+        val thread=direct ?: return@work
+        val pin=cards.firstOrNull {it.keys.contentEquals(thread.keys) && !it.replacing}
+        if(thread.archived || pin==null) {report("This old identity has no active pin. There is no plaintext fallback.");return@work}
+        if(radio==null || links.isEmpty()) {report("Not sent. Connect to nearby people, then retry.");return@work}
+        if(submitProtected {core,token->storage.sendDirect(core,pin.handle,DirectContent.Chat(value),token,now())})posted++
+        refresh()
+    }
+    fun reactDirect(message: DirectMessage, code: UByte) = work {
+        val thread=direct ?: return@work
+        val pin=cards.firstOrNull {it.keys.contentEquals(thread.keys) && !it.replacing}
+        if(thread.archived || pin==null || radio==null || links.isEmpty()) {report("Reaction not sent. This thread needs an active friend pin and connection.");return@work}
+        submitProtected {core,token->storage.sendDirect(core,pin.handle,DirectContent.Reaction(message.id,message.ownReaction==code,code),token,now())}
+        refresh()
+    }
+    private val pulseQueued = AtomicBoolean(false)
     private val pulse = object : Runnable {
         override fun run() {
-            work {
-                if (loaded) {
+            if(pulseQueued.compareAndSet(false,true)) work {
+                try { if (loaded) {
+                    if(links.isNotEmpty()) coreWork {storage.retryMessages(it,now())}
                     if (links.isNotEmpty() && now() >= announceAt) {
                         val bytes = checkNotNull(owner).announce(profile, avatar, links.size.toUByte(), (System.currentTimeMillis()/1000).toUInt())
-                        for (id in links.keys) radio?.send(id, bytes, TransportTraffic.LOCAL, cookie++)
+                        submitProtected { core, token -> storage.sendSigned(core, bytes, token, now()) }
                         announceAt = now() + (radio?.currentPower()?.announceMs ?: 30000uL)
                     }
-                    if (selected != null) refresh()
-                }
+                    if (selected != null || direct != null || links.isNotEmpty()) refresh()
+                } } finally {pulseQueued.set(false)}
             }
             main.postDelayed(this, 1000)
         }

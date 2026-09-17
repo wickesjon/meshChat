@@ -18,7 +18,7 @@ Build friend QR/scanner, explicit fingerprint/petname confirmation, friend manag
 
 ## Scope
 
-Permitted paths (relative to repository root): `src/android/ui/**`, `tests/integration/android-ui/**`, `src/android/app/**`, `src/android/security/src/main/java/org/meshchat/identity/IdentityProvider.kt`, `src/android/security/src/main/java/org/meshchat/storage/EncryptedStorage.kt`, `src/android/ble/src/main/java/org/meshchat/transport/**`, `src/core/src/native_messaging.rs`, `src/core/src/native_transport.rs`, `src/core/src/native_channels.rs`, `src/core/src/lib.rs`, `src/core/Cargo.toml`, `tests/integration/ffi/**`, `tests/integration/ble/**`, `.github/workflows/ci.yml`, `docs/testing/**`.
+Permitted paths (relative to repository root): `src/android/ui/**`, `tests/integration/android-ui/**`, `src/android/app/**`, `src/android/security/src/main/java/org/meshchat/identity/IdentityProvider.kt`, `src/android/security/src/main/java/org/meshchat/storage/EncryptedStorage.kt`, `src/android/ble/src/main/java/org/meshchat/transport/**`, `src/core/src/storage.rs`, `tests/integration/storage/**`, `src/core/src/native_messaging.rs`, `src/core/src/native_transport.rs`, `src/core/src/native_channels.rs`, `src/core/src/lib.rs`, `src/core/Cargo.toml`, `tests/integration/ffi/**`, `tests/integration/ble/**`, `.github/workflows/ci.yml`, `docs/testing/**`.
 
 Also permitted: this ticket and generated ticketboard index/diagram changes required by its workflow. No unrelated file changes or work outside the repository. Read the [design](../../mesh-chat-design.md), its §0 corrections, and the [active plan](../implementation-plan.md). A necessary change outside these paths needs an explicit scope decision.
 
@@ -44,7 +44,7 @@ A triggered fallback must be recorded with evidence. It does not authorize weake
 
 ## Evidence
 
-Implementation in progress. Hard dependencies are complete on main `dd9e006eaf6844ff128ea0a4c7000e26c9216391` after MC-028 PR #30. The proposal below is prepared on this ticket's dedicated branch. The user approved the integration extension on 2026-09-17 UTC; implementation proceeds within its recorded limits. No feature test or review pass is claimed.
+Implementation ready for review; final native/emulator evidence and independent review remain merge gates. Hard dependencies are complete on main `dd9e006eaf6844ff128ea0a4c7000e26c9216391` after MC-028 PR #30. The proposal below is prepared on this ticket's dedicated branch. The user approved the integration extension on 2026-09-17 UTC; implementation proceeds within its recorded limits. Feature implementation and automated checks are recorded in [the integration report](../../testing/MC-029-android-messaging.md). Emulator/native completion and required PR review remain pending.
 
 ## Review and merge
 
@@ -87,7 +87,7 @@ Require actual core/transport traces for encrypted send/receive/reactions, inval
 Implementation is authorized by the user approval above. No new product feature, protocol revision, machine setting or deployment authorization is included.
 
 
-## Additional storage-order correction: decision required
+## Approved storage-order correction
 
 The approved integration uncovered an existing storage-boundary blocker. The normative design section 3.6 requires local arrival order. `EncryptedStore::history` in `src/core/src/storage.rs` instead selects its limited page by sender timestamp, and `insert` uses the same ordering when enforcing the conversation cap. Friend/DM acceptance passes the authenticated sender timestamp through this path. Re-sorting the returned page in the UI cannot recover omitted or already discarded messages.
 
@@ -97,11 +97,11 @@ Reproduction added within approved paths: `tests/integration/android-ui/messagin
 - At 101 accepted messages, the limited history page omits the newest local arrival.
 - At 1001 accepted DMs, a direct database count confirms the conversation cap has deleted the newest local arrival.
 
-Command: `cargo test --locked --test messaging_history`, Rust 1.85.1 on Windows. Result: **three expected regression failures**, recorded in ignored `.work/mc029/history-reproduction.log`. These are storage-order tests with already-authenticated fixture inputs, not cryptographic or SQLCipher evidence. The ticket cannot merge while they fail.
+Command: `cargo test --locked --test messaging_history`, Rust 1.85.1 on Windows. Result: **three expected regression failures**, recorded in ignored `.work/mc029/history-reproduction.log`. These are storage-order tests with already-authenticated fixture inputs, not cryptographic or SQLCipher evidence. After the approved insertion-ID correction all three pass; the shared Python storage-policy suite also passes 14 checks, including public arrival ordering and unchanged timestamp expiry.
 
-**Requested additional paths:** `src/core/src/storage.rs` and `tests/integration/storage/**`, solely to use existing local insertion IDs for history selection and count-based eviction, and verify the correction across the shared/native storage consumers. Preserve timestamp-based age expiry, replay tombstones, acceptance windows, clock checks, record/byte caps, encryption, schema and wire formats. No migration or cryptography change is requested. Rerun storage/friend/DM/channel regressions and applicable native checks; include the change in final Terra review.
+**Approved additional paths:** `src/core/src/storage.rs` and `tests/integration/storage/**`, solely to use existing local insertion IDs for history selection and count-based eviction, and verify the correction across the shared/native storage consumers. Preserve timestamp-based age expiry, replay tombstones, acceptance windows, clock checks, record/byte caps, encryption, schema and wire formats. No migration or cryptography change is requested. Rerun storage/friend/DM/channel regressions and applicable native checks; include the change in final Terra review.
 
-This is an implementation correction to the existing local-arrival requirement, not a new requirement or an authorization to weaken replay checks. The earlier integration approval remains effective; only this additional file scope awaits approval. Do not implement the correction before the explicit decision.
+This is an implementation correction to the existing local-arrival requirement, not a new requirement or an authorization to weaken replay checks. The user explicitly approved these additional paths and this correction on 2026-09-17 UTC. The earlier integration approval remains effective.
 
 ## Handoff requested
 

@@ -97,6 +97,14 @@ class AndroidGattRadio(
         running = true
         guarded { openServer(); if (running) { policy(); if (running) handler.post(timer) } }
     }
+    fun protectedEgress(work: (TransportSend, () -> Boolean) -> Boolean) = synchronized(gate) {
+        check(!running); driver.protectedEgress = work
+    }
+    fun operation(work: (NativeTransport) -> TransportEffects): Boolean {
+        var accepted = false
+        guarded { accepted = driver.operation(work) }
+        return accepted
+    }
     fun send(id: Long, bytes: ByteArray, traffic: TransportTraffic, cookie: ULong): Boolean {
         var accepted = false
         guarded { accepted = driver.enqueue(id, bytes, traffic, cookie) }

@@ -142,3 +142,7 @@ path = "../../tests/integration/android-ui/organizer.rs"
 [[test]]
 name = "native_stats"
 path = "../../tests/integration/stats/native.rs"
+
+[[test]]
+name = "native_catchup"
+path = "../../tests/integration/ios-ui/native.rs"

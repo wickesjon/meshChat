@@ -93,6 +93,11 @@ enum IdentityFile: Hashable { case envelope, journal }
         return IdentityInfo(handle: IdentityHandle(generation: metadata.generation), identity: metadata, capabilities: try protection.capabilities())
     } }
     func publicIdentity(_ handle: IdentityHandle) throws -> PublicIdentity { try guarded { try unlocked(handle) { try $0.publicIdentity() } } }
+    /// The synchronous caller may use the session only inside this operation.
+    /// Every return or failure invalidates it before protected access ends.
+    func messaging<T>(_ work: (IdentityKeySession) throws -> T) throws -> T {
+        try guarded { try unlocked(nil, work) }
+    }
     func sign(_ handle: IdentityHandle, transcript: Data) throws -> Data { try guarded {
         guard transcript.count <= 2048 else { throw IdentityFailure.invalidInput }
         return try unlocked(handle) { try $0.sign(message: transcript) }
@@ -166,6 +171,8 @@ enum IdentityFile: Hashable { case envelope, journal }
         #endif
         var excluded = folder; var values = URLResourceValues(); values.isExcludedFromBackup = true
         try excluded.setResourceValues(values)
+        // Verify the filesystem value, not metadata cached earlier in this run loop.
+        excluded.removeAllCachedResourceValues()
         guard try excluded.resourceValues(forKeys: [.isExcludedFromBackupKey]).isExcludedFromBackup == true else { throw IdentityFailure.provider }
         #if os(iOS)
         try bytes.write(to: path(file), options: [.atomic, .completeFileProtection])
@@ -184,7 +191,10 @@ enum IdentityFile: Hashable { case envelope, journal }
 
 @MainActor final class AppleIdentityProtection: IdentityProtection {
     private let tag: Data
-    init(tag: String = "org.meshchat.identity.wrapping.v1") { self.tag = Data(tag.utf8) }
+    private let payloadRange: ClosedRange<Int>
+    init(tag: String = "org.meshchat.identity.wrapping.v1", payloadRange: ClosedRange<Int> = 64...64) {
+        self.tag = Data(tag.utf8); self.payloadRange = payloadRange
+    }
     private let algorithm = SecKeyAlgorithm.eciesEncryptionCofactorX963SHA256AESGCM
     private var query: [String: Any] { [kSecClass as String: kSecClassKey, kSecAttrApplicationTag as String: tag, kSecAttrKeyType as String: kSecAttrKeyTypeECSECPrimeRandom] }
     func requireUnlocked() throws {
@@ -233,6 +243,7 @@ enum IdentityFile: Hashable { case envelope, journal }
         return data
     }
     func seal(_ plain: Data, aad: Data) throws -> Data {
+        guard payloadRange.contains(plain.count) else { throw IdentityFailure.invalidInput }
         let privateKey = try key(); guard let publicKey = SecKeyCopyPublicKey(privateKey), SecKeyIsAlgorithmSupported(publicKey, .encrypt, algorithm) else { throw IdentityFailure.unavailable }
         // ECIES API has no AAD argument: authenticate the full header inside the
         // encrypted payload and require exact equality before importing seeds.
@@ -249,7 +260,7 @@ enum IdentityFile: Hashable { case envelope, journal }
             if let error { _ = error.takeRetainedValue() }; throw IdentityFailure.invalidInput
         }
         var bound = decoded as Data; defer { bound.resetBytes(in: 0..<bound.count) }
-        guard bound.count == aad.count + 64, bound.prefix(aad.count) == aad else { throw IdentityFailure.invalidInput }
+        guard payloadRange.contains(bound.count - aad.count), bound.prefix(aad.count) == aad else { throw IdentityFailure.invalidInput }
         return Data(bound.dropFirst(aad.count))
     }
     func capabilities() throws -> IdentityCapabilities { _ = try key(); return IdentityCapabilities(wrapping: .hardware) }

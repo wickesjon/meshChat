@@ -50,13 +50,18 @@ impl Beacon {
             since: now,
         })
     }
-    pub fn advance(&mut self, now: u64) -> Result<(), TransportError> {
+    pub fn advance(
+        &mut self,
+        now: u64,
+    ) -> Result<Vec<crate::sync::session::Event>, TransportError> {
         self.cache
             .advance(now)
             .map_err(|_| TransportError::Unavailable)?;
+        let mut ended = Vec::new();
         self.sessions
-            .advance(now, &mut |_| {})
-            .map_err(|_| TransportError::Unavailable)
+            .advance(now, &mut |event| ended.push(event))
+            .map_err(|_| TransportError::Unavailable)?;
+        Ok(ended)
     }
     pub fn power(
         &mut self,

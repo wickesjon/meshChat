@@ -11,6 +11,23 @@ enum IOSRadioState: Equatable {
     case permissionRequired, radioOff, locked, unavailable
 }
 
+@MainActor protocol MeshRadio: AnyObject {
+    var appliedPower: TransportPower? { get }
+    func start()
+    func stop(_ reason: IOSRadioState)
+    func setPower(_ setting: TransportPowerSetting)
+    @discardableResult func operation(_ work: (NativeTransport) throws -> TransportEffects) -> Bool
+    func enqueue(_ id: UInt64, bytes: Data, traffic: TransportTraffic, cookie: UInt64) -> Bool
+}
+
+@MainActor struct MeshRadioCallbacks {
+    let available: () -> Bool
+    let event: (UInt64, TransportEvent) -> Void
+    let state: (IOSRadioState) -> Void
+    let catchUp: ([UInt64]) -> Void
+    let egress: (TransportSend, () -> Bool) throws -> Bool
+}
+
 /// Production service UUIDs, deliberately separate from the MC-004 probe.
 @MainActor
 private enum MeshGattIds {
@@ -53,7 +70,7 @@ private final class IOSPeripheralCallbacks: NSObject, @preconcurrency CBPeripher
 }
 
 @MainActor
-final class IOSGattRadio: NSObject, IOSGattPort, @preconcurrency CBCentralManagerDelegate,
+final class IOSGattRadio: NSObject, IOSGattPort, MeshRadio, @preconcurrency CBCentralManagerDelegate,
     @preconcurrency CBPeripheralDelegate, @preconcurrency CBPeripheralManagerDelegate {
     private struct Client {
         let id: UInt64
@@ -99,10 +116,11 @@ final class IOSGattRadio: NSObject, IOSGattPort, @preconcurrency CBCentralManage
     init(core: NativeTransport, protectedAvailable: @escaping () -> Bool,
          event: @escaping (UInt64, TransportEvent) -> Void,
          state: @escaping (IOSRadioState) -> Void,
-         catchUp: @escaping ([UInt64]) -> Void) {
+         catchUp: @escaping ([UInt64]) -> Void,
+         egress: ((TransportSend, () -> Bool) throws -> Bool)? = nil) {
         self.protectedAvailable = protectedAvailable; receiveEvent = event; changed = state; self.catchUp = catchUp
         super.init()
-        driver = IOSGattDriver(core: core, port: self, clock: Self.now)
+        driver = IOSGattDriver(core: core, port: self, clock: Self.now, egress: egress)
     }
     static func now() -> UInt64 {
         var info = mach_timebase_info_data_t()
@@ -347,6 +365,10 @@ final class IOSGattRadio: NSObject, IOSGattPort, @preconcurrency CBCentralManage
         return accepted
     }
     func event(_ id: UInt64, _ event: TransportEvent) { receiveEvent(id, event) }
+    @discardableResult
+    func operation(_ work: (NativeTransport) throws -> TransportEffects) -> Bool {
+        guard available() else { return false }; return driver.operation(work)
+    }
     func enqueue(_ id: UInt64, bytes: Data, traffic: TransportTraffic, cookie: UInt64) -> Bool {
         guard available() else { return false }; return driver.enqueue(id, bytes: bytes, traffic: traffic, cookie: cookie)
     }

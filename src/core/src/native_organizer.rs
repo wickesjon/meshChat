@@ -212,7 +212,12 @@ impl Runtime {
         now: u64,
         out: &mut TransportEffects,
     ) -> Result<(), TransportError> {
-        let Ok(p) = codec::parse(raw, codec::Context::Live) else {
+        let context = if raw.get(1) == Some(&1) {
+            codec::Context::StoredChat
+        } else {
+            codec::Context::Live
+        };
+        let Ok(p) = codec::parse(raw, context) else {
             return Ok(());
         };
         if text::validate_payload(p.payload()).is_err() {
@@ -251,7 +256,7 @@ impl Runtime {
         }
         Ok(())
     }
-    fn organizer_authenticate(
+    pub(super) fn organizer_authenticate(
         &mut self,
         store: &EncryptedStore,
         now: u64,
@@ -272,7 +277,15 @@ impl Runtime {
                     break;
                 };
                 if !matches!(
-                    codec::parse(raw, codec::Context::Live).map(|p| p.payload()),
+                    codec::parse(
+                        raw,
+                        if raw.get(1) == Some(&1) {
+                            codec::Context::StoredChat
+                        } else {
+                            codec::Context::Live
+                        }
+                    )
+                    .map(|p| p.payload()),
                     Ok(codec::Payload::CredentialOffer(_)
                         | codec::Payload::Chat {
                             signature: codec::Signature::Organizer { .. },

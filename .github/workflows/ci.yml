@@ -246,18 +246,33 @@ jobs:
             src/ios/UI/ThemeTokens.swift tests/integration/billing/main.swift \
             -o .work/ffi/supporter-regression
           .work/ffi/supporter-regression
-      - name: Build unsigned iOS skeleton
+      - name: Build unsigned iOS application
         run: |
           mkdir -p .work/tmp .work/clang-module-cache
           export TMPDIR="$PWD/.work/tmp"
-          for configuration in Debug Release; do
-            xcodebuild -project src/ios/MeshChat.xcodeproj -scheme MeshChat \
-              -configuration "$configuration" -destination 'generic/platform=iOS Simulator' \
-              -derivedDataPath "$PWD/.work/ios-derived-data" \
-              -clonedSourcePackagesDirPath "$PWD/.work/swift-packages" \
-              CLANG_MODULE_CACHE_PATH="$PWD/.work/clang-module-cache" \
-              CODE_SIGNING_ALLOWED=NO build
+          plutil -lint src/ios/MeshChat/Info.plist
+          for platform in iphonesimulator iphoneos; do
+            for configuration in Debug Release; do
+              xcodebuild -project src/ios/MeshChat.xcodeproj -scheme MeshChat \
+                -configuration "$configuration" -sdk "$platform" \
+                -derivedDataPath "$PWD/.work/ios-derived-data/$platform" \
+                -clonedSourcePackagesDirPath "$PWD/.work/swift-packages" \
+                CLANG_MODULE_CACHE_PATH="$PWD/.work/clang-module-cache" \
+                CODE_SIGNING_ALLOWED=NO build
+            done
           done
+      - name: Native iOS feature and UI acceptance
+        run: python3 -B tests/integration/ios-ui/run_apple.py
+      - name: Retain synthetic iOS UI acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: mc035-ios-ui
+          include-hidden-files: true
+          retention-days: 7
+          path: |
+            .work/ios-ui/native.log
+            .work/ios-ui/results-*.xcresult
       - name: Build unsigned iOS BLE probe
         run: |
           mkdir -p .work/tmp .work/ble-module-cache

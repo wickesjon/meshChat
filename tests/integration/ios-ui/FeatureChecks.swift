@@ -11,12 +11,14 @@ enum CheckFailure: Error { case failed(String) }
     // Diagnose native adapter failures before the UI intentionally reduces them
     // to a generic locked/recovery state. Never include key or envelope bytes.
     let probe = try TestDevice()
-    do { _ = try probe.identity.create() }
+    do { _ = try probe.identity.create(); _ = try probe.identity.load() }
     catch { throw CheckFailure.failed("identity adapter creation: \(error)") }
     do { try probe.storage.create(); try probe.storage.reopen() }
     catch {
         let attrs = try? FileManager.default.attributesOfItem(atPath: probe.root.appendingPathComponent("database/history.db").path)
-        throw CheckFailure.failed("storage adapter creation: \(error); protection metadata: \(String(describing: attrs?[.protectionKey]))")
+        let folder = probe.root.appendingPathComponent("database", isDirectory: true)
+        let excluded = try? folder.resourceValues(forKeys: [.isExcludedFromBackupKey]).isExcludedFromBackup
+        throw CheckFailure.failed("storage adapter creation: \(error); file operation: \(probe.fileTrace.failure); folder exists: \(FileManager.default.fileExists(atPath: folder.path)); backup excluded: \(String(describing: excluded)); protection metadata: \(String(describing: attrs?[.protectionKey]))")
     }
     let clock = TestClock(), a = try TestDevice(clock), b = try TestDevice(clock)
     a.model.load(); b.model.load()

@@ -2,6 +2,25 @@ import Foundation
 import CryptoKit
 import Security
 
+// Record only adapter operation names and public error categories, never bytes.
+@MainActor final class TestFileTrace { var failure = "none" }
+@MainActor final class TracedTestFiles: IdentityStorage {
+    private let base: AppleIdentityStorage, trace: TestFileTrace
+    private let label: String
+    init(_ folder: URL, _ label: String, _ trace: TestFileTrace) {
+        base = AppleIdentityStorage(folder: folder); self.label = label; self.trace = trace
+    }
+    private func checked<T>(_ operation: String, _ work: () throws -> T) throws -> T {
+        do { return try work() }
+        catch { trace.failure = "\(label).\(operation): \(error)"; throw error }
+    }
+    func exists(_ file: IdentityFile) -> Bool { base.exists(file) }
+    func hasArtifacts() -> Bool { base.hasArtifacts() }
+    func read(_ file: IdentityFile) throws -> Data { try checked("read \(file)") { try base.read(file) } }
+    func write(_ file: IdentityFile, _ bytes: Data) throws { try checked("write \(file)") { try base.write(file, bytes) } }
+    func delete(_ file: IdentityFile) throws { try checked("delete \(file)") { try base.delete(file) } }
+}
+
 // Synthetic wrapping exists only in the test host. Production uses Secure Enclave.
 @MainActor final class TestProtection: IdentityProtection {
     var unlocked = true
@@ -62,6 +81,7 @@ import Security
 
 @MainActor final class TestDevice {
     let root: URL, clock: TestClock
+    let fileTrace = TestFileTrace()
     let protection: TestProtection, staffProtection: TestProtection
     let identity: IdentityProvider, storage: EncryptedStorage, staff: StaffKeyVault
     var radio: TestRadio?
@@ -73,9 +93,9 @@ import Security
         protection = TestProtection(root.appendingPathComponent("identity-key"))
         staffProtection = TestProtection(root.appendingPathComponent("staff-key"))
         let folder = root.appendingPathComponent("database", isDirectory: true)
-        let vault = StorageVault(folder: folder, files: AppleIdentityStorage(folder: folder), protection: TestProtection(root.appendingPathComponent("storage-key")))
+        let vault = StorageVault(folder: folder, files: TracedTestFiles(folder, "storage", fileTrace), protection: TestProtection(root.appendingPathComponent("storage-key")))
         staff = StaffKeyVault(files: AppleIdentityStorage(folder: root.appendingPathComponent("staff", isDirectory: true)), protection: staffProtection)
-        identity = IdentityProvider(storage: AppleIdentityStorage(folder: root.appendingPathComponent("identity", isDirectory: true)), protection: protection, state: FeatureResetStore(storage: vault, staff: staff))
+        identity = IdentityProvider(storage: TracedTestFiles(root.appendingPathComponent("identity", isDirectory: true), "identity", fileTrace), protection: protection, state: FeatureResetStore(storage: vault, staff: staff))
         storage = EncryptedStorage(identity: identity, vault: vault)
         reopen()
     }

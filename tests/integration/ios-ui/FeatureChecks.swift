@@ -8,6 +8,16 @@ enum CheckFailure: Error { case failed(String) }
 }
 
 @MainActor func featureChecks() throws {
+    // Diagnose native adapter failures before the UI intentionally reduces them
+    // to a generic locked/recovery state. Never include key or envelope bytes.
+    let probe = try TestDevice()
+    do { _ = try probe.identity.create() }
+    catch { throw CheckFailure.failed("identity adapter creation: \(error)") }
+    do { try probe.storage.create(); try probe.storage.reopen() }
+    catch {
+        let attrs = try? FileManager.default.attributesOfItem(atPath: probe.root.appendingPathComponent("database/history.db").path)
+        throw CheckFailure.failed("storage adapter creation: \(error); protection metadata: \(String(describing: attrs?[.protectionKey]))")
+    }
     let clock = TestClock(), a = try TestDevice(clock), b = try TestDevice(clock)
     a.model.load(); b.model.load()
     try check(!a.model.state.onboarded && !a.model.state.locked, "explicit onboarding")

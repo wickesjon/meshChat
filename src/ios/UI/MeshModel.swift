@@ -77,11 +77,16 @@ struct MeshState {
         try storage.putRecord(kind: .setting, key: Data(name.utf8), value: Data(value.utf8))
     }
     private func persist() throws {
-        try put("ui-profile-v1", "\(state.avatar)|0|\(state.nickname)")
-        try put("ui-channels-v1", joined.joined(separator: "\n"))
-        try put("ui-muted-v1", muted.sorted().joined(separator: "\n"))
-        try put("ui-cosmetics-v1", "\(state.theme)|\(state.nicknameRGB.map(String.init) ?? "")")
-        try put("ui-power-v1", state.power == .normal ? "NORMAL" : state.power == .saver ? "SAVER" : "AUTO")
+        try storage.operation { db in
+            let values = [
+                "ui-profile-v1": "\(state.avatar)|0|\(state.nickname)",
+                "ui-channels-v1": joined.joined(separator: "\n"),
+                "ui-muted-v1": muted.sorted().joined(separator: "\n"),
+                "ui-cosmetics-v1": "\(state.theme)|\(state.nicknameRGB.map(String.init) ?? "")",
+                "ui-power-v1": state.power == .normal ? "NORMAL" : state.power == .saver ? "SAVER" : "AUTO"
+            ]
+            for (name, value) in values { try db.putRecord(kind: .setting, key: Data(name.utf8), value: Data(value.utf8)) }
+        }
     }
     private func initialize() throws {
         let info = try identity.load()
@@ -135,23 +140,28 @@ struct MeshState {
     private func refreshThrowing() throws {
         let core = try requiredCore(), owner = try requiredOwner()
         try owner.setCosmetics(supporter: store?.active == true, rgb: state.nicknameRGB)
-        try drainCatchup()
         state.channels = try joined.map { try channelInfo(name: $0) }
-        state.friends = try storage.operation { try core.friendCards(store: $0, now: clock()) }
-        state.archives = try archives()
-        state.events = try storage.operation { try core.eventCards(store: $0, wall: wall) }
-        state.eventRows = try storage.operation { try core.eventMessages(store: $0, wall: wall, now: clock()) }
+        // One short-lived protected connection for the complete UI snapshot.
+        // Reopening SQLCipher independently for every row/query repeats its KDF.
+        try storage.operation { db in
+            try drainCatchup(db)
+            state.friends = try core.friendCards(store: db, now: clock())
+            state.archives = try archives(db)
+            state.events = try core.eventCards(store: db, wall: wall)
+            state.eventRows = try core.eventMessages(store: db, wall: wall, now: clock())
+            if let name = state.selected { state.rows = try core.messagingChannelHistory(store: db, owner: owner, name: name, nickname: state.nickname) }
+            else { state.rows = [] }
+            if let direct = state.direct { state.directRows = try core.directHistory(store: db, keys: direct.keys, now: clock(), wall: wall) }
+            else { state.directRows = [] }
+        }
         state.discoveries = try core.eventDiscoveries(now: clock())
         state.staffPresent = try staff.present()
         state.staff = state.staffPresent && staff.foreground ? try staff.access(generation: identity.load().identity.generation) { try staffProposal(uri: $0) } : nil
         state.contribution = try core.contributionStats(now: clock()); state.peers = links.count
         if let name = state.selected {
-            state.rows = try storage.operation { try core.messagingChannelHistory(store: $0, owner: owner, name: name, nickname: state.nickname) }
             state.waitSeconds = (try owner.waitMs(name: name, reaction: false, now: clock()) + 999) / 1000
             state.muted = muted.contains(name)
         } else { state.rows = []; state.waitSeconds = 0 }
-        if let direct = state.direct { state.directRows = try storage.operation { try core.directHistory(store: $0, keys: direct.keys, now: clock(), wall: wall) } }
-        else { state.directRows = [] }
     }
     func select(_ name: String?) { perform {
         state.notice = nil; state.direct = nil; state.selected = try name.map { try channelInfo(name: $0).name }
@@ -233,7 +243,13 @@ struct MeshState {
         openDirect(FriendProposal(uri: "", nickname: friend.petname, fingerprint: friend.fingerprint, keys: friend.keys), archived: false)
     }
     private func archives() throws -> [FriendProposal] {
-        try (0..<8).flatMap { index in try setting("ui-old-friends-\(index)")?.split(separator: "\n").map { try friendProposal(uri: String($0)) } ?? [] }
+        try storage.operation { try archives($0) }
+    }
+    private func archives(_ db: EncryptedStore) throws -> [FriendProposal] {
+        try (0..<8).flatMap { index in
+            let value = try db.getRecord(kind: .setting, key: Data("ui-old-friends-\(index)".utf8)).flatMap { String(data: $0, encoding: .utf8) }
+            return try value?.split(separator: "\n").map { try friendProposal(uri: String($0)) } ?? []
+        }
     }
     private func archive(_ friend: FriendCard) throws {
         if try archives().contains(where: { $0.keys == friend.keys }) { return }
@@ -325,14 +341,14 @@ struct MeshState {
                 catch TransportError.Busy { continue }
                 catch TransportError.Stale { continue }
             }
-            try drainCatchup()
+            try storage.operation { try drainCatchup($0) }
         }
     }
-    private func drainCatchup() throws {
+    private func drainCatchup(_ db: EncryptedStore) throws {
         let core = try requiredCore(), owner = try requiredOwner()
-        let progress = try storage.operation { db in try identity.messaging {
+        let progress = try identity.messaging {
             try core.processCatchup(store: db, provider: $0, owner: owner, now: clock(), wall: wall)
-        } }
+        }
         for key in progress.arrivals {
             if state.delayed.count >= 100, let old = state.delayed.first { state.delayed.remove(old) }
             state.delayed.insert(key)

@@ -49,12 +49,25 @@ impl Database {
             .unwrap();
         let folder = root.join(".work/friends-tests");
         std::fs::create_dir_all(&folder).unwrap();
-        Self::reopen(folder.join(format!(
-            "{}-{}-{}.sqlite",
-            std::process::id(),
-            module_path!().replace("::", "-"),
-            NEXT.fetch_add(1, Ordering::Relaxed)
-        )))
+        // Windows may reuse a previous test process ID while its ignored files
+        // remain. Reserve a genuinely new database instead of reopening it.
+        loop {
+            let path = folder.join(format!(
+                "{}-{}-{}.sqlite",
+                std::process::id(),
+                module_path!().replace("::", "-"),
+                NEXT.fetch_add(1, Ordering::Relaxed)
+            ));
+            match std::fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&path)
+            {
+                Ok(_) => return Self::reopen(path),
+                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+                Err(error) => panic!("cannot reserve synthetic database: {error}"),
+            }
+        }
     }
     pub fn reopen(path: PathBuf) -> Self {
         let script = PathBuf::from(env!("CARGO_MANIFEST_DIR"))

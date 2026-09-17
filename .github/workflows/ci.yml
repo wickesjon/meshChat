@@ -21,6 +21,7 @@ env:
   ANDROID_USER_HOME: ${{ github.workspace }}/.work/android
   RUNNER_TOOL_CACHE: ${{ github.workspace }}/.work/tools
   PYTHONDONTWRITEBYTECODE: "1"
+  PYTHONUNBUFFERED: "1"
 
 jobs:
   ticketboard:
@@ -116,6 +117,10 @@ jobs:
           python3 -B src/core/build_bindings.py android
       - name: Verify wrapper
         run: echo '81a82aaea5abcc8ff68b3dfcb58b3c3c429378efd98e7433460610fecd7ae45f  src/android/gradle/wrapper/gradle-wrapper.jar' | sha256sum --check
+      - name: Build protected storage for the production app
+        run: |
+          python3 -B src/android/security/build_sqlcipher.py
+          python3 -B src/android/ui/build_graphics.py
       - name: Android build and lint
         working-directory: src/android
         run: |
@@ -126,10 +131,10 @@ jobs:
           cat "$ANDROID_HOME/platforms/android-36/source.properties"
           cat "$ANDROID_HOME/build-tools/35.0.0/source.properties"
           bash gradlew --version
-          bash gradlew --no-daemon :app:assembleDebug :app:assembleRelease :app:lintDebug :app:testDebugUnitTest
+          bash gradlew --no-daemon :app:assembleDebug :app:assembleRelease :app:assembleDebugAndroidTest :app:lintDebug :app:testDebugUnitTest
       - name: Verify packaged native libraries
         run: |
-          python3 -B tests/integration/ffi/check_android_apk.py \
+          python3 -B tests/integration/android-ui/check_apk.py \
             src/android/app/build/outputs/apk/debug/app-debug.apk \
             src/android/app/build/outputs/apk/release/app-release-unsigned.apk
           for apk in src/android/app/build/outputs/apk/*/*.apk; do
@@ -165,6 +170,18 @@ jobs:
           start_security_emulator
           python3 -B tests/bench/security/run_android_emulator.py --serial emulator-5554
           python3 -B tests/integration/storage/run_android.py --serial emulator-5554
+          python3 -B tests/integration/android-ui/run_emulator.py --serial emulator-5554
+      - name: Retain synthetic UI evidence and rebuilt dependencies
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: mc028-android-evidence
+          include-hidden-files: true
+          retention-days: 7
+          path: |
+            .work/mc028/screenshots/*.png
+            .work/security-sqlcipher/sqlcipher-4.17.0-aligned.aar
+            .work/ui-graphics/graphics-path-1.0.1-aligned.aar
       - name: Stop isolated security emulator
         if: always()
         run: |

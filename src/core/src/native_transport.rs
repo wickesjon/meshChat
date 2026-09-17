@@ -695,6 +695,12 @@ impl NativeTransport {
                 )
                 .map_err(|_| TransportError::Stale)?;
             if let Outcome::Complete { len, state, .. } = result {
+                if state != State::DeferredSync && state != State::Control {
+                    let now = s.now;
+                    s.relay
+                        .observe(Some(&link), &output[..len], now)
+                        .map_err(|_| TransportError::Unavailable)?;
+                }
                 let clear = matches!(state, State::Unverified | State::Duplicate)
                     && output.get(2).is_some_and(|flags| flags & 7 == 0);
                 let signed = matches!(state, State::Pending | State::PendingDuplicate)
@@ -739,6 +745,11 @@ impl NativeTransport {
             return Err(TransportError::Stale);
         }
         let mut out = TransportEffects::default();
+        if matches!(traffic, TransportTraffic::Own) {
+            s.relay
+                .observe(None, &bytes, now)
+                .map_err(|_| TransportError::Invalid)?;
+        }
         s.enqueue(
             &link,
             &bytes,

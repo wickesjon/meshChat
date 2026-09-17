@@ -14,6 +14,7 @@ pub mod friends;
 pub mod identity;
 pub mod ingress;
 pub mod links;
+pub mod native_channels;
 pub mod native_transport;
 pub mod organizer;
 pub mod power;

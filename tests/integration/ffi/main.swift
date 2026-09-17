@@ -157,3 +157,27 @@ print("MC-024 Swift power policy, Auto hysteresis and bounded observations passe
 #if MC026_DRIVER_TESTS
 try iosDriverChecks()
 #endif
+
+func channelTrace() throws {
+    let db = try TransportSql(); defer { db.finish() }
+    let identity = try IdentityKeySession.importUnlocked(material: Data(repeating: 125, count: 64), generation: Data(repeating: 125, count: 16))
+    defer { try? identity.invalidate() }
+    let publicId = try identity.publicIdentity()
+    let store = try EncryptedStore.open(db: db, generation: publicId.generation, create: true, now: 200000)
+    let channels = try NativeChannels(identity: publicId, now: 0)
+    let first = try channels.compose(name: "#confessions", nickname: "Alice", avatar: 0x23, message: String(repeating: "🎉", count: 70), wall: 200000, now: 0)
+    let second = try channels.compose(name: "#confessions", nickname: "Alice", avatar: 0x23, message: "Another", wall: 200000, now: 0)
+    precondition(first.subdata(in: 12..<20) != second.subdata(in: 12..<20))
+    let accepted = try channels.accept(store: store, receipt: ChannelReceipt(link: nil, bytes: first, intake: .unverified, own: true, wall: 200000, now: 0))
+    precondition(accepted)
+    let message = try channels.history(store: store, name: "#confessions", ownNickname: "Alice")[0]
+    precondition(message.nickname == "Anonymous" && message.avatar == 0)
+    let reaction = try channels.reaction(name: "#confessions", target: message.id, code: 3, remove: false, now: 0)
+    precondition(reaction.subdata(in: 12..<20) == publicId.senderId)
+    _ = try channels.accept(store: store, receipt: ChannelReceipt(link: nil, bytes: reaction, intake: .unverified, own: true, wall: 200000, now: 0))
+    let result = try channels.history(store: store, name: "#confessions", ownNickname: "Alice")
+    precondition(result[0].reactions[3] == 1)
+    do { _ = try channels.compose(name: "#general", nickname: "Alice", avatar: 1, message: String(repeating: "🎉", count: 71), wall: 200000, now: 0); fatalError("accepted oversized message") } catch ChannelError.Invalid {}
+    print("MC-028 Swift real channel codec, disposable posts, byte limits and persistent reactions PASS")
+}
+try channelTrace()

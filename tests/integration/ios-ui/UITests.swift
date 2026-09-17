@@ -30,8 +30,12 @@ final class MeshUITests: XCTestCase {
         XCTAssertTrue(app.textFields["Message"].waitForExistence(timeout: 5))
         attach(app, "channel-plaintext")
         app.buttons["Back"].tap(); app.buttons["Settings"].tap()
-        XCTAssertTrue(app.buttons["Beacon Mode · unavailable on iOS"].exists)
-        XCTAssertFalse(app.buttons["Beacon Mode · unavailable on iOS"].isEnabled)
+        XCTAssertTrue(app.buttons["Save"].waitForExistence(timeout: 5))
+        let beacon = app.buttons["Beacon Mode · unavailable on iOS"]
+        // Form rows below the initial viewport are created lazily.
+        for _ in 0..<6 { if beacon.exists { break }; app.swipeUp() }
+        XCTAssertTrue(beacon.exists)
+        XCTAssertFalse(beacon.isEnabled)
         attach(app, "settings")
         app.buttons["Cancel"].firstMatch.tap()
         app.tabBars.buttons["Friends"].tap(); app.buttons["My friend code"].tap()

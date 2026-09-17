@@ -34,6 +34,7 @@ android {
 kotlin.compilerOptions { jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17); allWarningsAsErrors.set(true) }
 dependencies {
     testImplementation("junit:junit:4.13.2")
+    testImplementation("net.java.dev.jna:jna:5.17.0")
     testImplementation("com.google.zxing:core:3.4.1")
     implementation("androidx.annotation:annotation:1.9.1")
     implementation("net.java.dev.jna:jna:5.17.0@aar")

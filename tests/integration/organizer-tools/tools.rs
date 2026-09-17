@@ -39,6 +39,17 @@ fn encrypted_root_and_canonical_staff_roundtrip() {
     let mut damaged = created.vault.clone();
     damaged.replace_range(..2, "ff");
     assert!(OpenRoot::open(&damaged, &created.unlock, 200000).is_err());
+    let raw = unhex(&created.vault).unwrap();
+    for offset in [
+        b"meshchat/offline-root/v1\0".len(),
+        raw.len() - 17,
+        raw.len() - 1,
+    ] {
+        let mut modified = raw.to_vec();
+        modified[offset] ^= 1;
+        assert!(OpenRoot::open(&hex(&modified), &created.unlock, 200000).is_err());
+    }
+    assert!(OpenRoot::open(&hex(&raw[..raw.len() - 1]), &created.unlock, 200000).is_err());
     let qr = matrix(&staff).unwrap();
     assert!(qr.len() > 21);
     assert!(qr.iter().all(|row| row.len() == qr.len()));

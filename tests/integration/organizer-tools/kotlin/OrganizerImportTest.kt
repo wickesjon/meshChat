@@ -8,7 +8,7 @@ import org.junit.Test
 import uniffi.meshchat_core.*
 
 class OrganizerImportTest {
-    private val root = generateSequence(File(System.getProperty("user.dir"))) { it.parentFile }
+    private val root = generateSequence(File(requireNotNull(System.getProperty("user.dir")))) { it.parentFile }
         .first { File(it,"AGENTS.md").isFile }
     private val fixtures = File(root,".work/mc041/fixtures.tsv").readLines().associate {
         val pair=it.split('\t',limit=2);pair[0] to pair[1]

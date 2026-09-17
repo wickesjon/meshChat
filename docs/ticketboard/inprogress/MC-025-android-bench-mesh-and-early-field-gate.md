@@ -24,6 +24,10 @@ Also permitted: this ticket and generated ticketboard index/diagram changes requ
 
 ## Implementation details
 
+### Preparation checkpoint — 2026-09-17
+
+All hard dependencies are complete on main; this branch starts from integrated candidate `e20a05e4c55df857de2dc8168258138bf2092fbc` (MC-035 squash). Prepare `docs/testing/MC-025-android-physical-acceptance.md` within the existing scope: a requirements-to-scenario matrix, preflight/evidence template, unchanged MC-007 measurement rules and explicit blockers. No production changes or acceptance relaxation is planned. Validate board generation/default, board unit tests, whitespace and local documentation links. Procedure preparation is not executed physical acceptance.
+
 - Run two-, five- and ten-device mixed-OEM trials with controlled topology, late joining, churn and an identity-rotating flooder.
 - Measure actual GATT transmissions, reachable delivery, latency and battery under the MC-007 workload.
 - Compare radio outcomes with simulator predictions and record a small field trial on the integrated Android candidate before MC-034 beta acceptance.
@@ -49,7 +53,7 @@ A triggered fallback must be recorded with evidence. It does not authorize weake
 
 Scheduling approved 2026-09-14 in [the validation policy](../../decisions/local-validation-policy.md#physical-acceptance-scheduling--approved-2026-09-14). Near completion means the listed Android feature implementations and full-wire gate are complete, before MC-034 acceptance or distribution. This physical gate is deferred, not satisfied; use synthetic messages/identities until MC-043 permits sensitive-data use. Original MC-007 workload/thresholds and all original two/five/ten-device scenarios remain required.
 
-Not implemented. Record commands, versions, reproducible inputs and results here. For manual/hardware checks include device/OS, duration and report paths. No test or review is claimed yet.
+Physical execution is blocked: the read-only `adb devices -l` inventory on 2026-09-17 returned no devices after the isolated development emulator was stopped. The physical inventory question is pending. At least two real Android phones are needed to start, with Pixel/Samsung/Xiaomi and five-/ten-device cohorts required for the full gate. The [acceptance packet](../../testing/MC-025-android-physical-acceptance.md) is prepared; every physical scenario remains NOT RUN. Candidate-specific workload/measurement instrumentation must also be verified before execution; the existing emulator runners deliberately reject physical serials and must not be reused by removing that guard. No physical test, completed ticket or final review is claimed.
 
 ## Review and merge
 
@@ -57,3 +61,5 @@ Not implemented. Record commands, versions, reproducible inputs and results here
 - Review/PR: pending.
 - Squash commit title: `MC-025: Android integrated bench mesh and field gate`.
 - Completion becomes effective only when the reviewed squash commit lands on main.
+
+Preparation validation on 2026-09-17: ticketboard regeneration/default validation, all 12 board unit tests, acceptance-packet local-link checks and `git diff --check` pass. These validate documentation only. No PR is published and no final Terra or physical acceptance review is claimed while the gate is incomplete.

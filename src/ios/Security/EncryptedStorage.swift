@@ -124,7 +124,9 @@ final class CipherConnection: SqlDatabase, @unchecked Sendable {
         try protection.requireUnlocked()
         #if os(iOS)
         try FileManager.default.setAttributes([.protectionKey: FileProtectionType.complete], ofItemAtPath: database.path)
-        guard try FileManager.default.attributesOfItem(atPath: database.path)[.protectionKey] as? FileProtectionType == .complete else { throw IdentityFailure.provider }
+        // Foundation documents this dictionary value as NSString, rather than
+        // the Swift RawRepresentable wrapper used when setting the attribute.
+        guard try FileManager.default.attributesOfItem(atPath: database.path)[.protectionKey] as? String == FileProtectionType.complete.rawValue else { throw IdentityFailure.provider }
         #endif
         if create { try sync(folder); try files.delete(.journal) }
         return result

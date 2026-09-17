@@ -20,8 +20,8 @@ import SwiftUI
 // Renderer-only synthetic collision: both directions legitimately share an ID.
 private struct RowCollisionCheck: View {
     @State private var rows = [
-        DirectMessage(id: Data(repeating: 1, count: 8), text: "Own collision", own: true, claimedTimestamp: 0, reactions: [0,0,0,0,0,0,0,0,0], ownReaction: nil),
-        DirectMessage(id: Data(repeating: 1, count: 8), text: "Peer collision", own: false, claimedTimestamp: 0, reactions: [0,0,0,0,0,0,0,0,0], ownReaction: nil)
+        DirectMessage(id: Data(repeating: 1, count: 8), text: "Own collision", own: true, claimedTimestamp: 0, reactions: Data(repeating: 0, count: 9), ownReaction: nil),
+        DirectMessage(id: Data(repeating: 1, count: 8), text: "Peer collision", own: false, claimedTimestamp: 0, reactions: Data(repeating: 0, count: 9), ownReaction: nil)
     ]
     var body: some View { VStack {
         DirectRows(rows: rows) { row in Text(verbatim: row.text) }

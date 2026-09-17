@@ -655,8 +655,9 @@ impl Organizer {
             ingress.resolve_signature(&job.link, &job.raw, false)?;
             return Ok(None);
         }
-        if pin_state == 1 && (pin_expiry > c.not_after || pin_expiry > job.root.expiry) {
-            return Err(Error::Authority);
+        if text::validate_payload(packet.payload()).is_err() {
+            ingress.resolve_signature(&job.link, &job.raw, false)?;
+            return Ok(None);
         }
         let authority = Authority {
             root: job.root.key,
@@ -664,7 +665,12 @@ impl Organizer {
             staff,
             credential: job.credential.clone(),
             generation: self.generation,
-            pin_expiry: (pin_state == 1).then_some(pin_expiry),
+            // A signed pin outside authority bounds does not invalidate the
+            // otherwise valid signed text. Keep raw bytes; suppress its pin.
+            pin_expiry: (pin_state == 1
+                && pin_expiry <= c.not_after
+                && pin_expiry <= job.root.expiry)
+                .then_some(pin_expiry),
         };
         let result = self.persist(store, &job.raw, &job.root, &authority, timestamp, 0, wall)?;
         ingress.resolve_signature(&job.link, &job.raw, true)?;
@@ -802,6 +808,7 @@ impl Organizer {
             return Err(Error::Authority);
         }
         let packet = codec::parse(&raw, codec::Context::Live).map_err(|_| Error::Invalid)?;
+        text::validate_payload(packet.payload()).map_err(|_| Error::Invalid)?;
         let codec::Payload::Chat {
             timestamp,
             signature:

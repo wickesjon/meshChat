@@ -507,6 +507,10 @@ impl Friends {
             },
         )
         .map_err(|_| Error::Invalid)?;
+        if text::validate_payload(packet.payload()).is_err() {
+            ingress.resolve_signature(&job.link, raw, false)?;
+            return Ok(None);
+        }
         let result = if let codec::Payload::Chat { timestamp, .. } = packet.payload() {
             let mut immutable = raw.clone();
             immutable[3] = 0;

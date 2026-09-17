@@ -1,0 +1,29 @@
+# MC-022 full-wire freeze
+
+Status: **all implementation, assessment and native gates passed; effective on final reviewed squash merge**. Until that merge, completion remains pending. The remediated and independently retested source is `695fbc44e472e1f6a5664c9ec0cb3b8a0cc8f792` in [PR #26](https://github.com/wickesjon/meshChat/pull/26).
+
+## Versioned contract and compatibility
+
+The [MC-006 wire/QR grammar](../decisions/MC-006-wire-contract.md), [MC-007 budgets](../decisions/MC-007-budgets-and-acceptance.md) and [MC-008 cryptographic construction](../decisions/MC-008-crypto-contract.md) define the combined version 1 contract. The [review packet's inventory](MC-022-crypto-review-packet.md#wire-and-qr-inventory) maps every v1 frame, logical packet, provisioning form and authenticated transcript to its owner and tests. MC-022 introduces no new wire bytes, profile, signature domain, dependency version or database schema.
+
+The base compatibility rules in [MC-016](MC-016-base-freeze.md) continue to apply. Authenticated DMs use profile 01 and the exact RFC 9180 Auth suite/transcript in MC-008. Unknown profiles and noncanonical encodings fail closed; no plaintext DM fallback exists. Public signed bytes retain their exact text and immutable headers; only TTL has its specified transport mutability. An invalid pin cannot discard otherwise valid organizer text or obtain pin authority. Forbidden raw text is refused before local content acceptance; display normalization never rewrites signed originals.
+
+Public authenticated replay identity is independent of local history direction. Compatible storage reads cover both legacy public directions; new public tombstones use canonical direction zero. Existing history, conflicting records and replay tombstones are retained. DM direction remains part of its replay key. These are acceptance corrections to the existing contract, not an incompatible layout or a destructive migration.
+
+Any later incompatible byte/transcript change requires a versioned decision, updated positive/negative vectors, explicit compatibility consequences and reopening affected integration/security gates. Discovery of a construction or acceptance defect reopens its gate; a freeze is not permission to conceal or bypass a defect.
+
+## Assessment and validation evidence
+
+The [original separate automated construction assessment](MC-022-assessment/report.md) covers candidate `ad87cf890459cd43e1e10991085440ebd6d48cb9`, whose production source was main `835a7966f4edb2dead99f5768ec24b75059a337c`. Its original report, input inventory and defect-reproducing probes remain unchanged. The user approved the [scoped remediation](MC-022-assessment-remediation.md). The [independent retest](MC-022-assessment/retest-report.md) at `695fbc44e472e1f6a5664c9ec0cb3b8a0cc8f792` closes F-01/F-02/A-01 with no new blocking finding, supported by eight assessor-authored probes, 63 integration checks and 13 storage checks. The user's requested separate automated construction assessment is satisfied by these attributable artifacts; it is distinct from ordinary Terra PR review and does not become human certification. All four jobs in [CI run 35167822797](https://github.com/wickesjon/meshChat/actions/runs/35167822797) pass on that revision, including actual Android/Swift SQLCipher replay checks and both native vector runners. The ticket records platform details and the separate Terra review. Final metadata review and squash merge are still required for effectiveness.
+
+The ticket and review packet record commands, tool versions, exact revisions and applicability. Reference generators independently reproduce public fixtures using Node/OpenSSL and RFC known-answer inputs; Kotlin/Swift checks exercise the same Rust implementation through bindings and do not become independent cryptographic implementations. Shared SQLite callback tests use synthetic plaintext fixtures; actual SQLCipher runs provide separate native-engine evidence. No layer implies formal proof or device certification.
+
+## Integration obligations and release limits
+
+The assessor's A-02 remains a mandatory native integration obligation: local key loading/provisioning and QR verification must use the shared cryptographic work/concurrency accounting, and native lock/reset/provider invalidation must cancel stale authority and operations. MC-029/030 own Android friend/DM/organizer feature wiring, MC-031 sharing, MC-035 iOS feature wiring and MC-041 organizer provisioning tooling. Their integrations must retain these obligations and test budget exhaustion, lifecycle changes and recovery. MC-037 assesses the integrated applications. This record does not assert those unfinished features already satisfy A-02 or expand their permitted paths.
+
+Native callers must also recheck current authority at display/egress, preserve exact signed bytes, implement safe display normalization and badge/confusable handling, and distinguish unverified/opaque/pending transport effects from authenticated content. A transport send callback proves native completion only, not remote receipt or display.
+
+The accepted construction does not promise forward secrecy, recipient-compromise impersonation resistance, third-party non-repudiation, metadata privacy, wormhole resistance or guaranteed delivery. Public channels remain plaintext. Software curve keys follow the approved wrapped-key development contract; complete erasure of every runtime/FFI/database copy is unproved.
+
+Physical radio/lifecycle acceptance remains MC-025/027; platform key/storage certification remains MC-043/044. Those physical gates retain their original scenarios and sensitive-data restrictions. MC-036–040 retain integrated security, independent assessment, field and release gates. This freeze neither authorizes sensitive-data use before its platform gate nor claims an external human audit, store approval or release readiness.

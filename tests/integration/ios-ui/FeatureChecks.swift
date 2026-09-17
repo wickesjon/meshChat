@@ -7,7 +7,7 @@ enum CheckFailure: Error { case failed(String) }
     do { _ = try action() } catch { return }; throw CheckFailure.failed(label)
 }
 
-@MainActor func featureChecks() throws {
+@MainActor func featureChecks() async throws {
     // Diagnose native adapter failures before the UI intentionally reduces them
     // to a generic locked/recovery state. Never include key or envelope bytes.
     let probe = try TestDevice()
@@ -28,6 +28,7 @@ enum CheckFailure: Error { case failed(String) }
         let excluded = try? folder.resourceValues(forKeys: [.isExcludedFromBackupKey]).isExcludedFromBackup
         throw CheckFailure.failed("storage adapter creation: \(error); file operation: \(probe.fileTrace.failure); folder exists: \(FileManager.default.fileExists(atPath: folder.path)); backup excluded: \(String(describing: excluded)); protection metadata: \(String(describing: attrs?[.protectionKey]))")
     }
+    await Task.yield()
     let clock = TestClock(), a = try TestDevice(clock), b = try TestDevice(clock)
     a.model.load(); b.model.load()
     try check(!a.model.state.onboarded && !a.model.state.locked, "explicit onboarding")
@@ -45,6 +46,7 @@ enum CheckFailure: Error { case failed(String) }
     a.model.shareInput(bCode.uri); try check(a.model.state.friends.isEmpty, "link cannot pin")
     a.model.confirmFriend("My Bob"); b.model.shareInput(aCode.uri, scanned: true); b.model.confirmFriend("My Alice")
     try check(a.model.state.friends.count == 1 && b.model.state.friends.count == 1, "explicit reciprocal pins")
+    await Task.yield()
     a.model.connect(); b.model.connect(); a.radio!.ready(.central); b.radio!.ready(.peripheral)
     TestRadio.pump(a.radio!, b.radio!, seconds: 7)
     try check(a.model.state.peers == 1 && b.model.state.peers == 1, "real driver handshake")
@@ -54,6 +56,7 @@ enum CheckFailure: Error { case failed(String) }
     a.model.select(name); b.model.select(name); a.model.send("signed private words")
     TestRadio.pump(a.radio!, b.radio!, seconds: 4); b.model.refresh()
     try check(b.model.state.rows.contains { $0.text == "signed private words" && $0.verifiedPetname == "My Alice" }, "signed friend attribution")
+    await Task.yield()
     a.model.openDirect(a.model.state.friends[0]); b.model.openDirect(b.model.state.friends[0]); a.model.send("encrypted synthetic DM")
     TestRadio.pump(a.radio!, b.radio!, seconds: 4); b.model.refresh()
     try check(b.model.state.directRows.last?.text == "encrypted synthetic DM", "authenticated encrypted DM")
@@ -61,6 +64,7 @@ enum CheckFailure: Error { case failed(String) }
     b.model.react(dm.id, code: 1, remove: false)
     TestRadio.pump(a.radio!, b.radio!, seconds: 3); a.model.refresh()
     try check(a.model.state.directRows.last?.reactions[1] == 1, "encrypted reaction")
+    await Task.yield()
     // A queued protected send must not cross a lock even if native readiness returns.
     a.radio!.writable = false; a.model.send("must never reach port")
     let sent = a.radio!.submitted; a.protection.unlocked = false
@@ -74,6 +78,7 @@ enum CheckFailure: Error { case failed(String) }
     try check(a.databaseProtection.calls > 0 && a.model.state.locked, "file protection failure closes the feature owner")
     a.databaseProtection.available = true; a.model.load()
     try check(a.model.state.onboarded && !a.model.state.locked, "file protection recovery reopens existing identity")
+    await Task.yield()
     b.model.stop()
     a.model.changeFriend(a.model.state.friends[0], replace: true)
     try check(a.model.state.friends[0].replacing && a.model.state.archives.count == 1, "replacement keeps separate archive")
@@ -89,6 +94,7 @@ enum CheckFailure: Error { case failed(String) }
     let features = detector.features(in: CIImage(cgImage: image.cgImage!)).compactMap { ($0 as? CIQRCodeFeature)?.messageString }
     try check(features == [link], "offline QR exact round trip")
     try refuses("secret must not export") { try Sharing.qr("meshfest://staff/not-public") }
+    await Task.yield()
     let fixtureURL = Bundle.main.url(forResource: "events", withExtension: "tsv")!
     let fixtures = Dictionary(uniqueKeysWithValues: try String(contentsOf: fixtureURL, encoding: .utf8).split(separator: "\n").map { line in let pair = line.split(separator: "\t", maxSplits: 1); return (String(pair[0]), String(pair[1])) })
     // Independent pair exercises anonymous rendering inputs and staff signatures
@@ -101,6 +107,7 @@ enum CheckFailure: Error { case failed(String) }
     staffDevice.model.select("#confessions"); audience.model.select("#confessions"); staffDevice.model.send("anonymous synthetic")
     TestRadio.pump(staffDevice.radio!, audience.radio!, seconds: 3); audience.model.refresh()
     try check(audience.model.state.rows.last?.avatar == 0 && audience.model.state.rows.last?.nickname != "Synthetic Staff", "anonymous profile separation")
+    await Task.yield()
     for device in [staffDevice, audience] { device.model.shareInput(fixtures["event"]!); device.model.adoptEvent(); device.model.select("#event updates") }
     staffDevice.model.staffInput(fixtures["staff"]!); staffDevice.model.confirmStaff()
     staffDevice.model.send("signed synthetic update", pinExpiry: UInt32(Date().timeIntervalSince1970) + 60)
@@ -109,6 +116,7 @@ enum CheckFailure: Error { case failed(String) }
     staffDevice.model.foreground(false)
     try check(staffDevice.model.state.staff == nil, "background removes staff signing capability")
     staffDevice.model.stop(); audience.model.stop()
+    await Task.yield()
     a.model.shareInput(fixtures["event"]!); try check(a.model.state.events.isEmpty, "event confirmation")
     a.model.adoptEvent(); try check(a.model.state.events.first?.active == true, "adopted root")
     a.model.staffInput(fixtures["staff"]!); a.model.foreground(false)
@@ -124,10 +132,12 @@ enum CheckFailure: Error { case failed(String) }
     a.model.staffInput(fixtures["staff"]!); clock.now += 60_001; a.model.confirmStaff()
     try check(a.model.state.staffProposal == nil && a.model.state.staff != nil, "stale confirmation expires")
     a.model.forgetStaff(); try check(!a.model.state.staffPresent, "forget staff")
+    await Task.yield()
     try a.storage.putRecord(kind: .setting, key: Data("supporter-v1".utf8), value: Data("1".utf8))
     a.reopen(); a.model.load(); try check(a.model.store?.active == true, "offline purchase cache")
     a.model.updateProfile(nickname: "Alice", avatar: 0xf8, theme: "daylight", color: 0xff00ff)
     a.reopen(); a.model.load(); try check(a.model.state.avatar == 0xf8 && a.model.state.nicknameRGB == 0xff00ff, "encrypted settings persist")
+    await Task.yield()
     let old = a.model.state.myCode!.keys
     a.model.resetIdentity(); try check(!a.model.state.onboarded, "reset requires profile")
     a.model.create(nickname: "Reset", avatar: 1)

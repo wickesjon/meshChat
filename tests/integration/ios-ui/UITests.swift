@@ -12,7 +12,9 @@ final class MeshUITests: XCTestCase {
     @MainActor func testProductionFeatureIntegration() {
         let app = XCUIApplication(); app.launchArguments = ["--integration"]; app.launch()
         let result = app.staticTexts["integration-result"]
-        XCTAssertTrue(result.waitForExistence(timeout: 90))
+        XCTAssertTrue(result.waitForExistence(timeout: 20))
+        let finished = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label != %@", "MC035 integration running"), object: result)
+        XCTAssertEqual(XCTWaiter.wait(for: [finished], timeout: 90), .completed)
         XCTAssertEqual(result.label, "MC035 integration PASS")
     }
     @MainActor func testNativeScreensAndConfirmations() {

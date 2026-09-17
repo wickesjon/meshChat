@@ -2,19 +2,25 @@ import SwiftUI
 
 @main struct HarnessApp: App {
     private let device: TestDevice
-    private let result: String?
     init() {
         device = try! TestDevice()
-        if ProcessInfo.processInfo.arguments.contains("--integration") {
-            do { try featureChecks(); result = "MC035 integration PASS" }
-            catch { result = "MC035 integration FAILED: \(error)" }
-        } else { result = nil }
     }
     var body: some Scene { WindowGroup {
-        if let result { Text(result).accessibilityIdentifier("integration-result") }
+        if ProcessInfo.processInfo.arguments.contains("--integration") { IntegrationCheckView() }
         else if ProcessInfo.processInfo.arguments.contains("--row-identities") { RowCollisionCheck() }
         else { MeshView(model: device.model) }
     } }
+}
+
+private struct IntegrationCheckView: View {
+    @State private var result = "MC035 integration running"
+    var body: some View {
+        Text(result).accessibilityIdentifier("integration-result").task { @MainActor in
+            await Task.yield()
+            do { try await featureChecks(); result = "MC035 integration PASS" }
+            catch { result = "MC035 integration FAILED: \(error)" }
+        }
+    }
 }
 
 // Renderer-only synthetic collision: both directions legitimately share an ID.

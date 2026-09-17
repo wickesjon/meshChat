@@ -37,9 +37,9 @@ Necessary additional scope under standing repository-local approval: `.github/wo
 
 ## Exit criteria
 
-- [ ] Each shipping v1 flow passes native UI/integration tests with the production frozen core and synthetic inputs, plus applicable Mac/Xcode builds. Real-device flow/lifecycle acceptance remains mandatory in MC-027.
-- [ ] Key reset, background restoration, offline purchase cache and foreground catch-up behave as specified.
-- [ ] Native iOS screens preserve the same plaintext/encrypted and verified/unverified boundaries as Android.
+- [x] Each shipping v1 flow passes native UI/integration tests with the production frozen core and synthetic inputs, plus applicable Mac/Xcode builds. Real-device flow/lifecycle acceptance remains mandatory in MC-027.
+- [x] Key reset, background restoration, offline purchase cache and foreground catch-up behave as specified in automated/native checks; physical lifecycle acceptance remains MC-027/044.
+- [x] Native iOS screens preserve the same plaintext/encrypted and verified/unverified boundaries as Android.
 - [ ] Relevant checks pass, evidence is recorded, required review is complete, and the ticket is squash merged to main.
 
 ## Potential fallbacks
@@ -53,12 +53,12 @@ A triggered fallback must be recorded with evidence. It does not authorize weake
 
 Scheduling approved 2026-09-14 in [the validation policy](../../decisions/local-validation-policy.md#physical-acceptance-scheduling--approved-2026-09-14). Implementation consumes the native driver and independently frozen core before physical interop. MC-027 now follows this ticket and owns every shipping flow on the real iOS device matrix; no native build waiver is implied.
 
-Implementation is underway. Native acceptance and independent ticket review remain pending; no exit criterion is closed. For manual/hardware checks include device/OS, duration and report paths.
+Implementation and native acceptance pass, with separate Terra code review recorded below. Final Android emulator validation, evidence review and squash merge remain pending. Physical device/OS/duration reports remain the responsibility of MC-027/044; no physical acceptance is claimed.
 
 ## Review and merge
 
 - Branch: `ticket/MC-035-ios-feature-parity-and-lifecycle-ui`.
-- Review/PR: https://github.com/wickesjon/meshChat/pull/38 — ready PR, validation and follow-up review pending.
+- Review/PR: https://github.com/wickesjon/meshChat/pull/38 — ready PR, Terra code review and full Mac validation pass; final evidence/merge pending.
 - Squash commit title: `MC-035: iOS feature parity and lifecycle UI`.
 - Completion becomes effective only when the reviewed squash commit lands on main.
 
@@ -103,3 +103,13 @@ The synthetic acceptance boundary now explicitly includes the hardware-dependent
 Terra follow-up on `f4cfc4641b9540f2c37799f00bbe5e9737bb37ae` accepted the explicit synthetic boundary but raised P1 after inspecting launch execution: the full synchronous integration suite ran inside the test application's initializer, before its first screen. That supersedes its initial code PASS. The harness now renders a running result, starts an async MainActor task, yields between meaningful phases and publishes completion. XCUITest waits for a completed result and still requires the exact PASS value. These changes are confined to the test host; follow-up review and native execution remain required.
 
 Terra follow-up PASS for code at `457d766dc481174eca3353abd3fbbfaa1afc77c5`. Native run `35279942245` passes all four application builds, Swift/Supporter regressions, Rust, the full production feature integration suite (40 seconds), and the opposite-direction row regression. Onboarding and channel confirmation now pass in the screen test. The remaining screen-test failure is an offscreen, lazily created Settings Form row: the test queried the disabled Beacon control without scrolling. The test now waits for Settings and uses at most six upward scrolls before retaining both existence and disabled-state assertions. No product behavior or acceptance assertion is removed. The remaining screen flow and later Mac checks still require a passing run.
+
+### Current native acceptance
+
+Terra follow-up reviewed exact `1c46d16148de09564fadfa85f9952475315b5dd3`: **PASS for code**, no findings. Run [35281637468](https://github.com/wickesjon/meshChat/actions/runs/35281637468) at that revision passes all three native acceptance tests on the iPhone 16 Pro simulator, iOS 18.5: shipping screen navigation/confirmations (73.924 s), opposite-direction DM row identity/removal (11.586 s), and full production feature integration (94.606 s); zero failures, 180.117 s total. Durations describe test execution, not physical performance certification. Retained `mc035-ios-ui` artifacts include the full native log/result bundle and disposable public screenshots. The channel plaintext warning, public friend QR/fingerprint, and disabled Beacon explanation were visually inspected. Local copies are under ignored `.work/mc035/native-evidence-1c46/`.
+
+The entire Mac job is **PASS** on this revision: all four production application builds, Swift host/driver and Supporter regressions, four BLE probe builds, four security probe builds, identity/organizer import regressions, Swift curve interoperability, and real SQLCipher create/reopen/negative/key-loss/reset and native crypto integration. The hosted Rust job also passes. Commands are the pinned `ios`/`rust` steps in `.github/workflows/ci.yml`, including `python3 -B tests/integration/ios-ui/run_apple.py`, `tests/integration/storage/run_apple.py`, `tests/integration/organizer-tools/run_apple.py` and the warning-as-error Swift host compiles. Full Mac log is retained locally in `.work/mc035/ios-final.log`. Remaining hosted Android emulator checks are still running; final merge remains pending that applicable gate and final evidence review.
+
+### Android acceptance blocker and necessary test scope
+
+Run `35281637468` passes Android builds/lint, security and SQLCipher lifecycle, and all channel UI phases, but fails the contribution reset UI assertion at `StatsUiTest.kt:35`: it requires the published elapsed window to be below five seconds. The full production refresh performs protected database operations before publishing; software emulation can exceed this arbitrary interval. Investigate and validate a test-only correction in `tests/integration/stats/android/StatsUiTest.kt` under standing repository-local scope approval: compare the reset window against its observed pre-reset value, retain zero-counter assertions and all export checks, and retain the exact zero-time/credit-preservation native core regression. This changes no product behavior or physical performance threshold. Required evidence: rebuilt test APK, actual emulator execution of the corrected flow and remaining native consumer suites, followed by Terra review. The Android job is FAIL; later suites were skipped, never passed. Merge remains blocked until resolved.

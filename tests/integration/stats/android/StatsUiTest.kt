@@ -31,8 +31,14 @@ class StatsUiTest {
         ui.onNodeWithContentDescription("Share received activity").performClick()
         ui.onNodeWithText("Share image").assertIsEnabled()
         ui.onNodeWithText("MeshChat · local contribution",substring=true).assertExists();screenshot("preview")
-        click("Cancel");click("Reset local counters");click("Reset counters")
-        awaitState {model.screen.contribution!!.elapsedMs<5000uL};assertEquals(0uL,model.screen.contribution!!.completedFrames)
+        click("Cancel");click("Reset local counters")
+        val elapsedBeforeReset=model.screen.contribution!!.elapsedMs
+        assertTrue("An existing measurement window is required",elapsedBeforeReset>0uL)
+        click("Reset counters")
+        // Observe a new window, not a five-second device-speed requirement: protected
+        // refresh may take longer than that on a software-emulated CI device.
+        awaitState {model.screen.contribution!!.elapsedMs<elapsedBeforeReset}
+        assertEquals(0uL,model.screen.contribution!!.completedFrames)
         click("Done")
         // Fixed aggregate snapshot exercises actual image/URI export, without launching any share recipient.
         val stats=model.screen.contribution!!.copy(elapsedMs=120000u,receivedFrames=999u,receivedPackets=12u,completedFrames=888u,relayedChatCopies=777u,powerMode="PRIVATE_SENTINEL")

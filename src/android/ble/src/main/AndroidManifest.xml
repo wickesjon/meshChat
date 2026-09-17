@@ -22,5 +22,6 @@
             </intent-filter>
         </activity>
         <service android:name=".ProbeService" android:exported="false" android:foregroundServiceType="connectedDevice" />
+        <service android:name="org.meshchat.transport.MeshTransportService" android:exported="false" android:foregroundServiceType="connectedDevice" />
     </application>
 </manifest>

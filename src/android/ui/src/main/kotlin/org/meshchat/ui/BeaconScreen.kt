@@ -29,7 +29,7 @@ private tailrec fun activity(context: Context): Activity? = when(context) {
 }
 
 @Composable
-internal fun BeaconScreen(s: MeshScreenState, exit: () -> Unit, connect: () -> Unit) {
+internal fun BeaconScreen(s: MeshScreenState, exit: () -> Unit, connect: () -> Unit, permissions: () -> Unit) {
     val view=LocalView.current
     DisposableEffect(view) {
         val window=activity(view.context)?.window
@@ -60,7 +60,10 @@ internal fun BeaconScreen(s: MeshScreenState, exit: () -> Unit, connect: () -> U
                 ?: s.status,color=MaterialTheme.colorScheme.onBackground)
             Text(if(b?.infra==true)"Powered relay hint is on" else "Powered relay hint is off",color=MaterialTheme.colorScheme.onBackground)
             s.error?.let { Text(it,color=MaterialTheme.colorScheme.error) }
-            if(b==null)TextButton(onClick=connect) { Text("Connect nearby") }
+            if(b==null) {
+                TextButton(onClick=permissions) { Text("Review permissions") }
+                TextButton(onClick=connect) { Text("Connect nearby") }
+            }
             Box(Modifier.fillMaxWidth().heightIn(min=64.dp).background(MaterialTheme.colorScheme.surface)
                 .semantics(mergeDescendants=true) { onLongClick("Exit Beacon Mode") { exit();true } }
                 .pointerInput(exit) { detectTapGestures(onPress={

@@ -220,13 +220,20 @@ fn bounded_cache_is_served_only_after_admitted_request_and_respects_ttl() {
         2000,
     )
     .unwrap();
+    let mut request_events = Vec::new();
     for now in (2000..7000).step_by(1000) {
         for send in b.tick(now).unwrap().sends {
-            a.receive(al.clone(), send.bytes.len() as u64, send.bytes, now)
-                .unwrap();
+            request_events.extend(
+                a.receive(al.clone(), send.bytes.len() as u64, send.bytes, now)
+                    .unwrap()
+                    .events,
+            );
             b.complete(bl.clone(), send.token, true, now).unwrap();
         }
     }
+    assert!(request_events.iter().any(|event| matches!(event,
+        TransportEvent::Received { bytes, intake: TransportIntake::Unverified, .. } if bytes == &raw[..len])));
+    assert_eq!(a.beacon_status(6000).unwrap().cached_messages, 12);
     let mut items = Vec::new();
     for now in (7000..20_000).step_by(1000) {
         for send in a.tick(now).unwrap().sends {

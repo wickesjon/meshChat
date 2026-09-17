@@ -41,7 +41,7 @@ fun MeshApp(model: MeshModel, permissions: () -> Unit, scan: () -> Unit = {}, bu
                     Button(onClick=model::load) { Text("Reopen") }; ResetAction(model)
                 }
                 !s.onboarded -> Onboarding(model,s,permissions)
-                s.beaconRequested || s.beacon?.active == true -> BeaconScreen(s,model::exitBeacon,model::startRadio)
+                s.beaconRequested || s.beacon?.active == true -> BeaconScreen(s,model::exitBeacon,model::startRadio,permissions)
                 else -> Home(model,s,permissions,scan,buySupporter,restoreSupporter)
             }
         }

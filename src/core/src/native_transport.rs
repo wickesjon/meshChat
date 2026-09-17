@@ -753,13 +753,12 @@ impl NativeTransport {
                 (admitted.outcome, admitted.sync)
             };
             if let Some(admission) = sync {
-                if matches!(
-                    result,
-                    Outcome::Complete {
-                        kind: framing::ObjectKind::Logical,
-                        ..
-                    }
-                ) {
+                if let Outcome::Complete {
+                    kind: framing::ObjectKind::Logical,
+                    len,
+                    state,
+                } = result
+                {
                     let b = &mut s.beacon;
                     let _ = b.sessions.accept_admitted_request(
                         &link,
@@ -768,8 +767,18 @@ impl NativeTransport {
                         now,
                         &mut |_| {},
                     );
-                    // Preserve the existing read-only Received event for native
-                    // consumers; the cache owner has already handled serving.
+                    // Direct requests never enter mesh relay/digest/history
+                    // state. Preserve only the existing diagnostic event.
+                    out.events.push(TransportEvent::Received {
+                        link,
+                        bytes: output[..len].to_vec(),
+                        intake: if state == State::Duplicate {
+                            TransportIntake::Duplicate
+                        } else {
+                            TransportIntake::Unverified
+                        },
+                    });
+                    return Ok(out);
                 }
                 // Requesting/history presentation is owned separately; an
                 // unsolicited stored wrapper never becomes live CHAT here.

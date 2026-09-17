@@ -249,3 +249,5 @@ func organizerTrace() throws {
     print("MC-030 Swift production organizer adoption, protected-session boundary and expired import PASS; synthetic SQL")
 }
 try organizerTrace()
+
+try statsTrace()

@@ -104,6 +104,7 @@ private fun ProfilePicker(value: UByte,changed: (UByte)->Unit) {
 @Composable
 private fun Home(model: MeshModel,s: MeshScreenState,permissions: () -> Unit,scan: () -> Unit,scanStaff: () -> Unit,buySupporter: ()->Unit,restoreSupporter: ()->Unit) {
     var tab by rememberSaveable { mutableIntStateOf(0) }
+    var contribution by remember { mutableStateOf(false) }
     var settings by remember { mutableStateOf(false) }
     var join by remember { mutableStateOf(false) }
     var info by remember { mutableStateOf(false) }
@@ -149,7 +150,8 @@ private fun Home(model: MeshModel,s: MeshScreenState,permissions: () -> Unit,sca
     if(linkInput)ShareInput(model) {linkInput=false}
     if(share)s.selected?.takeIf {it.private}?.let {ChannelShare(it) {share=false}}
     if(join)JoinSheet({join=false},scan={join=false;scan()},paste={join=false;linkInput=true}) { model.join(it);join=false }
-    if(settings)SettingsSheet(model,s,buySupporter,restoreSupporter) { settings=false }
+    if(settings)SettingsSheet(model,s,buySupporter,restoreSupporter,showContribution={settings=false;contribution=true}) { settings=false }
+    if(contribution)ContributionPanel(model,s) {contribution=false}
     if(info)AlertDialog(onDismissRequest={info=false},title={Text("Channel details")},text={Column(verticalArrangement=Arrangement.spacedBy(12.dp)) {
         Text("Anyone with these words can read this channel. It is not encrypted.");Text(s.selected?.name?.replace('|',' ') ?: "")
         if(s.selected?.private==true)TextButton(onClick={info=false;share=true}){Text("Share channel")}
@@ -221,7 +223,7 @@ private fun WordChoice(words: List<String>,selected: Int,choose: (Int)->Unit) {
     Box{OutlinedButton(onClick={open=true},modifier=Modifier.fillMaxWidth().heightIn(min=48.dp)){Text(words[selected])};DropdownMenu(expanded=open,onDismissRequest={open=false}){words.forEachIndexed{index,word->DropdownMenuItem(text={Text(word)},onClick={choose(index);open=false})}}}
 }
 @Composable
-private fun SettingsSheet(model: MeshModel,s: MeshScreenState,buySupporter: ()->Unit,restoreSupporter: ()->Unit,close: ()->Unit) {
+private fun SettingsSheet(model: MeshModel,s: MeshScreenState,buySupporter: ()->Unit,restoreSupporter: ()->Unit,showContribution: ()->Unit,close: ()->Unit) {
     var nick by remember{mutableStateOf(s.nickname)};var avatar by remember{mutableStateOf(s.avatar)};var light by remember{mutableStateOf(s.light)}
     var theme by remember{mutableStateOf(Themes.selected(s.theme,s.supporter).id)}
     var color by remember{mutableStateOf(s.nicknameRgb?.toString(16)?.padStart(6,'0') ?: "")}
@@ -250,6 +252,7 @@ private fun SettingsSheet(model: MeshModel,s: MeshScreenState,buySupporter: ()->
             Switch(s.autoBeacon,{model.beacon(false,it)},modifier=Modifier.semantics { contentDescription="Auto-beacon while charging" })
         }
         Text("Automatic mode returns to ordinary operation when unplugged.")
+        TextButton(onClick=showContribution) {Text("Contribution & power")}
         Text("Nearby connection power")
         TransportPowerSetting.entries.forEach { value ->
             Row(Modifier.fillMaxWidth().heightIn(min=48.dp).clickable { model.power(value) },verticalAlignment=Alignment.CenterVertically) {

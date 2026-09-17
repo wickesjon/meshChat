@@ -15,6 +15,8 @@ mod beacon;
 pub mod messaging;
 #[path = "native_organizer.rs"]
 pub mod organizer;
+#[path = "native_stats.rs"]
+pub mod stats;
 pub use beacon::BeaconStatus;
 use sha2::{Digest, Sha256};
 use std::sync::{Arc, Mutex};
@@ -140,6 +142,7 @@ pub struct TransportObservation {
     pub novelty: Option<u16>,
 }
 struct PendingSend {
+    len: usize,
     protected: bool,
     pin: Option<crate::friends::SendToken>,
     token: u64,
@@ -182,6 +185,7 @@ struct Runtime {
     link_limit: usize,
     recent: Vec<([u8; 8], u64)>,
     beacon: beacon::Beacon,
+    stats: stats::Stats,
 }
 impl Runtime {
     fn next(&mut self) -> Result<u64, TransportError> {
@@ -213,6 +217,12 @@ impl Runtime {
     }
     fn results(&mut self, events: Vec<relay::ResultEvent>, out: &mut TransportEffects) {
         for event in events {
+            if event.status == relay::Status::NativeComplete && event.kind != relay::Kind::Control {
+                increment(&mut self.stats.values.completed_objects, 1);
+                if event.kind == relay::Kind::Chat {
+                    increment(&mut self.stats.values.relayed_chat_copies, 1);
+                }
+            }
             if event.cookie == 0 {
                 self.beacon.finished(&event, self.now);
                 continue;
@@ -508,6 +518,7 @@ impl NativeTransport {
             .set_power(params.mode, tier, now)
             .map_err(|_| TransportError::Unavailable)?;
         s.beacon.power(params, battery_percent, charging, now)?;
+        s.stats.power(params, battery_percent, charging, now);
         s.link_limit = params.max_links;
         Ok(TransportPower {
             beacon: params.mode == power::Mode::Beacon,
@@ -714,6 +725,8 @@ impl NativeTransport {
         let i = s.index(&link)?;
         let mut out = TransportEffects::default();
         s.links[i].native_activity = now;
+        increment(&mut s.stats.values.received_frames, 1);
+        increment(&mut s.stats.values.received_bytes, bytes.len() as u64);
         // This Rust dispatch only selects an owner. Existing ingress/framing
         // still charges and validates every byte before control interpretation.
         let control = !s.links[i].admitted
@@ -756,6 +769,13 @@ impl NativeTransport {
                     .map_err(|_| TransportError::Stale)?;
                 (admitted.outcome, admitted.sync)
             };
+            if let Outcome::Complete {
+                kind: framing::ObjectKind::Logical,
+                ..
+            } = result
+            {
+                increment(&mut s.stats.values.received_packets, 1);
+            }
             if let Some(admission) = sync {
                 if let Outcome::Complete {
                     kind: framing::ObjectKind::Logical,
@@ -787,7 +807,10 @@ impl NativeTransport {
                 // Requesting/history presentation is owned separately; an
                 // unsolicited stored wrapper never becomes live CHAT here.
             }
-            if let Outcome::Complete { len, state, .. } = result {
+            if let Outcome::Complete { len, state, kind } = result {
+                if kind == framing::ObjectKind::Logical && output.get(1) == Some(&1) && len >= 26 {
+                    increment(&mut s.stats.values.received_chat_packets, 1);
+                }
                 if !matches!(
                     state,
                     State::Duplicate | State::DeferredSync | State::Control
@@ -934,8 +957,10 @@ impl NativeTransport {
             let token = s.next()?;
             let (protected, pin) = s.messaging.egress_guard(&send.link, send.cookie);
             let protected = protected || s.organizer.guarded(&send.link, send.cookie);
+            increment(&mut s.stats.values.scheduled_frames, 1);
             let link = &mut s.links[index];
             link.pending = Some(PendingSend {
+                len: send.len,
                 protected,
                 pin,
                 token,
@@ -1057,6 +1082,10 @@ impl NativeTransport {
             }
             return Ok(out);
         }
+        if success {
+            increment(&mut s.stats.values.completed_frames, 1);
+            increment(&mut s.stats.values.completed_bytes, pending.len as u64);
+        }
         if success && pending.cookie == 1 {
             if s.friends.hello_transmitted(&link, now).is_err() {
                 s.close(&link, &mut out)?;
@@ -1127,7 +1156,12 @@ impl NativeTransport {
                 link_limit: limit,
                 recent: Vec::with_capacity(200),
                 beacon: beacon::Beacon::new(instance_nonce, monotonic_ms)?,
+                stats: stats::Stats::new(monotonic_ms),
             }),
         })
     }
+}
+
+fn increment(value: &mut u64, amount: u64) {
+    *value = value.saturating_add(amount);
 }

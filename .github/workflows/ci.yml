@@ -176,6 +176,7 @@ jobs:
           python3 -B tests/bench/security/run_android_emulator.py --serial emulator-5554
           python3 -B tests/integration/storage/run_android.py --serial emulator-5554
           python3 -B tests/integration/android-ui/run_emulator.py --serial emulator-5554
+          python3 -B tests/integration/stats/run_android.py --serial emulator-5554
           python3 -B tests/integration/android-ui/run_organizer_emulator.py --serial emulator-5554
           python3 -B tests/integration/android-ui/run_friends_emulator.py --serial emulator-5554
           python3 -B tests/integration/sharing/run_android.py --serial emulator-5554
@@ -191,7 +192,8 @@ jobs:
           path: |
             .work/mc028/screenshots
             .work/mc029/screenshots/*.png
-            .work/mc030/screenshots/*.png
+            .work/mc030/screenshots/
+            .work/mc042/screenshots/*.png
             .work/mc032/screenshots/*.png
             .work/mc033/screenshots/*.png
             .work/security-sqlcipher/sqlcipher-4.17.0-aligned.aar
@@ -230,7 +232,7 @@ jobs:
             -module-cache-path "$PWD/.work/clang-module-cache" \
             -I .work/ffi/swift -Xcc -fmodule-map-file=.work/ffi/swift/meshchat_coreFFI.modulemap \
             .work/ffi/swift/meshchat_core.swift src/ios/BLE/Transport/IOSGattDriver.swift \
-            tests/bench/ios/DriverChecks.swift tests/integration/ffi/main.swift \
+            tests/bench/ios/DriverChecks.swift tests/integration/stats/StatsChecks.swift tests/integration/ffi/main.swift \
             -L target/debug -lmeshchat_core -Xlinker -rpath -Xlinker "$PWD/target/debug" \
             -o .work/ffi/swift-regression
           .work/ffi/swift-regression

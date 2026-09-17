@@ -46,6 +46,8 @@ android {
         getByName("androidTest").java.srcDir(rootProject.file("../../tests/integration/billing/android"))
     }
 
+    sourceSets.getByName("test").java.srcDir(rootProject.file("../../tests/integration/stats/kotlin"))
+    sourceSets.getByName("androidTest").java.srcDir(rootProject.file("../../tests/integration/stats/android"))
     sourceSets.getByName("test").java.srcDir(rootProject.file("../../tests/bench/beacon/kotlin"))
     sourceSets.getByName("androidTest").java.srcDir(rootProject.file("../../tests/bench/beacon/android"))
 

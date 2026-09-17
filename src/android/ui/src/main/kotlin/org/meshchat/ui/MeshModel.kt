@@ -25,6 +25,7 @@ data class DirectThread(val keys: ByteArray, val petname: String, val archived: 
 data class DirectRow(val message: DirectMessage, val sendState: String)
 data class ChatRow(val message: ChannelMessage, val sendState: String)
 data class MeshScreenState(
+    val contribution: TransportStats? = null,
     val events: List<EventCard> = emptyList(), val eventProposal: EventProposal? = null,
     val staffProposal: StaffCard? = null, val staff: StaffCard? = null, val staffPresent: Boolean = false,
     val staffReady: Boolean = false, val staffStatus: String? = null, val eventRows: List<EventMessage> = emptyList(),
@@ -100,6 +101,7 @@ class MeshModel(private val context: Context) {
     private var announceAt = 0uL
     private val previews = mutableMapOf<String, String>()
     private val unread = mutableMapOf<String, Int>()
+    private var contributionOpen = false
     private var posted = 0L
     private val random = SecureRandom()
     private val overflow = AtomicBoolean(false)
@@ -265,6 +267,7 @@ class MeshModel(private val context: Context) {
         if(staff!=null&&!ready)staffStatus="Staff authority expired, not yet active, or its event is not adopted. Posting is disabled."
         val eventRows=if(selected=="#event updates")coreWork {storage.eventMessages(it,now())} else emptyList()
         val discoveries=coreWork {it.eventDiscoveries(now())}
+        val contribution=coreWork {it.contributionStats(now())}
         val n = checkNotNull(owner)
         n.setCosmetics(supporter,if(supporter)nicknameRgb else null)
         val rows = selected?.let { name -> coreWork { storage.messagingHistory(it, n, name, profile) } } ?: emptyList()
@@ -272,7 +275,7 @@ class MeshModel(private val context: Context) {
         val dmRows = direct?.let { thread -> coreWork { storage.directHistory(it, thread.keys, now()) } } ?: emptyList()
         selected?.let { previews[it] = rows.lastOrNull()?.text ?: "Quiet so far" }
         val wait = selected?.let { n.waitMs(it, false, now()) } ?: 0uL
-        publish(MeshScreenState(events=events,eventProposal=pendingEvent?.second,staffProposal=pendingStaffCard,
+        publish(MeshScreenState(contribution=contribution,events=events,eventProposal=pendingEvent?.second,staffProposal=pendingStaffCard,
             staff=staff,staffPresent=staffVault.present(),staffReady=ready,staffStatus=staffStatus,eventRows=eventRows,discoveries=discoveries,friends = cards, friendCode = myCode, proposal = proposal, proposalScanned = proposalScanned,
             replacingFriend = replacingFriend, direct = direct, archives = archives.filter { old -> cards.none { it.keys.contentEquals(old.keys) } },
             directRows = dmRows.map { DirectRow(it, receipts[key(it.id)] ?: if(it.own) "Stored locally - delivery unknown" else "Encrypted") },
@@ -325,6 +328,8 @@ class MeshModel(private val context: Context) {
         else status = "Starting nearby connections…"
         refresh()
     }
+    fun contributionVisible(value:Boolean) = work {contributionOpen=value;if(loaded)refresh()}
+    fun resetContribution() = work {coreWork {it.resetContributionStats(now())};refresh()}
     fun stop() = work { stopRadio(); refresh() }
     private fun stopPending() {
         for ((message, _) in pending.values) {
@@ -546,7 +551,7 @@ class MeshModel(private val context: Context) {
                         submitProtected { core, token -> storage.sendSigned(core, bytes, token, now()) }
                         announceAt = now() + (radio?.currentPower()?.announceMs ?: 30000uL)
                     }
-                    if (selected != null || direct != null || links.isNotEmpty() || beaconRequested || autoBeacon) refresh()
+                    if (contributionOpen || selected != null || direct != null || links.isNotEmpty() || beaconRequested || autoBeacon) refresh()
                 } } finally {pulseQueued.set(false)}
             }
             main.postDelayed(this, 1000)

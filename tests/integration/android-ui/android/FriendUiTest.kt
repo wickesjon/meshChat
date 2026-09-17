@@ -112,7 +112,9 @@ class FriendUiTest {
         screenshot("reopened-dm")
     }
     private fun replace() {
-        waitFor("Your channels");click("Friends");click("Manage");click("Replace device - require new scan")
+        waitFor("Your channels")
+        archiveCapacityRefusal()
+        click("Friends");click("Manage");click("Replace device - require new scan")
         awaitState {model.screen.friends.single().replacing}
         val old=model.screen.friends.single().keys.copyOf()
         model.friendInput(proposal().uri,false)
@@ -126,8 +128,34 @@ class FriendUiTest {
         assertFalse(old.contentEquals(model.screen.friends.single().keys));click("Messages")
         click("Local Bob - old identity");waitFor("Synthetic encrypted hello");assertTrue(model.screen.direct!!.archived)
         ui.onAllNodesWithText("Send").assertCountEquals(0);screenshot("old-identity")
-        click("Back");click("Friends");click("Manage");click("Remove friend")
+        click("Back");awaitState {model.screen.direct==null};waitFor("Friends")
+        click("Friends");click("Manage");click("Remove friend")
         awaitState {model.screen.friends.isEmpty()};assertTrue(model.screen.archives.any {it.keys.contentEquals(old)})
+    }
+    private fun archiveCapacityRefusal() {
+        val vault=StorageVault.android(context)
+        val storage=EncryptedStorage(IdentityProvider.android(context,vault),vault)
+        val codes=(40 until 104).map { seed ->
+            IdentityKeySession.importUnlocked(ByteArray(64){seed.toByte()},ByteArray(16){seed.toByte()}).use {friendCode(it.publicIdentity(),"Old $seed").uri}
+        }
+        for(slot in 0 until 8)storage.putRecord(RecordKind.SETTING,"ui-old-friends-$slot".toByteArray(),codes.drop(slot*8).take(8).joinToString("\n").toByteArray())
+        // The model advances its connection generation on every stop, even with
+        // no physical radio. Observe that lifecycle effect without a production
+        // fixture hook or a claim that emulator Bluetooth is device evidence.
+        val epoch=MeshModel::class.java.getDeclaredField("epoch").apply {isAccessible=true}
+        val before=epoch.getLong(model)
+        val friend=model.screen.friends.single()
+        for(replace in listOf(true,false)) {
+            model.changeFriend(friend,replace)
+            awaitState {model.screen.error?.startsWith("Old conversation list is full")==true}
+            assertEquals(before,epoch.getLong(model))
+            assertFalse(model.screen.friends.single().replacing)
+            assertTrue(friend.keys.contentEquals(model.screen.friends.single().keys))
+            // Finish queued UI work and clear the notice before the next attempt.
+            model.openDirect(friend);awaitState {model.screen.direct!=null}
+            model.closeDirect();awaitState {model.screen.direct==null}
+        }
+        for(slot in 0 until 8)storage.deleteRecord(RecordKind.SETTING,"ui-old-friends-$slot".toByteArray())
     }
     private fun exchangeProtectedMessages() {
         val vault=StorageVault.android(context);val identity=IdentityProvider.android(context,vault);val storage=EncryptedStorage(identity,vault)

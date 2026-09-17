@@ -1,6 +1,6 @@
 # MC-029 Android friend and encrypted-message integration
 
-Status: implementation and validation in progress. No PR review, merge, physical certification or completed platform matrix is claimed yet.
+Status: PR #31 is under review. Required local and native checks, including the Terra archive-capacity regression, pass. Follow-up review and squash merge are pending. No physical certification is claimed.
 
 ## Implemented boundary
 
@@ -26,8 +26,8 @@ QR generation and decoding use pinned ZXing Android Embedded 4.3.0 and ZXing cor
 - Fourteen Python/UniFFI storage-policy checks pass, including shared public history ordering and unchanged timestamp-based expiry. Their SQLite double is not encryption evidence.
 - Android normal Kotlin/Swift binding generation and both pinned-NDK Android libraries build. Initial Android Debug/Release/test APK, lint and JVM checks pass. The final provider-lock revision passes Debug/Release/test APK, lint and all ten app JVM tests; the BLE probe passes both builds, lint and 26 driver JVM tests.
 - Rust messaging traces cover inert/malformed proposals, persistent full-key pins, encrypted chat/reactions, tampered-before-valid same-ID intake, replay/restart, unknown keys, omitted-signing-key recovery, pinned petname versus unsigned copycat, queued removal, replacement/history separation and proof freshness.
-- New Kotlin tests exercise opaque friend handles, error mapping, offline QR decoding and protected session cleanup. Swift consumer coverage is added; its Mac execution remains pending.
-- Emulator acceptance uses `run_emulator.py` first to create the isolated synthetic profile, then `run_friends_emulator.py` for pair/reopen/replace phases. The latter exercises actual ACTION_VIEW confirmation, synthetic QR decoding, camera denial, protected SQLCipher/provider exchange with a synthetic peer, restart and old-identity history. Execution and screenshot review remain pending.
+- New Kotlin tests exercise opaque friend handles, error mapping, offline QR decoding and protected session cleanup. The new Swift consumer trace passes on the Mac runner.
+- Emulator acceptance uses `run_emulator.py` first to create the isolated synthetic profile, then `run_friends_emulator.py` for pair/reopen/replace phases. The latter exercises actual ACTION_VIEW confirmation, synthetic QR decoding, camera denial, protected SQLCipher/provider exchange with a synthetic peer, restart and old-identity history. All three phases pass locally, and the five screenshots have been inspected. Initial fixture failures were corrected: dialog-aware screenshot capture, ActivityScenario intent tracking, lazy-list scrolling, and awaiting asynchronous Back navigation. After the review fix, the full app Debug/Release/test APK, lint and ten JVM checks pass again, as do all six channel/friend emulator phases. The replacement phase fills all 64 encrypted archive entries and checks that both replacement and removal refusals retain the pin and connection generation; it then clears the synthetic entries and completes replacement/removal.
 
 The existing MC-005 emulator phases (create, reopen, key-loss) and MC-018 SQLCipher phases (create, reopen, checks, key-loss, reset) pass against the updated native libraries and protected adapter. MC-017 JVM provisioning/reopen/sign/agree/lock/key-loss/reset and seven injected recovery faults pass. Cargo-deny 0.20.2 passes advisories, bans, licenses and sources; only baseline unused license allowances warn. Both app and security Debug/Release APKs pass both-ABI ELF LOAD/RELRO 16 KiB checks; app APKs pass `zipalign -c -P 16 4`. Ticketboard validation (46 tickets/131 dependencies), 12 board unit tests and `git diff --check` pass.
 
@@ -57,10 +57,10 @@ python -B tests/integration/android-ui/run_friends_emulator.py --serial emulator
 
 Local app artifact SHA-256:
 
-- Debug: `e4970448e5c275c9eba74632f6b87370eb136ddf84764a137b32b1e5ad7c1349`.
-- Release unsigned: `c0547372866bbc95f47450c3d65d2d5540e25269ad5e3d1dfa3a8446dfaa301b`.
+- Debug: `ffd25ea5d974709bcd30af2c56e95e3284df29f4f0819a63a6111cb966c7d17e`.
+- Release unsigned: `d11140c7b4b3bdb1ab2ac0a0ed90cc94dc309896303857b46c9ac95109ae1fd1`.
 
-Ignored logs and screenshots live under `.work/mc029/`. Swift/Mac execution and Terra review remain pending; this record does not yet satisfy the merge gate.
+Ignored logs and screenshots live under `.work/mc029/`. The entire iOS job passes in [hosted run 35194417611](https://github.com/wickesjon/meshChat/actions/runs/35194417611/job/105114154530) on source `545158ea3859732d3889189e1159a151887bf934`: generated Swift host FFI including the new messaging trace, skeleton Debug/Release simulator builds, BLE/security probe Debug/Release device/simulator builds, curve/identity checks and SQLCipher lifecycle integration. Host is macOS 15.7.9 arm64, Xcode 16.4 (16F6), Apple Swift 6.1.2. Rust and ticketboard hosted jobs also pass. The follow-up changes affect only Android model/test code and evidence; shared Rust, generated API inputs and Swift consumers are identical to this passing revision. Android checks were rerun locally after the fix under the approved local-validation policy. Hosted Android remains supplemental; this record does not claim it passed. Terra medium independently reviewed that source and found one P2: a full archive refused the pin change but stopped the connection first. The fix reserves archive capacity before stopping, with emulator regression checking unchanged connection generation and pin for replacement/removal refusals. The new refusal regression and all affected Android checks pass. Follow-up review remains required.
 
 ## Deferred evidence
 

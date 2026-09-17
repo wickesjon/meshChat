@@ -350,8 +350,8 @@ class MeshModel(private val context: Context) {
         refresh("Friend pinned. Show them your code so it is mutual. Reconnect when ready.")
     }
     fun changeFriend(friend: FriendCard, replace: Boolean) = work {
-        stopRadio()
         if(!storage.archiveFriend(friend)) {report("Old conversation list is full. Delete an old conversation before changing this friend.");return@work}
+        stopRadio()
         storage.changeFriend(checkNotNull(transport),friend.handle,replace,now())
         archives=storage.archives();proposal=null;proposalScanned=false;direct=null
         replacingFriend=if(replace)friend else null

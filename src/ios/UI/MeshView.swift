@@ -34,6 +34,7 @@ struct MeshView: View {
     @State private var scan = false
     @State private var input = false
     @State private var eventSettings = false
+    @State private var capturedLink: (String, Bool)?
     @State private var shared: ShareItem?
     @State private var confirmation: ConfirmAction?
     private var state: MeshState { model.state }
@@ -85,14 +86,18 @@ struct MeshView: View {
         .onOpenURL { model.shareInput($0.absoluteString) }
         .sheet(isPresented: $settings) { SettingsView(model: model) }
         .sheet(isPresented: $join) { JoinView(model: model) }
-        .sheet(isPresented: $scan) { NavigationView { CodeScanner { value in scan = false; model.shareInput(value, scanned: true) }.navigationTitle("Scan a code").toolbar { Button("Cancel") { scan = false } } } }
-        .sheet(isPresented: $input) { LinkInput { model.shareInput($0) } }
+        .sheet(isPresented: $scan, onDismiss: reviewCapturedLink) { NavigationView { CodeScanner { value in capturedLink = (value, true); scan = false }.navigationTitle("Scan a code").toolbar { Button("Cancel") { scan = false } } } }
+        .sheet(isPresented: $input, onDismiss: reviewCapturedLink) { LinkInput { capturedLink = ($0, false); input = false } }
         .sheet(isPresented: $eventSettings) { EventSettings(model: model) }
         .sheet(item: $shared) { PublicShareView(uri: $0.uri, title: $0.title, explanation: $0.explanation) }
         .sheet(item: $confirmation) { item in ConfirmationView(title: item.title, explanation: item.explanation, destructive: true) { item.action(); confirmation = nil } }
         .sheet(isPresented: Binding(get: { state.channelProposal != nil || state.friendProposal != nil || state.eventProposal != nil }, set: { if !$0 { model.cancelProposal() } })) {
             ProposalView(model: model)
         }
+    }
+    private func reviewCapturedLink() {
+        guard let value = capturedLink else { return }; capturedLink = nil
+        model.shareInput(value.0, scanned: value.1)
     }
     private var channelList: some View {
         List {
@@ -132,6 +137,7 @@ struct MeshView: View {
             Button("Scan a friend's code") { scan = true }; Button("Paste a friend link") { input = true }
             Text("An authenticated response does not prove distance or direct radio range.")
             ForEach(state.friends, id: \.keys) { friend in VStack(alignment: .leading, spacing: 10) {
+                MeshAvatar(value: friend.avatar)
                 Text(verbatim: friend.petname).font(.headline)
                 Label("Pinned identity", systemImage: "checkmark.shield.fill")
                 Text(verbatim: friend.fingerprint).font(.system(.caption, design: .monospaced))
@@ -157,7 +163,7 @@ private struct OnboardingView: View {
     @State private var nickname = ""
     @State private var avatar: UInt8 = 1
     var body: some View {
-        VStack(alignment: .leading, spacing: 22) {
+        ScrollView { VStack(alignment: .leading, spacing: 22) {
             Text("Nearby, together").font(.caption); Text("Welcome to MeshChat").font(.largeTitle)
             if step == 0 {
                 TextField("Nickname", text: $nickname).textInputAutocapitalization(.never).disableAutocorrection(true)
@@ -174,7 +180,7 @@ private struct OnboardingView: View {
             if step < 2 { Button("Continue") { step += 1 }.disabled(step == 0 && (try? channelNickname(raw: nickname)) == nil) }
             else { Button("Create my local identity") { model.create(nickname: nickname, avatar: avatar) } }
             if step > 0 { Button("Back") { step -= 1 } }
-        }.padding(28)
+        }.padding(28) }
     }
 }
 
@@ -211,7 +217,7 @@ private struct ChatView: View {
                     ForEach(state.directRows, id: \.id) { row in VStack(alignment: .leading, spacing: 6) {
                         Text(row.own ? "You" : state.direct?.nickname ?? "Pinned friend").font(.caption)
                         Text(verbatim: row.text)
-                        if isDirect ? state.delayed.contains(where: { $0.suffix(8) == row.id }) : false { Text("Arrived late via nearby history").font(.caption) }
+                        if state.delayed.contains(where: { $0.suffix(8) == row.id }) { Text("Received through nearby history").font(.caption) }
                         if let status = state.sendStates[row.id] { Text(status).font(.caption) }
                         reactionRow(id: row.id, counts: row.reactions.map(UInt16.init), own: row.ownReaction)
                     }.padding().background(ThemeTokens.color(theme.surface)).cornerRadius(12) }
@@ -234,7 +240,11 @@ private struct ChatView: View {
                         if row.confusable { Text("Nickname resembles yours · identity is unverified").font(.caption) }
                         if let warning = row.claimWarning { Text(verbatim: warning).font(.caption) }
                         Text(verbatim: row.text)
-                        if state.delayed.contains(row.sender + row.id) { Text("Arrived late via nearby history").font(.caption) }
+                        if state.delayed.contains(row.sender + row.id) { Text("Received through nearby history").font(.caption) }
+                        if row.arrival - Int64(row.claimedTimestamp) > 120,
+                           state.rows.prefix(while: { $0.id != row.id || $0.sender != row.sender }).contains(where: { $0.claimedTimestamp > row.claimedTimestamp }) {
+                            Text("Delayed · sender time \(Date(timeIntervalSince1970: TimeInterval(row.claimedTimestamp)).formatted())").font(.caption).foregroundColor(ThemeTokens.color(theme.secondary))
+                        }
                         if let status = state.sendStates[row.id] { Text(status).font(.caption) }
                         reactionRow(id: row.id, counts: row.reactions, own: row.ownReaction)
                     }.padding().background(ThemeTokens.color(theme.surface)).cornerRadius(12) }
@@ -399,7 +409,7 @@ private struct SettingsView: View {
             }
             if let store = model.store { SupporterSettings(store: store, theme: $theme, nicknameRGB: $color) }
             Section("Nearby connection power") {
-                Picker("Power preference", selection: Binding(get: { model.state.power }, set: model.power)) {
+                Picker("Power preference", selection: Binding(get: { model.state.power }, set: { value in model.power(value) })) {
                     Text("Auto").tag(TransportPowerSetting.auto); Text("Normal").tag(TransportPowerSetting.normal); Text("Saver").tag(TransportPowerSetting.saver)
                 }
                 Button("Beacon Mode · unavailable on iOS") {}.disabled(true)
@@ -417,7 +427,7 @@ private struct SettingsView: View {
             ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
             ToolbarItem(placement: .confirmationAction) { Button("Save") { model.updateProfile(nickname: nickname, avatar: avatar, theme: theme, color: color); if model.state.nickname == nickname { dismiss() } } }
         }
-        .sheet(isPresented: $contribution) { NavigationView { if let stats = model.state.contribution { ContributionPanel(stats: stats, reset: model.resetContribution).toolbar { Button("Done") { contribution = false } } } } }
+        .sheet(isPresented: $contribution) { NavigationView { if let stats = model.state.contribution { ContributionPanel(stats: stats, reset: { model.resetContribution() }).toolbar { Button("Done") { contribution = false } } } } }
         .sheet(isPresented: $reset) { ConfirmationView(title: "Reset identity and local data?", explanation: "This permanently removes local history, friend pins, event trust and staff credentials. Friends must verify your new code. A lost key cannot recover old data.", destructive: true) { model.resetIdentity(); dismiss() } }
         }.onAppear { nickname = model.state.nickname; avatar = model.state.avatar; theme = model.state.theme; color = model.state.nicknameRGB }
     }

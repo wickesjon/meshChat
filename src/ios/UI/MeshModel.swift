@@ -177,6 +177,7 @@ struct MeshState {
         try refreshThrowing()
     } }
     func resetIdentity() { perform {
+        pendingPublicLink = nil
         stop(); clearCandidates(); core = nil; owner = nil; store = nil
         _ = try identity.reset(); try storage.create()
         joined = ["#general", "#event updates", "#confessions"]; muted = []; state = MeshState(); state.loading = false; replacingIdentity = true

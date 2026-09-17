@@ -53,7 +53,7 @@ A triggered fallback must be recorded with evidence. It does not authorize weake
 
 Scheduling approved 2026-09-14 in [the validation policy](../../decisions/local-validation-policy.md#physical-acceptance-scheduling--approved-2026-09-14). Implementation consumes the native driver and independently frozen core before physical interop. MC-027 now follows this ticket and owns every shipping flow on the real iOS device matrix; no native build waiver is implied.
 
-Not implemented. Record commands, versions, reproducible inputs and results here. For manual/hardware checks include device/OS, duration and report paths. No test or review is claimed yet.
+Implementation is underway. Native acceptance and independent ticket review remain pending; no exit criterion is closed. For manual/hardware checks include device/OS, duration and report paths.
 
 ## Review and merge
 
@@ -71,3 +71,9 @@ Inspection found that the native transport serves canonical SYNC requests but do
 Initial native application build on `c58f7e4` identified Swift state-wrapper declarations and a lost MainActor annotation; these are corrected, with native rerun pending. The catch-up wrapper compiles and passes strict workspace clippy. Four targeted Rust tests now pass: actual two-page native catch-up of six cached messages without live relay/count inflation; rejection of unsolicited/stale wrappers and admission of stored TTL zero; request timeout and no quota reset; and real signed-friend/encrypted-DM history through canonical crypto and pin owners. Full validation, native UI tests and separate review remain pending. No acceptance checkbox is closed.
 
 Additional exact test registration path under standing scope approval: `tests/integration/ffi/main.swift` may call new Swift driver/feature regression helpers, and `src/core/Cargo.toml` registers the requester integration test. The new native integration module and existing channel/organizer history readers use StoredChat parsing only after canonical SYNC admission; no wire grammar or cryptographic construction changes.
+
+### Automated validation checkpoint
+
+Core revision `8a205b7`: local Rust 1.85.1 read-only formatting check, strict workspace/all-target/all-feature clippy, complete workspace debug and release suites, release build and 14 storage policy checks pass. An existing native-transport fixture reused a process-ID-based temporary database name on Windows; removing only its ignored `.work/friends-tests/*-native_transport-database-*.sqlite*` files resolved the schema setup failures, and all 14 native transport tests and the full rerun pass. No production storage fallback was added. Hosted Rust also passes in run `35273161582`.
+
+Mac native builds exposed and corrected Swift state declaration/actor annotations, two unnecessary throwing annotations, and an existing diagnostic SYNC event expectation. The separate synthetic native acceptance host now compiles the production SwiftUI/model/SQLCipher/core/driver with test-only wrapping and framed-radio inputs. Its generated project and evidence stay under `.work/ios-ui/`, and no test switches or fallback protection are in the production entry point. Native test execution and final device/simulator builds remain pending.

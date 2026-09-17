@@ -44,7 +44,9 @@ enum CheckFailure: Error { case failed(String) }
     // A queued protected send must not cross a lock even if native readiness returns.
     a.radio!.writable = false; a.model.send("must never reach port")
     let sent = a.radio!.submitted; a.protection.unlocked = false
-    a.model.protectedDataUnavailable(); a.radio!.writable = true; a.radio!.driver.tick()
+    a.radio!.writable = true; clock.now += 1000; a.radio!.driver.ready(a.radio!.peer!); a.radio!.driver.tick()
+    try check(a.radio!.driver.stopped && a.radio!.submitted == sent, "final native protected gate")
+    a.model.protectedDataUnavailable()
     try check(a.model.state.locked && a.radio!.submitted == sent, "protected egress invalidation")
     a.protection.unlocked = true; a.model.load()
     try check(a.model.state.onboarded && !a.model.state.locked, "unlock reopens existing identity")
@@ -65,6 +67,24 @@ enum CheckFailure: Error { case failed(String) }
     try refuses("secret must not export") { try Sharing.qr("meshfest://staff/not-public") }
     let fixtureURL = Bundle.main.url(forResource: "events", withExtension: "tsv")!
     let fixtures = Dictionary(uniqueKeysWithValues: try String(contentsOf: fixtureURL, encoding: .utf8).split(separator: "\n").map { line in let pair = line.split(separator: "\t", maxSplits: 1); return (String(pair[0]), String(pair[1])) })
+    // Independent pair exercises anonymous rendering inputs and staff signatures
+    // through the same driver/feature callbacks used by the app.
+    let eventClock = TestClock(), staffDevice = try TestDevice(eventClock), audience = try TestDevice(eventClock)
+    staffDevice.model.load(); audience.model.load()
+    staffDevice.model.create(nickname: "Synthetic Staff", avatar: 0x78); audience.model.create(nickname: "Audience", avatar: 1)
+    staffDevice.model.connect(); audience.model.connect(); staffDevice.radio!.ready(.central); audience.radio!.ready(.peripheral)
+    TestRadio.pump(staffDevice.radio!, audience.radio!, seconds: 7)
+    staffDevice.model.select("#confessions"); audience.model.select("#confessions"); staffDevice.model.send("anonymous synthetic")
+    TestRadio.pump(staffDevice.radio!, audience.radio!, seconds: 3); audience.model.refresh()
+    try check(audience.model.state.rows.last?.avatar == 0 && audience.model.state.rows.last?.nickname != "Synthetic Staff", "anonymous profile separation")
+    for device in [staffDevice, audience] { device.model.shareInput(fixtures["event"]!); device.model.adoptEvent(); device.model.select("#event updates") }
+    staffDevice.model.staffInput(fixtures["staff"]!); staffDevice.model.confirmStaff()
+    staffDevice.model.send("signed synthetic update", pinExpiry: UInt32(Date().timeIntervalSince1970) + 60)
+    TestRadio.pump(staffDevice.radio!, audience.radio!, seconds: 9); audience.model.refresh()
+    try check(audience.model.state.eventRows.contains { $0.text == "signed synthetic update" && $0.staffLabel != nil && $0.pinned }, "verified staff pin")
+    staffDevice.model.foreground(false)
+    try check(staffDevice.model.state.staff == nil, "background removes staff signing capability")
+    staffDevice.model.stop(); audience.model.stop()
     a.model.shareInput(fixtures["event"]!); try check(a.model.state.events.isEmpty, "event confirmation")
     a.model.adoptEvent(); try check(a.model.state.events.first?.active == true, "adopted root")
     a.model.staffInput(fixtures["staff"]!); a.model.foreground(false)
@@ -77,6 +97,8 @@ enum CheckFailure: Error { case failed(String) }
     try refuses("staff background refusal") { try a.staff.access(generation: generation) { _ in } }
     a.model.foreground(true); a.model.staffInput(fixtures["expired"]!); a.model.confirmStaff()
     try check(a.model.state.staff != nil && !a.model.state.locked, "invalid import preserves credential")
+    a.model.staffInput(fixtures["staff"]!); clock.now += 60_001; a.model.confirmStaff()
+    try check(a.model.state.staffProposal == nil && a.model.state.staff != nil, "stale confirmation expires")
     a.model.forgetStaff(); try check(!a.model.state.staffPresent, "forget staff")
     try a.storage.putRecord(kind: .setting, key: Data("supporter-v1".utf8), value: Data("1".utf8))
     a.reopen(); a.model.load(); try check(a.model.store?.active == true, "offline purchase cache")

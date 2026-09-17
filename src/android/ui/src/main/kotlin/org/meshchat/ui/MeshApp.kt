@@ -26,7 +26,7 @@ import androidx.compose.ui.unit.sp
 import uniffi.meshchat_core.*
 
 @Composable
-fun MeshApp(model: MeshModel, permissions: () -> Unit) {
+fun MeshApp(model: MeshModel, permissions: () -> Unit, scan: () -> Unit = {}) {
     val s = model.screen
     val colors = if (s.light) lightColorScheme(primary=Color(0xFF176B50), background=Color(0xFFFAF9F6), surface=Color.White, onSurface=Color(0xFF22232A))
         else darkColorScheme(primary=Color(0xFF5DCAA5), background=Color(0xFF16161A), surface=Color(0xFF1F1F25), surfaceVariant=Color(0xFF1F1F25), outline=Color(0xFF3A3A41), onSurface=Color(0xFFF1EFE8), onBackground=Color(0xFFF1EFE8), onSurfaceVariant=Color(0xFFB4B2A9), error=Color(0xFFF09595))
@@ -41,7 +41,7 @@ fun MeshApp(model: MeshModel, permissions: () -> Unit) {
                     Button(onClick=model::load) { Text("Reopen") }; ResetAction(model)
                 }
                 !s.onboarded -> Onboarding(model,s,permissions)
-                else -> Home(model,s,permissions)
+                else -> Home(model,s,permissions,scan)
             }
         }
     }
@@ -91,15 +91,16 @@ private fun ProfilePicker(value: UByte,changed: (UByte)->Unit) {
 }
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun Home(model: MeshModel,s: MeshScreenState,permissions: () -> Unit) {
+private fun Home(model: MeshModel,s: MeshScreenState,permissions: () -> Unit,scan: () -> Unit) {
     var tab by rememberSaveable { mutableIntStateOf(0) }
     var settings by remember { mutableStateOf(false) }
     var join by remember { mutableStateOf(false) }
     var info by remember { mutableStateOf(false) }
     Scaffold(containerColor=MaterialTheme.colorScheme.background,topBar={Column {
         Row(Modifier.fillMaxWidth().padding(horizontal=20.dp,vertical=16.dp),verticalAlignment=Alignment.CenterVertically) {
+            if(s.direct!=null)TextButton(onClick=model::closeDirect) { Text("Back") }
             if(s.selected!=null)TextButton(onClick={model.select(null)}) { Text("Back") }
-            Column(Modifier.weight(1f)) { Text("NEARBY, TOGETHER",fontSize=10.sp,letterSpacing=2.sp,color=MaterialTheme.colorScheme.primary); Text(s.selected?.name?.replace('|',' ') ?: "MeshChat",fontSize=26.sp,fontWeight=FontWeight.Bold) }
+            Column(Modifier.weight(1f)) { Text("NEARBY, TOGETHER",fontSize=10.sp,letterSpacing=2.sp,color=MaterialTheme.colorScheme.primary); Text(s.direct?.petname ?: s.selected?.name?.replace('|',' ') ?: "MeshChat",fontSize=26.sp,fontWeight=FontWeight.Bold) }
             TextButton(onClick={if(s.selected!=null)info=true else settings=true}) { Text(if(s.selected!=null)"Info" else "Settings") }
         }
         Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(horizontal=20.dp,vertical=8.dp),verticalAlignment=Alignment.CenterVertically) {
@@ -107,12 +108,12 @@ private fun Home(model: MeshModel,s: MeshScreenState,permissions: () -> Unit) {
             Text(if(s.peers>0)"${s.peers} direct connections · ${s.status}" else s.status,fontSize=12.sp,modifier=Modifier.weight(1f))
             TextButton(onClick=model::startRadio) { Text("Connect") }
         }
-    }},bottomBar={if(s.selected==null)NavigationBar {
+    }},bottomBar={if(s.selected==null && s.direct==null)NavigationBar {
         listOf("Channels","Messages","Friends").forEachIndexed { index,title -> NavigationBarItem(selected=tab==index,onClick={tab=index},icon={MeshIcon(if(index==0)"open-lock" else if(index==1)"closed-lock" else "cat")},label={Text(title)}) }
     }}) { pad ->
         Column(Modifier.padding(pad).fillMaxSize()) {
             s.error?.let { Text(it,Modifier.fillMaxWidth().padding(16.dp),color=MaterialTheme.colorScheme.error) }
-            if(s.selected!=null)Chat(model,s) else when(tab) {
+            if(s.direct!=null)DirectChat(model,s) else if(s.selected!=null)Chat(model,s) else when(tab) {
                 0 -> LazyColumn(Modifier.fillMaxSize(),contentPadding=PaddingValues(20.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
                     item { Text("Your channels",fontSize=22.sp,fontWeight=FontWeight.SemiBold); Text("Open conversations. Readable on air.",color=MaterialTheme.colorScheme.onSurfaceVariant) }
                     items(s.channels,key={it.name}) { channel -> Surface(onClick={model.select(channel.name)},shape=RoundedCornerShape(18.dp),color=MaterialTheme.colorScheme.surface) {
@@ -125,14 +126,11 @@ private fun Home(model: MeshModel,s: MeshScreenState,permissions: () -> Unit) {
                     } }
                     item { OutlinedButton(onClick={join=true},modifier=Modifier.fillMaxWidth().heightIn(min=52.dp)) { Text("Join a word-triple channel") }; TextButton(onClick=permissions) { Text("Review connection permissions") } }
                 }
-                else -> Column(Modifier.padding(28.dp),verticalArrangement=Arrangement.spacedBy(16.dp)) {
-                    Spacer(Modifier.height(40.dp)); MeshIcon(if(tab==1)"closed-lock" else "cat")
-                    Text(if(tab==1)"Your private conversations" else "People you know",fontSize=28.sp,fontWeight=FontWeight.Bold)
-                    Text(if(tab==1)"Encrypted conversations with pinned friends will appear here." else "Verify a friend's code in person before trusting their identity. A matching nickname is not verification.")
-                }
+                else -> FriendsPage(model,s,scan,tab==1)
             }
         }
     }
+    FriendConfirmation(model,s)
     if(join)JoinSheet({join=false}) { model.join(it);join=false }
     if(settings)SettingsSheet(model,s) { settings=false }
     if(info)AlertDialog(onDismissRequest={info=false},title={Text("Channel details")},text={Column(verticalArrangement=Arrangement.spacedBy(12.dp)) {
@@ -154,7 +152,8 @@ private fun ColumnScope.Chat(model: MeshModel,s: MeshScreenState) {
             Row(Modifier.fillMaxWidth().combinedClickable(onClick={},onLongClick={reaction=message}),horizontalArrangement=Arrangement.spacedBy(12.dp)) {
                 Avatar(message.avatar)
                 Column(Modifier.weight(1f)) {
-                    Row(verticalAlignment=Alignment.CenterVertically) { Text(message.nickname,Modifier.weight(1f),maxLines=1,overflow=TextOverflow.Ellipsis,fontWeight=FontWeight.Bold,color=if(channel.anonymous)MaterialTheme.colorScheme.onSurface else nicknameColor(message.sender));Text(if(message.own)"You" else "Unverified",fontSize=10.sp,color=MaterialTheme.colorScheme.onSurfaceVariant) }
+                    Row(verticalAlignment=Alignment.CenterVertically) { Text(message.nickname,Modifier.weight(1f),maxLines=1,overflow=TextOverflow.Ellipsis,fontWeight=FontWeight.Bold,color=if(channel.anonymous)MaterialTheme.colorScheme.onSurface else nicknameColor(message.sender));Text(if(message.own)"You" else if(message.verifiedPetname!=null)"Verified friend" else if(message.signed)"Signed device" else "Unverified",fontSize=10.sp,color=MaterialTheme.colorScheme.onSurfaceVariant) }
+                    message.claimWarning?.let {Text(it,fontSize=11.sp,color=MaterialTheme.colorScheme.error)}
                     if(message.confusable)Text("Name resembles yours; identity is unverified",fontSize=11.sp,color=MaterialTheme.colorScheme.error)
                     if(!channel.anonymous)Text(message.sender.takeLast(2).joinToString(""){"%02x".format(it.toInt() and 255)},fontSize=10.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)
                     Text(message.text,Modifier.padding(vertical=6.dp),fontSize=16.sp,lineHeight=23.sp)

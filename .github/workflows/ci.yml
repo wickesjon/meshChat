@@ -171,6 +171,7 @@ jobs:
           python3 -B tests/bench/security/run_android_emulator.py --serial emulator-5554
           python3 -B tests/integration/storage/run_android.py --serial emulator-5554
           python3 -B tests/integration/android-ui/run_emulator.py --serial emulator-5554
+          python3 -B tests/integration/android-ui/run_friends_emulator.py --serial emulator-5554
       - name: Retain synthetic UI evidence and rebuilt dependencies
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -179,7 +180,8 @@ jobs:
           include-hidden-files: true
           retention-days: 7
           path: |
-            .work/mc028/screenshots/*.png
+            .work/mc028/screenshots
+            .work/mc029/screenshots/*.png
             .work/security-sqlcipher/sqlcipher-4.17.0-aligned.aar
             .work/ui-graphics/graphics-path-1.0.1-aligned.aar
       - name: Stop isolated security emulator

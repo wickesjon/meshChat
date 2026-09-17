@@ -9,6 +9,8 @@ use crate::{
     relay::{self, Relay},
     storage::EncryptedStore,
 };
+#[path = "native_messaging.rs"]
+pub mod messaging;
 use sha2::{Digest, Sha256};
 use std::sync::{Arc, Mutex};
 
@@ -128,6 +130,8 @@ pub struct TransportObservation {
     pub novelty: Option<u16>,
 }
 struct PendingSend {
+    protected: bool,
+    pin: Option<crate::friends::SendToken>,
     token: u64,
     attempt: relay::Attempt,
     started: u64,
@@ -156,6 +160,7 @@ struct Runtime {
     now: u64,
     ingress: Ingress,
     friends: Friends,
+    messaging: messaging::Messaging,
     relay: Relay,
     links: Vec<Link>,
     admissions: Vec<Admission>,
@@ -192,8 +197,9 @@ impl Runtime {
             .advance(now)
             .map_err(|_| TransportError::Unavailable)
     }
-    fn results(events: Vec<relay::ResultEvent>, out: &mut TransportEffects) {
+    fn results(&mut self, events: Vec<relay::ResultEvent>, out: &mut TransportEffects) {
         for event in events {
+            self.messaging.finished(&mut self.friends, &event);
             if event.cookie >= 3 {
                 out.events.push(TransportEvent::Finished {
                     link: event.link,
@@ -221,8 +227,9 @@ impl Runtime {
             .map_err(|_| TransportError::Unavailable)?;
         // Friends may already have invalidated this session on a changed HELLO.
         let _ = self.friends.disconnect(&mut self.ingress, link, self.now);
+        self.messaging.disconnected();
         self.links.remove(index);
-        Self::results(events, out);
+        self.results(events, out);
         out.events
             .push(TransportEvent::Closed { link: link.clone() });
         Ok(())
@@ -345,7 +352,7 @@ impl Runtime {
             self.now,
             &mut |e| events.push(e),
         );
-        Self::results(events, out);
+        self.results(events, out);
         // Refusal can follow expiration/eviction of other objects. Preserve
         // every terminal effect even when this new enqueue does not succeed.
         match result {
@@ -823,14 +830,17 @@ impl NativeTransport {
                 .relay
                 .poll(now, &mut raw, &mut |e| events.push(e))
                 .map_err(|_| TransportError::Unavailable)?;
-            Runtime::results(events, &mut out);
+            s.results(events, &mut out);
             let Some(send) = send else {
                 break;
             };
             let index = s.index(&send.link)?;
             let token = s.next()?;
+            let (protected, pin) = s.messaging.egress_guard(&send.link, send.cookie);
             let link = &mut s.links[index];
             link.pending = Some(PendingSend {
+                protected,
+                pin,
                 token,
                 attempt: send.attempt,
                 started: now,
@@ -905,7 +915,7 @@ impl NativeTransport {
         let expired = events
             .iter()
             .any(|e| e.link == link && e.cookie == cookie && e.status == relay::Status::Expired);
-        Runtime::results(events, &mut out);
+        s.results(events, &mut out);
         if result.is_err() && !expired {
             s.close(&link, &mut out)?;
         }
@@ -944,7 +954,7 @@ impl NativeTransport {
             let expired = events.iter().any(|e| {
                 e.link == link && e.cookie == pending.cookie && e.status == relay::Status::Expired
             });
-            Runtime::results(events, &mut out);
+            s.results(events, &mut out);
             if !expired {
                 s.close(&link, &mut out)?;
             }
@@ -968,7 +978,7 @@ impl NativeTransport {
         {
             s.close(&link, &mut out)?;
         }
-        Runtime::results(events, &mut out);
+        s.results(events, &mut out);
         s.consolidate(&mut out)?;
         Ok(out)
     }
@@ -1009,6 +1019,7 @@ impl NativeTransport {
                 now: monotonic_ms,
                 ingress,
                 friends,
+                messaging: messaging::Messaging::new(identity)?,
                 relay,
                 links: Vec::with_capacity(limit),
                 admissions: Vec::with_capacity(limit),

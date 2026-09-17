@@ -23,6 +23,13 @@ class GattDriver(
     private val clock: () -> ULong,
     private val event: (Long, TransportEvent) -> Unit,
 ) {
+    /** Configured by the protected application adapter before start. Without
+     * it, protected outgoing operations fail closed. Called under radio gate. */
+    var protectedEgress: ((TransportSend, () -> Boolean) -> Boolean)? = null
+    fun operation(work: (NativeTransport) -> TransportEffects): Boolean = guarded(false) {
+        if (stopped) return@guarded false
+        effects(work(core)); true
+    }
     private class Peer(val id: Long, val address: String, val role: TransportRole, val admission: ULong, val born: ULong) {
         var link: LinkHandle? = null
         var capacity = 0
@@ -166,7 +173,11 @@ class GattDriver(
             val p = peers.values.firstOrNull { it.link == send.link } ?: continue
             check(p.pending == null && send.bytes.size <= p.capacity && send.bytes.size <= 512)
             p.pending = send.token
-            if (!radio.send(p.id, send.path, send.bytes)) completed(p.id, false)
+            val submitted = try {
+                val submit = { radio.send(p.id, send.path, send.bytes) }
+                protectedEgress?.invoke(send, submit) ?: (!core.messageNeedsAuthorization(send.link, send.token) && submit())
+            } catch (_: Exception) { false }
+            if (!submitted) completed(p.id, false)
         }
     }
     fun lost(id: Long) = guarded(Unit) { close(id) }

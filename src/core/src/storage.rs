@@ -353,7 +353,7 @@ impl EncryptedStore {
     }
     fn insert(&self, item: &HistoryItem) -> Result<(), StorageError> {
         self.exec("INSERT INTO history(conversation,direct,direction,logical_type,message_id,timestamp,body,provenance) VALUES(?,?,?,?,?,?,?,?)",vec![b(&item.conversation),n(item.direct as i64),n(item.direction.into()),n(item.logical_type.into()),b(&item.message_id),n(item.timestamp),b(&item.body),b(&item.provenance)])?;
-        self.exec("DELETE FROM history WHERE direct=? AND conversation=? AND id NOT IN (SELECT id FROM history WHERE direct=? AND conversation=? ORDER BY timestamp DESC,id DESC LIMIT ?)",vec![n(item.direct as i64),b(&item.conversation),n(item.direct as i64),b(&item.conversation),n(if item.direct{1000}else{5000})])?;
+        self.exec("DELETE FROM history WHERE direct=? AND conversation=? AND id NOT IN (SELECT id FROM history WHERE direct=? AND conversation=? ORDER BY id DESC LIMIT ?)",vec![n(item.direct as i64),b(&item.conversation),n(item.direct as i64),b(&item.conversation),n(if item.direct{1000}else{5000})])?;
         // Never prune live replay tombstones to make room. History may refuse a
         // new transaction at global caps; explicit deletion/age pruning recovers.
         if self.scalar("SELECT count(*) FROM history",vec![])?>20000 || self.scalar("SELECT coalesce(sum(length(body)+length(provenance)),0) FROM history",vec![])?>32*1024*1024 || self.scalar("SELECT count(*) FROM history WHERE direct=1",vec![])?>5000 || self.scalar("SELECT coalesce(sum(length(body)+length(provenance)),0) FROM history WHERE direct=1",vec![])?>8*1024*1024 {return Err(StorageError::Capacity)}
@@ -496,7 +496,7 @@ impl EncryptedStore {
             return Err(StorageError::InvalidInput);
         }
         let _lock = self.lock.lock().map_err(|_| StorageError::Unavailable)?;
-        self.rows("SELECT direction,logical_type,message_id,timestamp,body,provenance FROM history WHERE direct=? AND conversation=? ORDER BY timestamp DESC,id DESC LIMIT ?",vec![n(direct as i64),b(&conversation),n(limit.into())],limit)?.into_iter().map(|row|{
+        self.rows("SELECT direction,logical_type,message_id,timestamp,body,provenance FROM history WHERE direct=? AND conversation=? ORDER BY id DESC LIMIT ?",vec![n(direct as i64),b(&conversation),n(limit.into())],limit)?.into_iter().map(|row|{
             if row.cells.len()!=6{return Err(StorageError::Schema)}let c=row.cells;
             Ok(HistoryItem{conversation:conversation.clone(),direct,direction:integer(&c[0])?.try_into().map_err(|_|StorageError::Schema)?,logical_type:integer(&c[1])?.try_into().map_err(|_|StorageError::Schema)?,message_id:bytes(&c[2])?,timestamp:integer(&c[3])?,body:bytes(&c[4])?,provenance:bytes(&c[5])?})
         }).collect()

@@ -55,6 +55,8 @@ class IdentityProvider internal constructor(
         )
     }
     private fun refuse(failure: IdentityFailure): Nothing = throw IdentityProviderException(failure)
+    // One lock order across providers, storage and native egress. Per-instance
+    // monitors would invert with storage entering this global reset lock first.
     private inline fun <T> guarded(work: () -> T): T = synchronized(operationLock) { try { work() }
         catch (error: IdentityProviderException) { throw error }
         catch (_: IdentityException.InvalidInput) { refuse(IdentityFailure.INVALID_INPUT) }
@@ -62,7 +64,7 @@ class IdentityProvider internal constructor(
         catch (_: IdentityException.Unavailable) { refuse(IdentityFailure.UNAVAILABLE) }
         catch (_: Exception) { refuse(IdentityFailure.PROVIDER) } }
 
-    @Synchronized fun create(): IdentityInfo = guarded {
+    fun create(): IdentityInfo = guarded {
         protection.requireUnlocked()
         if (storage.hasArtifacts() || protection.exists()) refuse(IdentityFailure.RECOVERY_REQUIRED)
         storage.write(IdentityFile.JOURNAL, byteArrayOf(1))
@@ -70,7 +72,7 @@ class IdentityProvider internal constructor(
         storage.delete(IdentityFile.JOURNAL)
         loadInternal()
     }
-    @Synchronized fun load(): IdentityInfo = guarded { loadInternal() }
+    fun load(): IdentityInfo = guarded { loadInternal() }
     private fun checkAvailable() {
         protection.requireUnlocked()
         if (storage.exists(IdentityFile.JOURNAL)) refuse(IdentityFailure.RECOVERY_REQUIRED)
@@ -106,18 +108,24 @@ class IdentityProvider internal constructor(
         val public = session.publicIdentity()
         IdentityInfo(IdentityHandle(public.generation.copyOf()), public, protection.capabilities())
     }
-    @Synchronized fun publicIdentity(handle: IdentityHandle): PublicIdentity = guarded { unlocked(handle) { it.publicIdentity() } }
-    @Synchronized fun sign(handle: IdentityHandle, transcript: ByteArray): ByteArray = guarded {
+    /** Module-internal, synchronous protected operation. Never return/retain the session. */
+    internal fun <T> messaging(work: (IdentityKeySession) -> T): T {
+        var result: Result<T>? = null
+        guarded { unlocked(null) { session -> result = runCatching { work(session) } } }
+        return checkNotNull(result).getOrThrow()
+    }
+    fun publicIdentity(handle: IdentityHandle): PublicIdentity = guarded { unlocked(handle) { it.publicIdentity() } }
+    fun sign(handle: IdentityHandle, transcript: ByteArray): ByteArray = guarded {
         if (transcript.size > 2048) refuse(IdentityFailure.INVALID_INPUT)
         unlocked(handle) { it.sign(transcript) }
     }
-    @Synchronized fun agree(handle: IdentityHandle, peer: ByteArray): ByteArray = guarded {
+    fun agree(handle: IdentityHandle, peer: ByteArray): ByteArray = guarded {
         if (peer.size != 32) refuse(IdentityFailure.INVALID_INPUT)
         unlocked(handle) { it.agree(peer) }
     }
     /** Recovery is explicit. Journal becomes durable before touching pins or
      * keys; retrying after any partial failure clears state again and rotates. */
-    @Synchronized fun reset(): IdentityInfo = guarded {
+    fun reset(): IdentityInfo = guarded {
         protection.requireUnlocked()
         storage.write(IdentityFile.JOURNAL, byteArrayOf(2))
         if (resettingState) refuse(IdentityFailure.RECOVERY_REQUIRED)

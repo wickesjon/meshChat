@@ -13,19 +13,20 @@ import android.os.Build
 import android.os.IBinder
 import uniffi.meshchat_core.NativeTransport
 import uniffi.meshchat_core.TransportEvent
+import uniffi.meshchat_core.TransportSend
 
 /** Application integration supplies an already protected core; this service
  * never creates plaintext persistence or keeps an unlocked identity session.
  * The application starts it from a visible user action after permission grants.
  */
 class MeshTransportService : Service() {
-    private class Session(val core: NativeTransport, val event: (Long, TransportEvent) -> Unit, val ready: (AndroidGattRadio) -> Unit, val state: (RadioState) -> Unit)
+    private class Session(val core: NativeTransport, val event: (Long, TransportEvent) -> Unit, val ready: (AndroidGattRadio) -> Unit, val state: (RadioState) -> Unit, val egress: ((TransportSend, () -> Boolean) -> Boolean)?)
     companion object {
         private var session: Session? = null
-        /** Transfers ownership of core only on success; no automatic restart. */
-        @Synchronized fun start(context: Context, core: NativeTransport, event: (Long, TransportEvent) -> Unit, ready: (AndroidGattRadio) -> Unit, state: (RadioState) -> Unit = {}): Boolean {
+        /** Borrows core from the application for this session; no automatic restart. */
+        @Synchronized fun start(context: Context, core: NativeTransport, event: (Long, TransportEvent) -> Unit, ready: (AndroidGattRadio) -> Unit, state: (RadioState) -> Unit = {}, egress: ((TransportSend, () -> Boolean) -> Boolean)? = null): Boolean {
             if (session != null || !MeshGatt.allowed(context)) return false
-            session = Session(core, event, ready, state)
+            session = Session(core, event, ready, state, egress)
             return try { context.startForegroundService(Intent(context, MeshTransportService::class.java)); true }
             catch (_: RuntimeException) { session = null; false }
         }
@@ -72,6 +73,7 @@ class MeshTransportService : Service() {
             }
         }) { stopSelf() }
         radio = driver
+        supplied.egress?.let { driver.protectedEgress(it) }
         driver.start()
         supplied.ready(driver)
         return START_NOT_STICKY
@@ -80,7 +82,6 @@ class MeshTransportService : Service() {
         radio?.stop(); radio = null
         if (registered) unregisterReceiver(lifecycle)
         registered = false
-        active?.core?.close()
         release(active); active = null
         super.onDestroy()
     }

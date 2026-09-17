@@ -144,4 +144,64 @@ class EncryptedStorage(private val identity:IdentityProvider,private val vault:S
     }
     fun channelHistory(owner: NativeChannels, name: String, nickname: String): List<ChannelMessage> =
         operation { owner.history(it, name, nickname) }
+
+    fun friendCards(core: NativeTransport, now: ULong): List<FriendCard> = operation { core.friendCards(it, now) }
+    fun friendCode(nickname: String): FriendProposal = friendCode(identity.load().identity, nickname)
+    fun confirmFriend(core: NativeTransport, uri: String, petname: String, previous: FriendHandle?, now: ULong): TransportEffects =
+        operation { store -> identity.messaging { core.confirmFriend(store, it, uri, petname, previous, now) } }
+    fun changeFriend(core: NativeTransport, friend: FriendHandle, replace: Boolean, now: ULong): TransportEffects =
+        operation { core.changeFriend(it, friend, replace, now) }
+    fun authenticate(core: NativeTransport, link: LinkHandle, bytes: ByteArray, now: ULong): AuthenticationResult =
+        operation { store -> identity.messaging { core.authenticateMessage(store, it, link, bytes, now, System.currentTimeMillis()/1000) } }
+    fun retryMessages(core: NativeTransport, now: ULong): Boolean =
+        operation { store -> identity.messaging { core.retryMessages(store, it, now, System.currentTimeMillis()/1000) } }
+    fun sendDirect(core: NativeTransport, friend: FriendHandle, content: DirectContent, cookie: ULong, now: ULong): MessageSubmission =
+        operation { store -> identity.messaging { core.sendDirect(store, it, friend, content, cookie, now, System.currentTimeMillis()/1000) } }
+    fun sendSigned(core: NativeTransport, bytes: ByteArray, cookie: ULong, now: ULong): MessageSubmission =
+        operation { store -> identity.messaging { core.sendSigned(store, it, bytes, cookie, now, System.currentTimeMillis()/1000) } }
+    fun directHistory(core: NativeTransport, keys: ByteArray, now: ULong): List<DirectMessage> =
+        operation { core.directHistory(it, keys, now, System.currentTimeMillis()/1000) }
+    fun messagingHistory(core: NativeTransport, owner: NativeChannels, name: String, nickname: String): List<ChannelMessage> =
+        operation { core.messagingChannelHistory(it, owner, name, nickname) }
+    fun proof(core: NativeTransport, link: LinkHandle, now: ULong): TransportEffects =
+        IdentityProvider.withOperation { identity.messaging { core.prepareProof(link, it, now) } }
+    /** Keep reset serialization through the actual native submission. The
+     * database/session are closed before returning; callbacks never hold keys. */
+    fun messageEgress(core: NativeTransport, send: TransportSend, submit: () -> Boolean): Boolean = IdentityProvider.withOperation {
+        if (core.messageNeedsAuthorization(send.link, send.token)) {
+            operation { core.authorizeMessageEgress(it, send.link, send.token) }
+        }
+        submit()
+    }
+
+    /** Bounded encrypted navigation index for retained old-identity histories.
+     * Persist before pin mutation; a failed mutation can leave a harmless duplicate.
+     * Eight slots hold eight canonical public-key codes each, below 2 KiB/record. */
+    fun archives(): List<FriendProposal> = operation { store -> (0 until 8).flatMap { slot ->
+        store.getRecord(RecordKind.SETTING, "ui-old-friends-$slot".toByteArray())?.toString(Charsets.UTF_8)
+            ?.split('\n')?.filter { it.isNotEmpty() }?.map(::friendProposal) ?: emptyList()
+    } }
+    fun archiveFriend(friend: FriendCard): Boolean = operation { store ->
+        val slots=(0 until 8).map { slot ->
+            store.getRecord(RecordKind.SETTING, "ui-old-friends-$slot".toByteArray())?.toString(Charsets.UTF_8)
+                ?.split('\n')?.filter { it.isNotEmpty() }?.toMutableList() ?: mutableListOf()
+        }
+        if (slots.flatten().any { friendProposal(it).keys.contentEquals(friend.keys) }) true else {
+            val slot=slots.indexOfFirst { it.size<8 }
+            if(slot<0) false else {
+                val metadata=PublicIdentity(byteArrayOf(),friend.keys.copyOfRange(0,32),friend.keys.copyOfRange(32,64),byteArrayOf(),byteArrayOf())
+                slots[slot].add(friendCode(metadata,friend.petname).uri)
+                store.putRecord(RecordKind.SETTING,"ui-old-friends-$slot".toByteArray(),slots[slot].joinToString("\n").toByteArray());true
+            }
+        }
+    }
+    fun deleteArchive(keys: ByteArray) = operation { store ->
+        store.deleteHistory(keys,true)
+        for(slot in 0 until 8) {
+            val name="ui-old-friends-$slot".toByteArray()
+            val old=store.getRecord(RecordKind.SETTING,name)?.toString(Charsets.UTF_8) ?: continue
+            val kept=old.split('\n').filter { it.isNotEmpty() && !friendProposal(it).keys.contentEquals(keys) }
+            store.putRecord(RecordKind.SETTING,name,kept.joinToString("\n").toByteArray())
+        }
+    }
 }

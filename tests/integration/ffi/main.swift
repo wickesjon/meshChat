@@ -181,3 +181,31 @@ func channelTrace() throws {
     print("MC-028 Swift real channel codec, disposable posts, byte limits and persistent reactions PASS")
 }
 try channelTrace()
+
+func messagingTrace() throws {
+    let db = try TransportSql(); defer { db.finish() }
+    let identity = try IdentityKeySession.importUnlocked(material: Data(repeating: 71, count: 64), generation: Data(repeating: 71, count: 16))
+    let peer = try IdentityKeySession.importUnlocked(material: Data(repeating: 72, count: 64), generation: Data(repeating: 72, count: 16))
+    defer { try? identity.invalidate(); try? peer.invalidate() }
+    let own = try identity.publicIdentity()
+    let store = try EncryptedStore.open(db: db, generation: own.generation, create: true, now: 200000)
+    let core = try NativeTransport(store: store, identity: own, instanceNonce: 71, monotonicMs: 0)
+    let code = try friendCode(identity: peer.publicIdentity(), nickname: "Bob / é")
+    let proposal = try friendProposal(uri: code.uri)
+    precondition(proposal.keys == code.keys && proposal.fingerprint.count == 79)
+    let before = try core.friendCards(store: store, now: 0)
+    precondition(before.isEmpty)
+    _ = try core.confirmFriend(store: store, provider: identity, uri: code.uri, petname: "Local Bob", previous: nil, now: 0)
+    let pin = try core.friendCards(store: store, now: 0)[0]
+    precondition(pin.petname == "Local Bob" && !pin.fresh)
+    _ = try core.changeFriend(store: store, friend: pin.handle, replace: true, now: 0)
+    let held = try core.friendCards(store: store, now: 0)[0]
+    precondition(held.replacing)
+    _ = try core.changeFriend(store: store, friend: pin.handle, replace: false, now: 0)
+    let removed = try core.friendCards(store: store, now: 0)
+    let history = try core.directHistory(store: store, keys: pin.keys, now: 0, wall: 200000)
+    precondition(removed.isEmpty && history.isEmpty)
+    do { _ = try friendProposal(uri: "meshfest://friend/bad/key"); fatalError("malformed friend proposal accepted") } catch MessagingError.Invalid {}
+    print("MC-029 Swift inert proposals, full tuple, opaque pin handle and replacement/removal PASS")
+}
+try messagingTrace()

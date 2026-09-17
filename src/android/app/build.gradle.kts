@@ -63,6 +63,8 @@ dependencies {
     // The upstream JNI has 4 KB RELRO; package the source-rebuilt pinned AAR.
     configurations.configureEach { exclude(group = "androidx.graphics", module = "graphics-path") }
     implementation(files(rootProject.file("../../.work/ui-graphics/graphics-path-1.0.1-aligned.aar")))
+    implementation("com.journeyapps:zxing-android-embedded:4.3.0")
+    implementation("com.google.zxing:core:3.4.1")
     implementation("androidx.annotation:annotation:1.9.1")
     implementation("net.java.dev.jna:jna:5.17.0@aar")
     implementation(files(rootProject.file("../../.work/security-sqlcipher/sqlcipher-4.17.0-aligned.aar")))

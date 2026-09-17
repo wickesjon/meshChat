@@ -40,6 +40,7 @@ data class MeshScreenState(
     val previews: Map<String, String> = emptyMap(), val unread: Map<String, Int> = emptyMap(),
     val posted: Long = 0,
     val power: TransportPowerSetting = TransportPowerSetting.AUTO,
+    val beaconRequested: Boolean = false, val autoBeacon: Boolean = false, val beacon: BeaconStatus? = null,
 )
 
 /** A bounded serial feature owner. Protected adapters open/close the store per
@@ -74,6 +75,9 @@ class MeshModel(private val context: Context) {
     private var billingStatus = "Purchases are not configured in this build."
     private var supporterPrice: String? = null
     private var power = TransportPowerSetting.AUTO
+    private var beaconRequested = false
+    private var autoBeacon = false
+    private var beaconExits = 0uL
     private var joined = mutableListOf("#general", "#event updates", "#confessions")
     private val muted = mutableSetOf<String>()
     private var selected: String? = null
@@ -119,10 +123,14 @@ class MeshModel(private val context: Context) {
         put("ui-channels-v1", joined.joinToString("\n"))
         put("ui-muted-v1", muted.joinToString("\n"))
         put("ui-power-v1", power.name)
+        put("ui-beacon-v1", "${if(beaconRequested)1 else 0}|${if(autoBeacon)1 else 0}")
         put("ui-cosmetics-v1", "$theme|${nicknameRgb?.toString() ?: ""}")
     }
     fun load() = work {
-        if (loaded) { refresh(); return@work }
+        if (loaded) {
+            if(beaconRequested || autoBeacon)startRadio()
+            refresh(); return@work
+        }
         val info = try { identity.load() } catch (e: IdentityProviderException) {
             if (e.failure == IdentityFailure.MISSING) { publish(MeshScreenState(loading = false)); return@work }; throw e
         }
@@ -136,11 +144,14 @@ class MeshModel(private val context: Context) {
         nicknameRgb = cosmetics?.getOrNull(1)?.toUIntOrNull()?.takeIf { it<=0xffffffu }
         light = Themes.selected(theme,supporter).light
         power = setting("ui-power-v1")?.let { TransportPowerSetting.valueOf(it) } ?: TransportPowerSetting.AUTO
+        val beaconSetting = setting("ui-beacon-v1")?.split('|')
+        beaconRequested = beaconSetting?.getOrNull(0)=="1"; autoBeacon=beaconSetting?.getOrNull(1)=="1"; beaconExits=0uL
         joined = (setting("ui-channels-v1")?.split('\n') ?: joined).take(33).map { channelInfo(it).name }.distinct().toMutableList()
         muted.clear(); muted.addAll(setting("ui-muted-v1")?.split('\n')?.filter { it in joined } ?: emptyList())
         owner = NativeChannels(info.identity, now()); initializeMessaging(); loaded = true
         previews.clear(); unread.clear()
         for (name in joined) previews[name] = coreWork { storage.messagingHistory(it, checkNotNull(owner), name, profile) }.lastOrNull()?.text ?: "Quiet so far"
+        if(beaconRequested || autoBeacon)startRadio()
         refresh()
     }
     /** Called only from the final explicit onboarding action. */
@@ -176,7 +187,17 @@ class MeshModel(private val context: Context) {
     private fun canJoin(channel: ChannelInfo): Boolean = !channel.private ||
         EntitlementPolicy.canAddPrivate(supporter,joined.count { channelInfo(it).private })
     private fun slotNotice() = "Private channel slots are full. Leave one to add another. Existing channels stay available."
-    fun power(value: TransportPowerSetting) = work { power = value; persist(); radio?.powerSetting(value); refresh() }
+    fun power(value: TransportPowerSetting) = work {
+        beaconRequested=false; autoBeacon=false; power=value; persist()
+        radio?.configureBeacon(false,false); radio?.powerSetting(value); refresh()
+    }
+    fun beacon(manual: Boolean, automatic: Boolean) = work {
+        beaconRequested=manual; autoBeacon=automatic; power=TransportPowerSetting.AUTO
+        persist(); radio?.configureBeacon(manual,automatic)
+        if(manual || automatic)startRadio()
+        refresh()
+    }
+    fun exitBeacon() = beacon(false,false)
     fun select(name: String?) = work { notice = null; direct = null; selected = name?.let { channelInfo(it).name }; selected?.let { unread[it] = 0 }; refresh() }
     fun join(name: String) = work {
         val channel = channelInfo(name)
@@ -204,7 +225,7 @@ class MeshModel(private val context: Context) {
         supporter=false;theme="afterhours";nicknameRgb=null
         previews.clear(); unread.clear()
         replacement = true
-        power = TransportPowerSetting.AUTO
+        power = TransportPowerSetting.AUTO; beaconRequested=false; autoBeacon=false; beaconExits=0uL
         // Reset creates a replacement identity; finish its profile explicitly.
         publish(MeshScreenState(loading = false, error = "Identity reset. Choose a new nickname to finish setup."))
     }
@@ -216,6 +237,12 @@ class MeshModel(private val context: Context) {
     private fun refresh(error: String? = notice) {
         if (!loaded) return
         notice = error
+        val beaconStatus = radio?.beaconStatus()
+        if (beaconStatus != null && beaconStatus.batteryExitCount > beaconExits) {
+            beaconExits=beaconStatus.batteryExitCount; beaconRequested=false
+            notice="Beacon Mode ended at 30% battery. Your channels and history are unchanged."
+            persist(); radio?.configureBeacon(false,autoBeacon)
+        }
         val n = checkNotNull(owner)
         n.setCosmetics(supporter,if(supporter)nicknameRgb else null)
         val rows = selected?.let { name -> coreWork { storage.messagingHistory(it, n, name, profile) } } ?: emptyList()
@@ -230,8 +257,8 @@ class MeshModel(private val context: Context) {
             supporter = supporter, theme = theme, nicknameRgb = nicknameRgb, billingStatus = billingStatus, supporterPrice = supporterPrice,
             channels = joined.map(::channelInfo), selected = selected?.let(::channelInfo), channelProposal = channelProposal,
             rows = rows.map { ChatRow(it, receipts[key(it.id)] ?: if(it.own) "Stored locally · delivery unknown" else "Unverified") },
-            peers = links.size, status = status, error = error, waitSeconds = ((wait + 999uL) / 1000uL).toInt(), muted = selected in muted,
-            previews = previews.toMap(), unread = unread.toMap(), posted = posted, power = power))
+            peers = links.size, status = status, error = notice, waitSeconds = ((wait + 999uL) / 1000uL).toInt(), muted = selected in muted,
+            previews = previews.toMap(), unread = unread.toMap(), posted = posted, power = power, beaconRequested=beaconRequested, autoBeacon=autoBeacon, beacon=beaconStatus))
     }
     fun send(text: String) = work {
         notice = null
@@ -267,7 +294,7 @@ class MeshModel(private val context: Context) {
         notice = null; starting = true
         val transport = checkNotNull(transport); val generation = ++epoch
         val started = MeshTransportService.start(context, transport, { id, event -> work { if (generation == epoch) this.event(id, event) } },
-            { engine -> work { if (generation == epoch) { starting = false; radio = engine; engine.powerSetting(power); announceAt = 0uL; refresh() } else engine.stop() } },
+            { engine -> work { if (generation == epoch) { starting = false; radio = engine; engine.powerSetting(power); if(beaconRequested || autoBeacon)engine.configureBeacon(beaconRequested,autoBeacon); announceAt = 0uL; refresh() } else engine.stop() } },
             { state -> work { if (generation == epoch) radioState(state) } },
             { send, submit -> storage.messageEgress(transport, send, submit) })
         if (!started) { starting = false; status = "Allow Bluetooth access, then try connecting again." }
@@ -450,11 +477,11 @@ class MeshModel(private val context: Context) {
                 try { if (loaded) {
                     if(links.isNotEmpty()) coreWork {storage.retryMessages(it,now())}
                     if (links.isNotEmpty() && now() >= announceAt) {
-                        val bytes = checkNotNull(owner).announce(profile, avatar, links.size.toUByte(), (System.currentTimeMillis()/1000).toUInt())
+                        val bytes = checkNotNull(transport).beaconAnnounce(checkNotNull(owner).announce(profile, avatar, links.size.toUByte(), (System.currentTimeMillis()/1000).toUInt()))
                         submitProtected { core, token -> storage.sendSigned(core, bytes, token, now()) }
                         announceAt = now() + (radio?.currentPower()?.announceMs ?: 30000uL)
                     }
-                    if (selected != null || direct != null || links.isNotEmpty()) refresh()
+                    if (selected != null || direct != null || links.isNotEmpty() || beaconRequested || autoBeacon) refresh()
                 } } finally {pulseQueued.set(false)}
             }
             main.postDelayed(this, 1000)

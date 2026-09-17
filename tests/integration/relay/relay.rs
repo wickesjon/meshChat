@@ -744,7 +744,8 @@ fn infra_is_only_charging_android_beacon_not_an_ordinary_power_hint() {
         visible_peers: 4,
         auto_beacon: true,
     };
-    assert!(!policy.update(input, 0).unwrap().infra);
+    // Charging transitions are immediate in MC-033; ordinary Auto keeps hysteresis.
+    assert!(policy.update(input, 0).unwrap().infra);
     assert!(policy.update(input, 60_000).unwrap().infra);
     assert!(
         !policy

@@ -65,8 +65,11 @@ class AndroidGattRadio(
     private var state = RadioState.STOPPED
     private var foreground = true
     private var saver = false
+    private var beacon = false
     private var linkLimit = 6
     private var powerStatus: PowerStatus? = null
+    fun beaconStatus(): BeaconStatus? = synchronized(gate) { driver.beaconStatus() }
+    fun configureBeacon(manual: Boolean, auto: Boolean) = guarded { driver.beacon(manual, auto); setting=null; policy() }
     fun currentPower(): PowerStatus? = synchronized(gate) { powerStatus }
     data class PowerStatus(val saver: Boolean, val linkLimit: Int, val batteryTier: Int, val announceMs: ULong)
     private fun report(value: RadioState) { if (state != value) { state = value; status(value) } }
@@ -145,6 +148,7 @@ class AndroidGattRadio(
             ?: run { stop(RadioState.STOPPED); return }
         setting = null
         saver = result.saver
+        beacon = result.beacon
         linkLimit = result.linkLimit.toInt()
         powerStatus = PowerStatus(saver, linkLimit, result.batteryTier.toInt(), result.announceMs)
         val proximity = context.checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
@@ -153,11 +157,11 @@ class AndroidGattRadio(
             context.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED,
             context.getSystemService(LocationManager::class.java).isLocationEnabled,
             context.checkSelfPermission(Manifest.permission.ACCESS_BACKGROUND_LOCATION) == PackageManager.PERMISSION_GRANTED)
-        val mode = scanning.mode(saver, visible, foreground, restriction == null)
+        val mode = scanning.mode(saver, visible, foreground, restriction == null, beacon)
         changeScan(mode)
         report(if (restriction != null) restriction
             else if (scanning.retrying || (mode != ScanMode.OFF && scanner == null)) RadioState.DISCOVERY_PAUSED else RadioState.ACTIVE)
-        val plan = selection.plan(driver.connections(), linkLimit)
+        val plan = selection.plan(driver.connections(), linkLimit, beacon)
         plan.close.forEach { driver.lost(it) }
         plan.connect?.let { address ->
             // Teardown may replace the whole server, so recheck current slots.

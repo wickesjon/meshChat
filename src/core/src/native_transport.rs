@@ -9,8 +9,11 @@ use crate::{
     relay::{self, Relay},
     storage::EncryptedStore,
 };
+#[path = "native_beacon.rs"]
+mod beacon;
 #[path = "native_messaging.rs"]
 pub mod messaging;
+pub use beacon::BeaconStatus;
 use sha2::{Digest, Sha256};
 use std::sync::{Arc, Mutex};
 
@@ -98,7 +101,7 @@ pub struct TransportConnection {
     pub link: LinkHandle,
     pub effects: TransportEffects,
 }
-/// User settings only; Beacon integration remains MC-033.
+/// Ordinary user settings. Beacon configuration is Android-only and separate.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
 pub enum TransportPowerSetting {
     Auto,
@@ -107,6 +110,9 @@ pub enum TransportPowerSetting {
 }
 #[derive(Debug, Clone, uniffi::Record)]
 pub struct TransportPower {
+    pub beacon: bool,
+    pub infra: bool,
+    pub beacon_battery_exit: bool,
     pub saver: bool,
     pub link_limit: u16,
     pub battery_tier: u8,
@@ -119,6 +125,8 @@ pub struct TransportPower {
 /// Local connection-selection hints, never identity, display or delivery authority.
 #[derive(Debug, Clone, uniffi::Record)]
 pub struct TransportObservation {
+    /// Fresh ANNOUNCE claim, used only for bounded connection preference.
+    pub peer_count: Option<u8>,
     pub link: LinkHandle,
     /// Budget-admitted, text-valid clear CHAT/ANNOUNCE, including an explicitly
     /// work-budgeted full-key friend signature check. Opaque/encrypted and
@@ -149,6 +157,7 @@ struct Link {
     first_valid_ms: Option<u64>,
     digest: Option<(u64, [u8; 256])>,
     native_activity: u64,
+    peer_count: Option<(u64, u8)>,
 }
 struct Admission {
     token: u64,
@@ -169,6 +178,7 @@ struct Runtime {
     platform: Platform,
     link_limit: usize,
     recent: Vec<([u8; 8], u64)>,
+    beacon: beacon::Beacon,
 }
 impl Runtime {
     fn next(&mut self) -> Result<u64, TransportError> {
@@ -185,12 +195,13 @@ impl Runtime {
             .ok_or(TransportError::Stale)
     }
     fn clock(&mut self, now: u64) -> Result<(), TransportError> {
-        if self.failed || now < self.now || now > u64::MAX - 900_000 {
+        if self.failed || now < self.now || now > u64::MAX - 3_600_000 {
             self.failed = true;
             self.friends.clear_session_trust();
             return Err(TransportError::Unavailable);
         }
         self.now = now;
+        self.beacon.advance(now)?;
         self.recent.retain(|(_, at)| now - *at < 60_000);
         self.admissions.retain(|a| now < a.born + 30_000);
         self.ingress
@@ -199,6 +210,10 @@ impl Runtime {
     }
     fn results(&mut self, events: Vec<relay::ResultEvent>, out: &mut TransportEffects) {
         for event in events {
+            if event.cookie == 0 {
+                self.beacon.finished(&event, self.now);
+                continue;
+            }
             self.messaging.finished(&mut self.friends, &event);
             if event.cookie >= 3 {
                 out.events.push(TransportEvent::Finished {
@@ -227,6 +242,7 @@ impl Runtime {
             .map_err(|_| TransportError::Unavailable)?;
         // Friends may already have invalidated this session on a changed HELLO.
         let _ = self.friends.disconnect(&mut self.ingress, link, self.now);
+        self.beacon.disconnect(link, self.now);
         self.messaging.disconnected();
         self.links.remove(index);
         self.results(events, out);
@@ -245,6 +261,10 @@ impl Runtime {
                 .friends
                 .effective_capacities(&link.handle)
                 .map_err(|_| TransportError::Stale)?;
+            self.beacon
+                .sessions
+                .register(&link.handle, self.now)
+                .map_err(|_| TransportError::Unavailable)?;
             link.admitted = true;
             out.events.push(TransportEvent::Admitted {
                 link: link.handle.clone(),
@@ -322,7 +342,10 @@ impl Runtime {
                 self.links[index].first_valid_ms.get_or_insert(self.now);
                 self.remember(packet.header().message_id);
             }
-            codec::Payload::Announce { digest, .. } => {
+            codec::Payload::Announce {
+                digest, peer_count, ..
+            } => {
+                self.links[index].peer_count = Some((self.now, peer_count));
                 self.links[index].last_valid_ms = Some(self.now);
                 self.links[index].first_valid_ms.get_or_insert(self.now);
                 self.links[index].digest = digest.try_into().ok().map(|bytes| (self.now, bytes));
@@ -338,6 +361,9 @@ impl Runtime {
         cookie: u64,
         out: &mut TransportEffects,
     ) -> Result<(), TransportError> {
+        if matches!(traffic, relay::Traffic::Own) {
+            self.beacon.cache_live(bytes, self.now);
+        }
         let mut random = [0; 8];
         getrandom::fill(&mut random).map_err(|_| TransportError::Unavailable)?;
         let mut events = Vec::new();
@@ -427,18 +453,22 @@ impl NativeTransport {
             battery_percent,
             charging,
             visible_peers: usize::from(visible_peers),
-            auto_beacon: false,
+            auto_beacon: s.beacon.auto,
         };
-        let params = if let Some(setting) = setting {
-            s.power.set(
-                match setting {
-                    TransportPowerSetting::Auto => power::Setting::Auto,
-                    TransportPowerSetting::Normal => power::Setting::Normal,
-                    TransportPowerSetting::Saver => power::Setting::Saver,
-                },
-                input,
-                now,
-            )
+        let beacon_setting = s.beacon.manual.take().map(|manual| {
+            if manual {
+                power::Setting::Beacon
+            } else {
+                power::Setting::Auto
+            }
+        });
+        let selected = beacon_setting.or(setting.map(|value| match value {
+            TransportPowerSetting::Auto => power::Setting::Auto,
+            TransportPowerSetting::Normal => power::Setting::Normal,
+            TransportPowerSetting::Saver => power::Setting::Saver,
+        }));
+        let params = if let Some(setting) = selected {
+            s.power.set(setting, input, now)
         } else {
             s.power.update(input, now)
         }
@@ -458,7 +488,7 @@ impl NativeTransport {
                 s.close(&link, &mut out)?;
             }
         }
-        let tier = if charging || battery_percent == 100 {
+        let tier = if params.mode == power::Mode::Beacon || charging || battery_percent == 100 {
             3
         } else if battery_percent < 15 {
             0
@@ -473,8 +503,12 @@ impl NativeTransport {
         s.relay
             .set_power(params.mode, tier, now)
             .map_err(|_| TransportError::Unavailable)?;
+        s.beacon.power(params, battery_percent, charging, now)?;
         s.link_limit = params.max_links;
         Ok(TransportPower {
+            beacon: params.mode == power::Mode::Beacon,
+            infra: params.infra,
+            beacon_battery_exit: params.beacon_battery_exit,
             saver: params.mode == power::Mode::Saver,
             link_limit: params.max_links as u16,
             battery_tier: tier,
@@ -517,6 +551,10 @@ impl NativeTransport {
                         (absent * 1000 / s.recent.len()) as u16
                     });
                 TransportObservation {
+                    peer_count: link
+                        .peer_count
+                        .filter(|(at, _)| now - at < 60_000)
+                        .map(|(_, count)| count),
                     link: link.handle.clone(),
                     last_valid_ms: link.last_valid_ms,
                     first_valid_ms: link.first_valid_ms,
@@ -617,6 +655,7 @@ impl NativeTransport {
             first_valid_ms: None,
             digest: None,
             native_activity: now,
+            peer_count: None,
         });
         let mut out = TransportEffects::default();
         if let Err(error) = s.enqueue(&link, &hello, relay::Traffic::Transport(2), 1, &mut out) {
@@ -692,21 +731,67 @@ impl NativeTransport {
                 .receive_capacity(&link)
                 .map_err(|_| TransportError::Stale)?;
             let mut output = [0; 1035];
-            let result = ingress
-                .receive_friend(
-                    &link,
-                    (reported_bytes, &bytes),
-                    now,
-                    &mut output,
-                    (false, capacity),
+            // Oversize native values still enter the charged refusal path. All
+            // other values use the same ingress plus an unforgeable SYNC receipt.
+            let (result, sync) = if bytes.len() > capacity {
+                (
+                    ingress
+                        .receive_friend(
+                            &link,
+                            (reported_bytes, &bytes),
+                            now,
+                            &mut output,
+                            (false, capacity),
+                        )
+                        .map_err(|_| TransportError::Stale)?,
+                    None,
                 )
-                .map_err(|_| TransportError::Stale)?;
+            } else {
+                let admitted = ingress
+                    .receive_deferred_sync(&link, reported_bytes, &bytes, now, &mut output)
+                    .map_err(|_| TransportError::Stale)?;
+                (admitted.outcome, admitted.sync)
+            };
+            if let Some(admission) = sync {
+                if let Outcome::Complete {
+                    kind: framing::ObjectKind::Logical,
+                    len,
+                    state,
+                } = result
+                {
+                    let b = &mut s.beacon;
+                    let _ = b.sessions.accept_admitted_request(
+                        &link,
+                        admission,
+                        &mut b.cache,
+                        now,
+                        &mut |_| {},
+                    );
+                    // Direct requests never enter mesh relay/digest/history
+                    // state. Preserve only the existing diagnostic event.
+                    out.events.push(TransportEvent::Received {
+                        link,
+                        bytes: output[..len].to_vec(),
+                        intake: if state == State::Duplicate {
+                            TransportIntake::Duplicate
+                        } else {
+                            TransportIntake::Unverified
+                        },
+                    });
+                    return Ok(out);
+                }
+                // Requesting/history presentation is owned separately; an
+                // unsolicited stored wrapper never becomes live CHAT here.
+            }
             if let Outcome::Complete { len, state, .. } = result {
                 if state != State::DeferredSync && state != State::Control {
                     let now = s.now;
                     s.relay
                         .observe(Some(&link), &output[..len], now)
                         .map_err(|_| TransportError::Unavailable)?;
+                }
+                if matches!(state, State::Unverified | State::Pending | State::Opaque) {
+                    s.beacon.cache_live(&output[..len], now);
                 }
                 let clear = matches!(state, State::Unverified | State::Duplicate)
                     && output.get(2).is_some_and(|flags| flags & 7 == 0);
@@ -823,7 +908,8 @@ impl NativeTransport {
         for link in expired {
             s.close(&link, &mut out)?;
         }
-        for _ in 0..6 {
+        s.serve_cache(&mut out)?;
+        for _ in 0..8 {
             let mut raw = [0; 512];
             let mut events = Vec::new();
             let send = s
@@ -1028,6 +1114,7 @@ impl NativeTransport {
                 platform,
                 link_limit: limit,
                 recent: Vec::with_capacity(200),
+                beacon: beacon::Beacon::new(instance_nonce, monotonic_ms)?,
             }),
         })
     }

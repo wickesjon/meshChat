@@ -33,7 +33,7 @@ Also permitted: this ticket and generated ticketboard index/diagram changes requ
 - [x] Adding friends, encrypted send/receive, reactions, restart and friend removal work end to end.
 - [x] Deep-link and scanned-key flows require explicit trust confirmation; spoofed nicknames cannot gain a verified badge.
 - [x] Explicit user-selected replacement blocks stale-pin sends until confirmed re-pairing; network claims cannot disable existing pins and no UI action causes plaintext DM fallback.
-- [x] Relevant checks pass, evidence is recorded, required review is complete, and the ticket is squash merged to main.
+- [ ] Relevant checks pass, evidence is recorded, required review is complete, and the ticket is squash merged to main. (Left unchecked in the reviewed pre-merge snapshot; PR #31's merged state and this ticket on main establish effective completion.)
 
 ## Potential fallbacks
 

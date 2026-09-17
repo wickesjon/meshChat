@@ -378,11 +378,12 @@ final class IOSGattRadio: NSObject, IOSGattPort, @preconcurrency CBCentralManage
     }
     private func resetServer() {
         guard !resettingServer else { return }; resettingServer = true
-        for id in Array(subscribers.keys) { driver.lost(id) }
-        subscribers.removeAll()
-        server?.stopAdvertising(); server?.removeAllServices(); server?.delegate = nil; server = nil
-        serverRestart = Self.now() + 5000
-        if running { status(.restoring) }
+        driver.restore(.peripheral) {
+            subscribers.removeAll()
+            server?.stopAdvertising(); server?.removeAllServices(); server?.delegate = nil; server = nil
+            serverRestart = Self.now() + 5000
+            if running { status(.restoring) }
+        }
         resettingServer = false
     }
     func centralManager(_ central: CBCentralManager, willRestoreState dict: [String: Any]) {
@@ -401,8 +402,9 @@ final class IOSGattRadio: NSObject, IOSGattPort, @preconcurrency CBCentralManage
         status(.restoring)
         // Restored characteristics/subscribers have no current logical generation.
         // Discard them and publish fresh objects before accepting new input.
-        peripheral.stopAdvertising(); peripheral.removeAllServices()
-        published = false; publishing = false; tx = nil; rx = nil
+        // A fresh manager is created by pulse after the bounded backoff; its
+        // powered-on callback publishes and advertises fresh service objects.
+        resetServer()
     }
     func stop(_ reason: IOSRadioState = .stopped) {
         guard running else { return }; running = false

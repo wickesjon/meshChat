@@ -51,7 +51,7 @@ Implementation is in progress within the approved scope. Native automated eviden
 ## Review and merge
 
 - Branch: `ticket/MC-026-ios-corebluetooth-driver`.
-- Review/PR: pending.
+- Review/PR: [PR #29](https://github.com/wickesjon/meshChat/pull/29).
 - Squash commit title: `MC-026: iOS CoreBluetooth driver`.
 - Completion becomes effective only when the reviewed squash commit lands on main.
 
@@ -94,3 +94,11 @@ The production Swift adapter and its serialized driver are implemented under `sr
 The native adapter uses runtime directional transmit limits, validates the production INFO/characteristics, owns bounded records and subscriptions, waits for readiness callbacks, guards callback generations, and exposes stopped/limited/restoring states. Initial valid-activity eviction, five-minute blacklist, power cap shrink, lock/permission/radio stop, fresh restoration handshakes and foreground catch-up are integrated. Conservative manager-epoch replacement and application-entry obligations are documented in [the driver guide](../../testing/MC-026-ios-corebluetooth-driver.md). Real radio/OS restoration and key certification remain MC-027/044.
 
 Local candidate checks pass: Rust/cargo 1.85.1 formatting and all-target/all-feature clippy with warnings denied; all 165 tests in debug and release; release build; cargo-deny 0.20.2 advisories/bans/licenses/sources (existing unmatched allowance warnings only). Host bindings and both Android release ABIs build with NDK 27.3.13750724. BLE `assembleDebug assembleRelease lintDebug` passes with all 24 JVM regressions, both ABI/ELF alignment checks, JDK 17.0.15+6, Gradle 8.13 and Kotlin 2.2.0. Logs are under `.work/mc026/`. Swift/native checks run on the pinned hosted Mac; their results and exact review revisions are still pending, not claimed passed.
+
+### Review corrections
+
+Terra medium reviewed `6a12edec66c0355ed88f47b1c1acb26535be73f6` and reported one P1: peripheral restoration removed services without republishing or clearing old subscriber/core state. Restoration now clears the affected role through the serialized driver and schedules a fresh peripheral manager, whose powered-on callback republishes services and advertising. A deterministic regression verifies cleanup before rebuilding, preservation of the other role, fresh admission/HELLO and rejection of old callbacks. Follow-up review is pending.
+
+An additional regression reproduced lost terminal expiry events when a native submission crossed the object's absolute deadline. Completion and backpressure now return those effects without retrying the expired frame; the 14 native transport tests pass after the fix. Full revised-candidate validation remains pending.
+
+Hosted run `35179676215` failed Swift host compilation because a nested test helper lacked explicit main-actor isolation. The helper is corrected; this failed run is not passing Swift or Xcode evidence. A fresh run must validate the correction and execute the previously skipped native builds.

@@ -642,3 +642,44 @@ fn native_sync_wrappers_remain_deferred_and_use_the_paced_bounded_scheduler() {
         }]
     );
 }
+
+#[test]
+fn ios_submission_crossing_object_deadline_preserves_terminal_effects() {
+    for queue_full in [false, true] {
+        let a = ios_owner(89);
+        let (b, _) = owner(90);
+        let al = ready(&a, TransportRole::Central, 182, 512, 0);
+        let bl = ready(&b, TransportRole::Peripheral, 512, 512, 0);
+        handshake(&a, &b, &al, &bl);
+        a.enqueue(al.clone(), chat(91, 256), TransportTraffic::Own, 91, 1000)
+            .unwrap();
+        let first = a.tick(1000).unwrap().sends.remove(0);
+        a.complete(al.clone(), first.token, true, 1000).unwrap();
+        for now in [10_000, 20_000] {
+            a.readiness(al.clone(), now).unwrap();
+            a.set_writable(al.clone(), false, now).unwrap();
+        }
+        a.readiness(al.clone(), 30_999).unwrap();
+        let frame = a.tick(30_999).unwrap().sends.remove(0);
+        let result = if queue_full {
+            a.backpressure(al.clone(), frame.token, 31_000)
+        } else {
+            a.complete(al.clone(), frame.token, true, 31_000)
+        }
+        .unwrap();
+        assert_eq!(
+            result.events,
+            vec![TransportEvent::Finished {
+                link: al.clone(),
+                cookie: 91,
+                status: TransportStatus::Expired
+            }]
+        );
+        assert!(a.tick(31_000).unwrap().sends.is_empty());
+        assert_eq!(
+            a.complete(al.clone(), frame.token, true, 31_000)
+                .unwrap_err(),
+            TransportError::Stale
+        );
+    }
+}

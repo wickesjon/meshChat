@@ -886,13 +886,18 @@ impl NativeTransport {
             return Err(TransportError::Stale);
         }
         let attempt = pending.attempt;
+        let cookie = pending.cookie;
         let mut events = Vec::new();
-        s.relay
-            .backpressure(attempt, now, &mut |e| events.push(e))
-            .map_err(|_| TransportError::Stale)?;
+        let result = s.relay.backpressure(attempt, now, &mut |e| events.push(e));
         s.links[i].pending = None;
         let mut out = TransportEffects::default();
+        let expired = events
+            .iter()
+            .any(|e| e.link == link && e.cookie == cookie && e.status == relay::Status::Expired);
         Runtime::results(events, &mut out);
+        if result.is_err() && !expired {
+            s.close(&link, &mut out)?;
+        }
         Ok(out)
     }
     /// Report actual submission refusal or callback completion exactly once.
@@ -919,9 +924,21 @@ impl NativeTransport {
         }
         let pending = s.links[i].pending.take().unwrap();
         let mut events = Vec::new();
-        s.relay
+        if s.relay
             .complete(pending.attempt, success, now, &mut |e| events.push(e))
-            .map_err(|_| TransportError::Stale)?;
+            .is_err()
+        {
+            // Native submission can cross the absolute object deadline. Retain
+            // the scheduler's terminal event rather than losing it as Stale.
+            let expired = events.iter().any(|e| {
+                e.link == link && e.cookie == pending.cookie && e.status == relay::Status::Expired
+            });
+            Runtime::results(events, &mut out);
+            if !expired {
+                s.close(&link, &mut out)?;
+            }
+            return Ok(out);
+        }
         if success && pending.cookie == 1 {
             if s.friends.hello_transmitted(&link, now).is_err() {
                 s.close(&link, &mut out)?;

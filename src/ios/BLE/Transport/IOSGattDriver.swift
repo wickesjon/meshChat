@@ -187,6 +187,12 @@ final class IOSGattDriver {
     }
     /// Restoration drops old logical state without resetting node admission credit.
     func resetLinks() { for id in ids { lost(id) } }
+    /// Drop the affected role before rebuilding its native service/manager. The
+    /// other role remains owned; callbacks from the discarded IDs stay stale.
+    func restore(_ role: TransportRole, rebuild: () -> Void) {
+        for id in ids where peers[id]?.role == role { lost(id) }
+        rebuild()
+    }
     func stop() {
         guard !stopped else { return }
         stopped = true

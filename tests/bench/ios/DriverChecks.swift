@@ -58,7 +58,7 @@ private func baseFixture(_ name: String) throws -> Data {
 func iosDriverChecks() throws {
     try withIOS(100) { a in try withIOS(101) { b in
         let al = a.connect(.central, 512), bl = b.connect(.peripheral, 182)
-        func exchange(_ sender: IOSNode, _ receiver: IOSNode, _ target: UInt64) {
+        @MainActor func exchange(_ sender: IOSNode, _ receiver: IOSNode, _ target: UInt64) {
             sender.driver.tick()
             let frames = sender.port.frames; sender.port.frames.removeAll()
             for (_, value) in frames { precondition(value.count <= 146); receiver.driver.value(target, value) }
@@ -139,6 +139,23 @@ func iosDriverChecks() throws {
         let id = n.connect(.peripheral, 182)
         n.driver.connected(id, transmitCapacity: 146)
         precondition(n.driver.count == 0 && n.port.closed.contains(id))
+    }
+    try withIOS(105) { n in
+        let central = n.driver.reserve(address: Data(repeating: 1, count: 16), role: .central)!
+        let old = n.driver.reserve(address: Data(repeating: 2, count: 16), role: .peripheral)!
+        var rebuilt = 0
+        n.driver.restore(.peripheral) {
+            precondition(n.driver.ids == [central] && n.port.closed == [old])
+            rebuilt += 1
+        }
+        precondition(rebuilt == 1)
+        n.time = 5000
+        let fresh = n.connect(.peripheral, 182, address: 2)
+        precondition(fresh != old)
+        n.driver.connected(old, transmitCapacity: 512); n.driver.ready(old)
+        n.driver.value(old, Data([1,2,3])); n.driver.tick()
+        precondition(n.driver.ids == [central, fresh])
+        precondition(n.port.frames.count == 1 && n.port.frames[0].0 == fresh && n.port.frames[0].1.count == 59)
     }
     print("MC-026 production Swift adapter: both roles/base kinds, SYNC wrappers, readiness/backpressure, caps, stale callbacks and lifecycle cleanup PASS")
 }

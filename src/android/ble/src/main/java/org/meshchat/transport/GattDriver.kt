@@ -74,6 +74,15 @@ class GattDriver(
         p.subscribed = true
         ready(p)
     }
+    /** A server descriptor request is committed only after Android accepts the
+     * response. Commit native subscription state before any core-ready effect.
+     */
+    fun subscriptionRequest(id: Long, enabled: Boolean, acknowledge: () -> Boolean, commit: (Boolean) -> Unit) = guarded(Unit) {
+        if (id !in peers) return@guarded
+        val accepted = acknowledge() && enabled
+        commit(accepted)
+        subscribed(id, accepted)
+    }
     private fun ready(p: Peer) {
         if (p.link != null || !p.subscribed || p.capacity == 0) return
         val connection = try { core.nativeReady(p.admission, p.role, p.capacity.toUShort(), p.capacity.toUShort(), clock()) }

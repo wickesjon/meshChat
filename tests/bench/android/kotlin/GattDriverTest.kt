@@ -139,6 +139,24 @@ class GattDriverTest {
         assertEquals(count, n.radio.sends.size)
         assertTrue(listOf(a, b, c).all { n.radio.calls.contains("close:$it") })
     }
+    @Test fun refusedCccdResponseCannotCommitSubscriptionOrStartHello() = node(59) { n ->
+        val id = requireNotNull(n.driver.incoming("00:00:00:00:00:14"))
+        n.driver.connected(id, true); n.driver.mtu(id, 517, true)
+        val committed = mutableListOf<Boolean>()
+        var attempts = 0
+        n.driver.subscriptionRequest(id, true, { attempts++; false }) { committed += it }
+        n.driver.tick()
+        assertEquals(1, attempts)
+        assertEquals(listOf(false), committed)
+        assertTrue(n.radio.calls.contains("close:$id"))
+        assertTrue(n.radio.sends.isEmpty())
+        val next = requireNotNull(n.driver.incoming("00:00:00:00:00:15"))
+        n.driver.mtu(next, 517, true)
+        n.driver.subscriptionRequest(next, true, { true }) { committed += it }
+        n.driver.tick()
+        assertEquals(listOf(false, true), committed)
+        assertEquals(next, n.radio.sends.single().first)
+    }
     @Test fun busyRefusalIsPacedAndNeverFakedAsSuccess() = node(54) { n ->
         val id = n.central()
         n.radio.accepted = false

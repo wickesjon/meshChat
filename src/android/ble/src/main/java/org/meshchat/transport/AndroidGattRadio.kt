@@ -228,10 +228,13 @@ class AndroidGattRadio(
             val enabled = value.contentEquals(BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE)
             val valid = handle != null && descriptor.characteristic === notify && descriptor.uuid == MeshGatt.CCCD &&
                 !preparedWrite && offset == 0 && (enabled || value.contentEquals(BluetoothGattDescriptor.DISABLE_NOTIFICATION_VALUE))
-            if (responseNeeded) server?.sendResponse(device, requestId, if (valid) BluetoothGatt.GATT_SUCCESS else BluetoothGatt.GATT_REQUEST_NOT_SUPPORTED, offset, null)
-            if (handle != null) {
-                if (valid && enabled) subscriptions.add(handle) else subscriptions.remove(handle)
-                driver.subscribed(handle, valid && enabled)
+            val respond = {
+                responseNeeded && server?.sendResponse(device, requestId,
+                    if (valid) BluetoothGatt.GATT_SUCCESS else BluetoothGatt.GATT_REQUEST_NOT_SUPPORTED, offset, null) == true
+            }
+            if (handle == null) respond()
+            else driver.subscriptionRequest(handle, valid && enabled, respond) { accepted ->
+                if (accepted) subscriptions.add(handle) else subscriptions.remove(handle)
             }
         }
         override fun onDescriptorReadRequest(device: BluetoothDevice, requestId: Int, offset: Int, descriptor: BluetoothGattDescriptor) = current {

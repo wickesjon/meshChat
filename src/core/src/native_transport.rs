@@ -144,6 +144,7 @@ struct Link {
     last_valid_ms: Option<u64>,
     first_valid_ms: Option<u64>,
     digest: Option<(u64, [u8; 256])>,
+    native_activity: u64,
 }
 struct Admission {
     token: u64,
@@ -160,6 +161,7 @@ struct Runtime {
     admissions: Vec<Admission>,
     failed: bool,
     power: power::Policy,
+    platform: Platform,
     link_limit: usize,
     recent: Vec<([u8; 8], u64)>,
 }
@@ -380,28 +382,23 @@ impl NativeTransport {
         instance_nonce: u64,
         monotonic_ms: u64,
     ) -> Result<Self, TransportError> {
-        let ingress =
-            Ingress::new(instance_nonce, 6, monotonic_ms).map_err(|_| TransportError::Invalid)?;
-        let friends =
-            Friends::open(&store, &identity, monotonic_ms).map_err(|_| TransportError::Identity)?;
-        let relay = Relay::new(instance_nonce, Platform::Android, true, monotonic_ms)
-            .map_err(|_| TransportError::Invalid)?;
-        Ok(Self {
-            state: Mutex::new(Runtime {
-                instance: instance_nonce,
-                serial: 0,
-                now: monotonic_ms,
-                ingress,
-                friends,
-                relay,
-                links: Vec::with_capacity(6),
-                admissions: Vec::with_capacity(6),
-                failed: false,
-                power: power::Policy::new(Platform::Android, monotonic_ms),
-                link_limit: 6,
-                recent: Vec::with_capacity(200),
-            }),
-        })
+        Self::create(
+            store,
+            identity,
+            instance_nonce,
+            monotonic_ms,
+            Platform::Android,
+        )
+    }
+    /// iOS uses four Normal links and readiness, without per-write callbacks.
+    #[uniffi::constructor]
+    pub fn new_ios(
+        store: Arc<EncryptedStore>,
+        identity: PublicIdentity,
+        instance_nonce: u64,
+        monotonic_ms: u64,
+    ) -> Result<Self, TransportError> {
+        Self::create(store, identity, instance_nonce, monotonic_ms, Platform::Ios)
     }
     /// None retains the current user setting and Auto hysteresis. Mode changes
     /// preserve all node/address credits; cancelled setup permits are returned
@@ -612,6 +609,7 @@ impl NativeTransport {
             last_valid_ms: None,
             first_valid_ms: None,
             digest: None,
+            native_activity: now,
         });
         let mut out = TransportEffects::default();
         if let Err(error) = s.enqueue(&link, &hello, relay::Traffic::Transport(2), 1, &mut out) {
@@ -665,6 +663,7 @@ impl NativeTransport {
         s.clock(now)?;
         let i = s.index(&link)?;
         let mut out = TransportEffects::default();
+        s.links[i].native_activity = now;
         // This Rust dispatch only selects an owner. Existing ingress/framing
         // still charges and validates every byte before control interpretation.
         let control = !s.links[i].admitted
@@ -758,6 +757,34 @@ impl NativeTransport {
         }
         Ok(out)
     }
+    /// A trusted SYNC owner supplies a structurally valid item/marker after its
+    /// session, history and authorization checks. Native completion is not SYNC
+    /// completion. Incoming wrappers remain DeferredSync for that owner.
+    pub fn enqueue_sync(
+        &self,
+        link: LinkHandle,
+        bytes: Vec<u8>,
+        cookie: u64,
+        now: u64,
+    ) -> Result<TransportEffects, TransportError> {
+        if bytes.len() > 1035 || cookie < 3 {
+            return Err(TransportError::Invalid);
+        }
+        let mut s = self.state.lock().map_err(|_| TransportError::Unavailable)?;
+        s.clock(now)?;
+        if !s.links[s.index(&link)?].admitted {
+            return Err(TransportError::Stale);
+        }
+        let mut out = TransportEffects::default();
+        s.enqueue(
+            &link,
+            &bytes,
+            relay::Traffic::Transport(1),
+            cookie,
+            &mut out,
+        )?;
+        Ok(out)
+    }
     /// One bounded batch, at most one outstanding GATT value per live link.
     /// Commands must be submitted immediately on the serialized native owner.
     pub fn tick(&self, now: u64) -> Result<TransportEffects, TransportError> {
@@ -769,7 +796,9 @@ impl NativeTransport {
             .iter()
             .filter(|l| {
                 (!l.admitted && now > l.born + 10_000)
-                    || l.pending.as_ref().is_some_and(|p| now >= p.started + 5_000)
+                    || (s.platform == Platform::Android
+                        && l.pending.as_ref().is_some_and(|p| now >= p.started + 5_000))
+                    || (s.platform == Platform::Ios && now >= l.native_activity + 15_000)
             })
             .map(|l| l.handle.clone())
             .collect();
@@ -808,6 +837,64 @@ impl NativeTransport {
         }
         Ok(out)
     }
+    /// Current native readiness level. Checking a property is not a liveness event.
+    pub fn set_writable(
+        &self,
+        link: LinkHandle,
+        writable: bool,
+        now: u64,
+    ) -> Result<(), TransportError> {
+        let mut s = self.state.lock().map_err(|_| TransportError::Unavailable)?;
+        s.clock(now)?;
+        s.index(&link)?;
+        if s.platform != Platform::Ios {
+            return Err(TransportError::Invalid);
+        }
+        s.relay
+            .ready(&link, writable, now)
+            .map_err(|_| TransportError::Stale)
+    }
+    /// Only an actual CoreBluetooth readiness callback refreshes native liveness.
+    pub fn readiness(&self, link: LinkHandle, now: u64) -> Result<(), TransportError> {
+        let mut s = self.state.lock().map_err(|_| TransportError::Unavailable)?;
+        s.clock(now)?;
+        let i = s.index(&link)?;
+        if s.platform != Platform::Ios {
+            return Err(TransportError::Invalid);
+        }
+        s.links[i].native_activity = now;
+        s.relay
+            .ready(&link, true, now)
+            .map_err(|_| TransportError::Stale)
+    }
+    /// An actual iOS notification submission returned false. Keep the same
+    /// object/fragment, retain its deadline and paid credits, and await readiness.
+    pub fn backpressure(
+        &self,
+        link: LinkHandle,
+        token: u64,
+        now: u64,
+    ) -> Result<TransportEffects, TransportError> {
+        let mut s = self.state.lock().map_err(|_| TransportError::Unavailable)?;
+        s.clock(now)?;
+        let i = s.index(&link)?;
+        if s.platform != Platform::Ios {
+            return Err(TransportError::Invalid);
+        }
+        let pending = s.links[i].pending.as_ref().ok_or(TransportError::Stale)?;
+        if pending.token != token {
+            return Err(TransportError::Stale);
+        }
+        let attempt = pending.attempt;
+        let mut events = Vec::new();
+        s.relay
+            .backpressure(attempt, now, &mut |e| events.push(e))
+            .map_err(|_| TransportError::Stale)?;
+        s.links[i].pending = None;
+        let mut out = TransportEffects::default();
+        Runtime::results(events, &mut out);
+        Ok(out)
+    }
     /// Report actual submission refusal or callback completion exactly once.
     /// A missing/ambiguous callback closes the connection instead of retrying
     /// on an operation whose native completion could still arrive later.
@@ -826,7 +913,7 @@ impl NativeTransport {
             return Err(TransportError::Stale);
         }
         let mut out = TransportEffects::default();
-        if now >= pending.started + 5_000 {
+        if s.platform == Platform::Android && now >= pending.started + 5_000 {
             s.close(&link, &mut out)?;
             return Ok(out);
         }
@@ -869,5 +956,40 @@ impl NativeTransport {
         let mut out = TransportEffects::default();
         s.close(&link, &mut out)?;
         Ok(out)
+    }
+}
+
+impl NativeTransport {
+    fn create(
+        store: Arc<EncryptedStore>,
+        identity: PublicIdentity,
+        instance_nonce: u64,
+        monotonic_ms: u64,
+        platform: Platform,
+    ) -> Result<Self, TransportError> {
+        let limit = power::parameters(platform, power::Mode::Normal, false, false).max_links;
+        let ingress = Ingress::new(instance_nonce, limit, monotonic_ms)
+            .map_err(|_| TransportError::Invalid)?;
+        let friends =
+            Friends::open(&store, &identity, monotonic_ms).map_err(|_| TransportError::Identity)?;
+        let relay = Relay::new(instance_nonce, platform, true, monotonic_ms)
+            .map_err(|_| TransportError::Invalid)?;
+        Ok(Self {
+            state: Mutex::new(Runtime {
+                instance: instance_nonce,
+                serial: 0,
+                now: monotonic_ms,
+                ingress,
+                friends,
+                relay,
+                links: Vec::with_capacity(limit),
+                admissions: Vec::with_capacity(limit),
+                failed: false,
+                power: power::Policy::new(platform, monotonic_ms),
+                platform,
+                link_limit: limit,
+                recent: Vec::with_capacity(200),
+            }),
+        })
     }
 }

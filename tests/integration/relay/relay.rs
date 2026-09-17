@@ -759,3 +759,42 @@ fn infra_is_only_charging_android_beacon_not_an_ordinary_power_hint() {
             .infra
     );
 }
+
+#[test]
+fn ios_queue_full_retains_deadline_and_charges_every_attempt() {
+    let mut r = Relay::new(7, Platform::Ios, false, 0).unwrap();
+    r.register(&link(1), 146, 0).unwrap();
+    let mut events = Vec::new();
+    enqueue(
+        &mut r,
+        1,
+        &body("chat", 100),
+        Traffic::Own,
+        100,
+        0,
+        &mut events,
+    )
+    .unwrap();
+    let first = send(&mut r, 0, &mut events).unwrap();
+    r.backpressure(first.0.attempt, 0, &mut |e| events.push(e))
+        .unwrap();
+    assert!(send(&mut r, 1000, &mut events).is_none());
+    for now in [1000, 2000, 29_000] {
+        r.ready(&link(1), true, now).unwrap();
+        let next = send(&mut r, now, &mut events).unwrap();
+        assert_eq!(next.1, first.1);
+        r.backpressure(next.0.attempt, now, &mut |e| events.push(e))
+            .unwrap();
+    }
+    assert_eq!(r.counters().attempts, 4);
+    assert!(events.is_empty());
+    r.advance(30_000, &mut |e| events.push(e)).unwrap();
+    assert_eq!(events.len(), 1);
+    assert_eq!(events[0].status, Status::Expired);
+    r.ready(&link(1), true, 30_000).unwrap();
+    assert!(send(&mut r, 30_000, &mut events).is_none());
+    assert!(
+        r.backpressure(first.0.attempt, 30_000, &mut |_| {})
+            .is_err()
+    );
+}

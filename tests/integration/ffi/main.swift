@@ -153,3 +153,7 @@ try transportTrace()
 print("MC-023 Swift real HELLO/proof, capacity refusal, stale callback and timeout passed")
 
 print("MC-024 Swift power policy, Auto hysteresis and bounded observations passed")
+
+#if MC026_DRIVER_TESTS
+try iosDriverChecks()
+#endif

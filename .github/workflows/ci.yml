@@ -194,10 +194,11 @@ jobs:
           python3 -B src/core/build_bindings.py ios
       - name: Swift host FFI regression
         run: |
-          xcrun swiftc -swift-version 6 -warnings-as-errors \
+          xcrun swiftc -swift-version 6 -warnings-as-errors -D MC026_DRIVER_TESTS \
             -module-cache-path "$PWD/.work/clang-module-cache" \
             -I .work/ffi/swift -Xcc -fmodule-map-file=.work/ffi/swift/meshchat_coreFFI.modulemap \
-            .work/ffi/swift/meshchat_core.swift tests/integration/ffi/main.swift \
+            .work/ffi/swift/meshchat_core.swift src/ios/BLE/Transport/IOSGattDriver.swift \
+            tests/bench/ios/DriverChecks.swift tests/integration/ffi/main.swift \
             -L target/debug -lmeshchat_core -Xlinker -rpath -Xlinker "$PWD/target/debug" \
             -o .work/ffi/swift-regression
           .work/ffi/swift-regression

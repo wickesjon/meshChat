@@ -931,6 +931,37 @@ impl Relay {
         }
         Ok(())
     }
+    /// Native iOS queue-full is backpressure, not a failed transmission. Every
+    /// subsequent actual attempt still goes through poll and pays fresh credit.
+    pub fn backpressure(
+        &mut self,
+        attempt: Attempt,
+        now: u64,
+        emit: &mut impl FnMut(ResultEvent),
+    ) -> Result<(), Error> {
+        self.advance(now, emit)?;
+        if self.platform != Platform::Ios {
+            return Err(Error::Invalid);
+        }
+        if attempt.instance != self.instance {
+            return Err(Error::Stale);
+        }
+        let i = self
+            .objects
+            .iter()
+            .position(|o| {
+                o.as_ref().is_some_and(|o| {
+                    o.pending == Some(attempt.serial)
+                        && self.links[o.link].as_ref().unwrap().handle.generation
+                            == attempt.generation
+                })
+            })
+            .ok_or(Error::Stale)?;
+        let o = self.objects[i].as_mut().unwrap();
+        o.pending = None;
+        self.links[o.link].as_mut().unwrap().ready = false;
+        Ok(())
+    }
     pub fn reservations(&self) -> Reservations {
         Reservations {
             objects: self.objects.iter().flatten().count(),

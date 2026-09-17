@@ -4,7 +4,9 @@ import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -18,9 +20,7 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.onLongClick
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 
 private tailrec fun activity(context: Context): Activity? = when(context) {
     is Activity -> context
@@ -31,6 +31,7 @@ private tailrec fun activity(context: Context): Activity? = when(context) {
 @Composable
 internal fun BeaconScreen(s: MeshScreenState, exit: () -> Unit, connect: () -> Unit, permissions: () -> Unit) {
     val view=LocalView.current
+    val currentExit by rememberUpdatedState(exit)
     DisposableEffect(view) {
         val window=activity(view.context)?.window
         val previous=window?.attributes?.screenBrightness
@@ -66,12 +67,14 @@ internal fun BeaconScreen(s: MeshScreenState, exit: () -> Unit, connect: () -> U
             }
             Box(Modifier.fillMaxWidth().heightIn(min=64.dp).background(MaterialTheme.colorScheme.surface)
                 .semantics(mergeDescendants=true) { onLongClick("Exit Beacon Mode") { exit();true } }
-                .pointerInput(exit) { detectTapGestures(onPress={
-                    coroutineScope {
-                        val held=launch { delay(2_000);exit() }
-                        try { tryAwaitRelease() } finally { held.cancel() }
+                .pointerInput(Unit) { awaitEachGesture {
+                    awaitFirstDown().consume()
+                    val held = withTimeoutOrNull(2_000) {
+                        waitForUpOrCancellation()
+                        false
                     }
-                }) },contentAlignment=Alignment.Center) {
+                    if(held==null)currentExit()
+                } },contentAlignment=Alignment.Center) {
                 Text("Hold 2 seconds to exit",color=MaterialTheme.colorScheme.onSurface)
             }
             Text("Screen-off relaying uses the Android connection service. Actual radio and battery results depend on this device.",color=MaterialTheme.colorScheme.onSurfaceVariant)

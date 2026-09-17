@@ -2,7 +2,7 @@
 
 ## Implemented behavior
 
-Android exposes a manual Beacon setting and an encrypted auto-beacon-while-charging preference. The status display uses the free dark palette at window-local 6% brightness, moves its content once per minute, and requires a two-second press or the accessibility long-click action to exit. It restores the previous window brightness and keep-screen-on setting on exit. It does not change system settings. A warning precedes activation without assuming a battery benefit.
+Android exposes a manual Beacon setting and an encrypted auto-beacon-while-charging preference. The status display uses the free dark palette at window-local 6% brightness, moves its content once per minute, and requires a two-second press or the accessibility long-click action to exit. It restores the previous window brightness and keep-screen-on setting on exit. It does not change system settings. A warning precedes activation without assuming a battery benefit. Enabling manual or automatic mode, and restoring either preference at app launch, starts the existing transport service through its normal permission and lock checks. The status screen offers permission review and a connection retry when the service is unavailable.
 
 The existing shared power/relay/cache policies remain authoritative: up to eight setup/live connections, 10–40 ms relay hold-off, no additional mode forwarding bucket, and all aggregate ingress/egress, signature, connection-attempt and memory limits. Scan failures, permission/lifecycle restrictions and the RSSI anti-clustering heuristic remain enforced. Fresh ANNOUNCE peer-count claims only prefer retaining sparsely connected peers during bounded slot rotation; they grant no trust or rate privilege. Claims expire after one minute.
 
@@ -14,7 +14,7 @@ ANNOUNCE receives battery-tier and externally-powered infra bits before signing;
 
 ## Development validation
 
-Native/core tests in `tests/bench/beacon/native.rs` exercise six logical hours with a genuine native HELLO connection, admitted traffic from three synthetic senders, forwarding to another native link, exact first-arrival expiry, bounded memory/queues, manual downgrade, automatic charge/unplug transitions, eight-link setup capacity, and a fragmented SYNC request with four-item page boundary. A separate ANNOUNCE test checks powered/unpowered/cutoff hints and iOS refusal. Android policy tests cover continuous low-latency scanning with permission/backoff gates and bounded sparse-peer retention. The UI fixture checks protected preference restart, rejection of an ordinary tap, accessible exit and brightness restoration.
+Native/core tests in `tests/bench/beacon/native.rs` exercise six logical hours with a genuine native HELLO connection, admitted traffic from three synthetic senders, forwarding to another native link, exact first-arrival expiry, bounded memory/queues, manual downgrade, automatic charge/unplug transitions, eight-link setup capacity, and a fragmented SYNC request with four-item page boundary. A separate ANNOUNCE test checks powered/unpowered/cutoff hints and iOS refusal. Android policy tests cover continuous low-latency scanning with permission/backoff gates and bounded sparse-peer retention. The UI fixture checks protected preference restart, rejection of an ordinary tap, accessible exit and brightness restoration. The runner also performs a real Android 2.3-second stationary touch outside Compose's virtual clock, waits for the protected save and normal screen, then verifies both Beacon preferences remain disabled after restart.
 
 Commands (all caches and outputs inside the repository):
 
@@ -30,9 +30,18 @@ python -B src/core/build_bindings.py android
 src/android/gradlew.bat -p src/android --no-daemon --max-workers=2 :app:assembleDebug :app:assembleRelease :app:assembleDebugAndroidTest :app:lintDebug :app:testDebugUnitTest
 python -B tests/integration/android-ui/run_emulator.py --serial emulator-5580
 python -B tests/bench/beacon/run_android.py --serial emulator-5580
+src/android/gradlew.bat -p src/android/ble --no-daemon --max-workers=2 assembleDebug assembleRelease lintDebug testDebugUnitTest verifyTransportApks
+python -B tests/integration/android-ui/check_apk.py src/android/app/build/outputs/apk/debug/app-debug.apk src/android/app/build/outputs/apk/release/app-release-unsigned.apk
+zipalign -c -P 16 4 <each-production-apk>
 ```
 
-Final exact revisions, outcomes and native Mac evidence are recorded in the ticket/PR. Initial production Android build/lint/JVM checks and the initial three core Beacon scenarios passed; final checks including the additional ANNOUNCE test and UI execution are in progress. Toolchain remains Rust1.85.1, JDK17.0.15+6, Gradle8.13, Kotlin2.2.0, AGP8.11.1, SDK36/build-tools35.0.0; local emulator API29 x86_64/default revision8, emulator37.1.11, adb37.0.1, WHPX. Synthetic timing and emulator results are not physical certification.
+Rust formatting, strict clippy, 193 debug and 193 release tests, release build, fourteen storage-policy tests and cargo-deny passed on core revision `c47c028448d64e8d4b19df3d8b4aafdecac70f31`. The four native Beacon tests are included. Kotlin/Swift generation and both Android ABIs passed. Android app Debug/Release/test-APK builds, lint and eighteen JVM tests passed again after the final gesture change; BLE Debug/Release/lint and twenty-six JVM tests passed on the unchanged core/driver inputs. Production APK native-set, ELF LOAD/RELRO and ZIP 16 KiB alignment checks passed. Static alignment does not establish runtime 16 KiB device support.
+
+The full [Mac native job](https://github.com/wickesjon/meshChat/actions/runs/35251216171/job/105303956941) passed at that core revision: Swift FFI/driver/Beacon/Supporter regressions, app and BLE Debug/Release builds, and security-probe device/simulator builds and crypto checks. Later changes affect only Android UI, its test runner and evidence; Mac/core inputs are identical. The first Mac run exposed the removed SYNC-request diagnostic event; the final revision restores it while keeping direct requests out of relay digest/cache/activity state, with regression coverage. Hosted Android provisioning failed while downloading the unchanged Compose graphics source (HTTP 503); it is unavailable evidence. Local builds use the existing pinned SQLCipher/graphics dependencies under the approved local-validation policy. No branch-protection override is authorized.
+
+The emulator uses a 320x640/density160 viewport. Channel, friend, sharing and synthetic billing suites passed; final Beacon and channel results and the exact final reviewed revision are recorded in the ticket/PR. An early touch runner killed the app before its asynchronous protected save completed; it now waits for the published normal screen before checking persistence. The stable gesture key keeps status recomposition from restarting an active hold. Toolchain: Rust1.85.1, cargo-deny0.20.2, JDK17.0.15+6, Gradle8.13, Kotlin2.2.0, AGP8.11.1, SDK36/build-tools35.0.0, NDK27.3.13750724; emulator API29 x86_64/default revision8, emulator37.1.11, adb37.0.1, WHPX; native Mac uses macOS15 arm64, Xcode16.4 (16F6), Apple Swift6.1.2. Synthetic timing and emulator results are not physical certification.
+
+Final production APK SHA-256: Debug `9e0a486e95a832b9d9b1ef5b0bf08f2838478e8078ed7295bf18161b9df56305`; unsigned Release `e8a7d8cbead0108915e3d9c6c9dd7522867dfa706ca369468d4f5c6f9b27a829`. Detailed local logs and synthetic screenshots remain ignored under `.work/mc033/`.
 
 ## Required MC-025 physical procedure
 

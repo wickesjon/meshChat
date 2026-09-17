@@ -19,6 +19,11 @@ class BeaconUiTest {
     @Test fun protectedPreferenceRestartAndAccessibleExit() {
         waitFor {model.screen.onboarded}
         val phase=InstrumentationRegistry.getArguments().getString("phase") ?: "enable"
+        if(phase=="verify-touch") {
+            assertFalse("The real Android touch hold must persist exit",model.screen.beaconRequested)
+            assertFalse(model.screen.autoBeacon)
+            return
+        }
         if(phase=="enable") {
             ui.runOnUiThread {model.beacon(true,true)}
             waitFor {model.screen.beaconRequested && model.screen.autoBeacon}

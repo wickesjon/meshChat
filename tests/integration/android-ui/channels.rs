@@ -51,6 +51,35 @@ fn accept(
     .unwrap()
 }
 #[test]
+fn channel_links_are_inert_canonical_proposals() {
+    let expected = channel_info("melodic|techno|valley".into()).unwrap();
+    for uri in [
+        "meshfest://j/melodic-techno-valley",
+        "MESHFEST://J/MELODIC-techno-VALLEY",
+        "https://meshfest.app/j/melodic-techno-valley",
+    ] {
+        let proposal = channel_link(uri.into()).unwrap();
+        assert_eq!(proposal.name, expected.name);
+        assert_eq!(proposal.id, expected.id);
+    }
+    for uri in [
+        "meshfest://j/madeup-techno-valley",
+        "meshfest://j/melodic-techno-valley/",
+        "meshfest://j/melodic-techno-valley?join=1",
+        "meshfest://j/melodic-techno-valley#fragment",
+        "meshfest://j/melodic%2Dtechno-valley",
+        "https://meshfest.app:443/j/melodic-techno-valley",
+        "https://user@meshfest.app/j/melodic-techno-valley",
+        "https://meshfest.app/J/melodic-techno-valley",
+        "https://evil.example/j/melodic-techno-valley",
+        "meshfest://friend/invalid/Alice",
+        "meshfest://staff/invalid/invalid",
+    ] {
+        assert!(channel_link(uri.into()).is_err());
+    }
+    assert!(channel_link("x".repeat(2049)).is_err());
+}
+#[test]
 fn public_and_private_channels_use_canonical_core_rules() {
     let c = channel_info(" MELODIC|techno|VALLEY ".into()).unwrap();
     assert!(c.private);

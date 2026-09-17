@@ -76,6 +76,14 @@ fn parse(name: &str) -> Result<Channel, ChannelError> {
 pub fn channel_info(name: String) -> Result<ChannelInfo, ChannelError> {
     Ok(info(parse(&name)?))
 }
+/// An inert proposal. Only explicit native confirmation may join this channel.
+#[uniffi::export]
+pub fn channel_link(uri: String) -> Result<ChannelInfo, ChannelError> {
+    match crate::links::parse(&uri).map_err(|_| ChannelError::Invalid)? {
+        crate::links::UnconfirmedProposal::Channel(channel) => Ok(info(channel)),
+        _ => Err(ChannelError::Invalid),
+    }
+}
 #[uniffi::export]
 pub fn channel_words() -> ChannelWords {
     let strings = |v: [&str; 20]| v.into_iter().map(String::from).collect();

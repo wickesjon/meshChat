@@ -30,6 +30,7 @@ data class MeshScreenState(
     val loading: Boolean = true, val onboarded: Boolean = false, val locked: Boolean = false,
     val nickname: String = "", val avatar: UByte = 1u, val light: Boolean = false,
     val channels: List<ChannelInfo> = emptyList(), val selected: ChannelInfo? = null,
+    val channelProposal: ChannelInfo? = null,
     val rows: List<ChatRow> = emptyList(), val peers: Int = 0,
     val status: String = "Nearby connection is off", val error: String? = null,
     val waitSeconds: Int = 0, val muted: Boolean = false,
@@ -53,6 +54,7 @@ class MeshModel(private val context: Context) {
     private var myCode: FriendProposal? = null
     private var proposal: FriendProposal? = null
     private var proposalScanned = false
+    private var channelProposal: ChannelInfo? = null
     private var replacingFriend: FriendCard? = null
     private var direct: DirectThread? = null
     private var archives = emptyList<FriendProposal>()
@@ -188,7 +190,7 @@ class MeshModel(private val context: Context) {
             replacingFriend = replacingFriend, direct = direct, archives = archives.filter { old -> cards.none { it.keys.contentEquals(old.keys) } },
             directRows = dmRows.map { DirectRow(it, receipts[key(it.id)] ?: if(it.own) "Stored locally - delivery unknown" else "Encrypted") },
             loading = false, onboarded = true, nickname = profile, avatar = avatar, light = light,
-            channels = joined.map(::channelInfo), selected = selected?.let(::channelInfo),
+            channels = joined.map(::channelInfo), selected = selected?.let(::channelInfo), channelProposal = channelProposal,
             rows = rows.map { ChatRow(it, receipts[key(it.id)] ?: if(it.own) "Stored locally · delivery unknown" else "Unverified") },
             peers = links.size, status = status, error = error, waitSeconds = ((wait + 999uL) / 1000uL).toInt(), muted = selected in muted,
             previews = previews.toMap(), unread = unread.toMap(), posted = posted, power = power))
@@ -310,6 +312,7 @@ class MeshModel(private val context: Context) {
         transport=storage.transport(instance,now()); myCode=storage.friendCode(profile); archives=storage.archives()
     }
     private fun clearMessaging() {
+        channelProposal=null
         transport?.close(); transport=null; cards=emptyList(); myCode=null; proposal=null
         proposalScanned=false; replacingFriend=null; direct=null; archives=emptyList()
     }
@@ -334,13 +337,35 @@ class MeshModel(private val context: Context) {
         return sent.queued
     }
     fun friendInput(uri: String, scanned: Boolean = false) = work {
-        proposal=null; proposalScanned=false
+        channelProposal=null; proposal=null; proposalScanned=false
         val decoded=friendProposal(uri)
         if(replacingFriend!=null && !scanned) {report("Replacement requires a fresh scan of the new device's code.");return@work}
         proposal=decoded;proposalScanned=scanned;notice=null;refresh()
     }
     fun cancelProposal() = work {proposal=null;proposalScanned=false;refresh()}
-    fun scannerUnavailable() = work {report("Camera access is unavailable. Paste a friend link and verify its source in person. Replacement still requires a fresh scan.")}
+    fun shareInput(uri: String, scanned: Boolean = false) = work {
+        channelProposal=null; proposal=null; proposalScanned=false
+        val channel=try { channelLink(uri) } catch (_: ChannelException.Invalid) { null }
+        if(channel!=null) {
+            channelProposal=channel;notice=null;refresh()
+        } else {
+            val decoded=try {friendProposal(uri)} catch (_: MessagingException.Invalid) {
+                report("Check the channel or friend link. Nothing was joined or pinned.");return@work
+            }
+            if(replacingFriend!=null && !scanned) {report("Replacement requires a fresh scan of the new device's code.");return@work}
+            proposal=decoded;proposalScanned=scanned;notice=null;refresh()
+        }
+    }
+    fun cancelChannelProposal() = work {channelProposal=null;refresh()}
+    fun confirmChannel(name: String) = work {
+        if(!loaded || channelProposal?.name!=name)return@work
+        if(name !in joined) {
+            if(joined.size>=32) {refresh("You can join up to 32 channels.");return@work}
+            joined.add(name);persist()
+        }
+        channelProposal=null;direct=null;selected=name;unread[name]=0;refresh()
+    }
+    fun scannerUnavailable() = work {report("Camera access is unavailable. Enter channel words or paste a link and verify its source. Friend replacement still requires a fresh scan.")}
     fun confirmFriend(petname: String) = work {
         val decoded=proposal ?: return@work
         if(replacingFriend!=null && !proposalScanned) {report("Scan the replacement device's code first.");return@work}

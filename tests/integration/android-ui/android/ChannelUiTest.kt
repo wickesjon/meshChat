@@ -40,6 +40,9 @@ class ChannelUiTest {
     }
     private fun waitFor(text: String) { awaitState { shown(text) } }
     private fun click(text: String) {
+        // LazyColumn items outside a small viewport do not have semantic nodes
+        // until the container scrolls them into composition.
+        if(!shown(text))ui.onNode(hasScrollToNodeAction()).performScrollToNode(hasText(text))
         val node=ui.onNodeWithText(text)
         try { node.assertIsDisplayed() } catch (_: AssertionError) { node.performScrollTo() }
         node.performClick()

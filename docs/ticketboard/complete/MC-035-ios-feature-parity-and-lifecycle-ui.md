@@ -53,12 +53,12 @@ A triggered fallback must be recorded with evidence. It does not authorize weake
 
 Scheduling approved 2026-09-14 in [the validation policy](../../decisions/local-validation-policy.md#physical-acceptance-scheduling--approved-2026-09-14). Implementation consumes the native driver and independently frozen core before physical interop. MC-027 now follows this ticket and owns every shipping flow on the real iOS device matrix; no native build waiver is implied.
 
-Implementation and native acceptance pass, with separate Terra code review recorded below. Final Android emulator validation, evidence review and squash merge remain pending. Physical device/OS/duration reports remain the responsibility of MC-027/044; no physical acceptance is claimed.
+Implementation and applicable native acceptance pass, with separate Terra code review recorded below. This completion record is staged for final evidence review and squash merge; the combined final checkbox remains open until that merge. Physical device/OS/duration reports remain the responsibility of MC-027/044; no physical acceptance is claimed.
 
 ## Review and merge
 
 - Branch: `ticket/MC-035-ios-feature-parity-and-lifecycle-ui`.
-- Review/PR: https://github.com/wickesjon/meshChat/pull/38 — ready PR, Terra code review and full Mac validation pass; final evidence/merge pending.
+- Review/PR: https://github.com/wickesjon/meshChat/pull/38 — ready PR; applicable checks and Terra code review pass. The PR records the exact final documentation revision and actual review outcome before squash merge.
 - Squash commit title: `MC-035: iOS feature parity and lifecycle UI`.
 - Completion becomes effective only when the reviewed squash commit lands on main.
 
@@ -117,3 +117,23 @@ Run `35281637468` passes Android builds/lint, security and SQLCipher lifecycle, 
 Terra medium follow-up at exact `0145cb272aad6adc2757c4f0b2446a2d9c74a4b1`: **PASS for code**, no findings. The reviewer confirms that monotonic `now - since` makes a smaller observed window positive reset evidence, while native tests retain exact reset/no-credit-refill coverage. Rebuilt test APK and corrected local contribution test pass. A first organizer run used expired disposable credentials from an earlier build and was explicitly stopped; regenerate with `cargo test --locked -p meshchat-core --test native_organizer generate_native_organizer_fixtures` before packaging. Fresh-fixture channel/contribution and all three organizer phases pass. This setup correction changes no tracked fixture or expiry policy. Remaining consumer checks and final evidence review are pending.
 
 The final local consumer sequence passes channel, contribution, organizer, friends/DM, sharing and all three synthetic billing phases. Beacon enable/reopen-accessible-exit/re-enable pass, but the external touch runner exhausts ten startup polls before protected load publishes its button. A subsequent read-only UI dump shows the correct visible target. Necessary test-only scope extension: `tests/bench/beacon/run_android.py`, replace the arbitrary startup poll count with the existing 120-second monotonic deadline already used for protected post-touch persistence. Retain the real 2.3-second touch, target bounds checks, explicit failure, and restart assertions. This is harness readiness, not a waived device-performance gate; rerun all Beacon phases and obtain Terra follow-up.
+
+### Final development acceptance and merge packet
+
+Source `5a018c109002aeb3119fa914e512e07dfe7d8598`: separate Terra medium follow-up **PASS for code**, no findings. All Beacon phases now pass, including the external 2.3-second stationary touch and force-stop/reopen verification of both disabled preferences. The final changes after fully validated production revision `1c46d16148de09564fadfa85f9952475315b5dd3` affect only the two Android test readiness assertions and ticket evidence; shared core, bindings, production Android and all iOS inputs are identical.
+
+Local Windows Android evidence uses emulator 37.1.11.0 (build 15917651), Android 10/API 29 x86_64, isolated serial `emulator-5580`, 4 KiB runtime pages. Fresh disposable organizer credentials were generated using the existing command above; `:app:assembleDebugAndroidTest` passes with the already recorded pinned JDK/Gradle/Kotlin toolchain. The following commands all pass with `--serial emulator-5580`:
+
+- `python -B tests/integration/android-ui/run_emulator.py`: all three channel phases.
+- `python -B tests/integration/stats/run_android.py`: production panel, explicit selection/export bounds, privacy and reset.
+- `python -B tests/integration/android-ui/run_organizer_emulator.py`: import, reopen and forget.
+- `python -B tests/integration/android-ui/run_friends_emulator.py`: pin/DM/reopen/replacement and protected archive coverage.
+- `python -B tests/integration/sharing/run_android.py`: offline canonical QR/link/export and confirmation lifecycle.
+- `python -B tests/integration/billing/run_android.py`: synthetic purchase, reopen/refund and link-cap phases.
+- `python -B tests/bench/beacon/run_android.py`: enable, reopen/accessibility exit, enable and real touch/persisted exit.
+
+Logs remain under ignored `.work/mc035/local-*.log`; the authoritative final Beacon log is `local-beacon-corrected.log`. Public synthetic screenshots remain in their runner evidence directories. Debug production APK SHA-256: `2f167a92e6aec3081182028f57a8df373715d1828fa340d6f2001579654294b0`; fresh-fixture test APK: `bbf7fce5b5766304b2f7a2f0201539d87f861f1af85b56908d5beb482981c5b7`.
+
+Under the approved local-validation policy, the all-passing Mac job and hosted Rust/security/storage/channel results on identical production inputs combine with the final local Android consumer results, build/alignment/lint/JVM/core/security evidence above and required Terra review. Hosted Android run `35281637468` remains FAIL; subsequent supplemental runs are not claimed passed. Both observed harness failures were investigated, corrected without production changes, independently reviewed and actually rerun successfully. No failed applicable source test is waived. Static 16 KiB APK checks and 4 KiB emulator runtime are distinct evidence.
+
+The final revision changes only this completion record and generated ticketboard state. Regenerated/default board validation, all 12 board unit tests and `git diff --check` pass. Final exact-revision review is recorded in PR #38; completion becomes effective only upon its squash merge. Physical MC-025/027/043/044, real store/domain integration and independent integrated security assessment remain separate required gates; none is certified here.

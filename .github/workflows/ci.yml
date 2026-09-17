@@ -21,6 +21,7 @@ env:
   ANDROID_USER_HOME: ${{ github.workspace }}/.work/android
   RUNNER_TOOL_CACHE: ${{ github.workspace }}/.work/tools
   PYTHONDONTWRITEBYTECODE: "1"
+  PYTHONUNBUFFERED: "1"
 
 jobs:
   ticketboard:

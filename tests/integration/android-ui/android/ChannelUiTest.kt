@@ -40,11 +40,17 @@ class ChannelUiTest {
         File(context.filesDir,"mc028-$name.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG,100,it) }
     }
     @Test fun productionAppAcceptance() {
-        when(InstrumentationRegistry.getArguments().getString("phase")) {
-            "create" -> create()
-            "reopen" -> reopen()
-            "composer" -> composer()
-            else -> error("Explicit isolated emulator fixture phase is required")
+        val phase=InstrumentationRegistry.getArguments().getString("phase")
+        try {
+            when(phase) {
+                "create" -> create()
+                "reopen" -> reopen()
+                "composer" -> composer()
+                else -> error("Explicit isolated emulator fixture phase is required")
+            }
+        } catch (failure: Throwable) {
+            runCatching { screenshot("failed-$phase") }
+            throw failure
         }
     }
     private fun create() {
@@ -59,6 +65,11 @@ class ChannelUiTest {
         ui.onNode(hasSetTextAction()).performTextReplacement("Synthetic offline draft")
         ui.onNodeWithText("Send").assertIsEnabled().performClick()
         ui.waitUntil(5000) { ui.onAllNodesWithText("Not sent.",substring=true).fetchSemanticsNodes().isNotEmpty() }
+        ui.runOnUiThread {
+            val keyboard=ui.activity.getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager
+            keyboard.hideSoftInputFromWindow(ui.activity.window.decorView.windowToken,0)
+        }
+        ui.waitForIdle()
         // The production protected store, generated channel codec and presentation
         // run here. Radio admission is separately exercised by the three-node test.
         val context=InstrumentationRegistry.getInstrumentation().targetContext
@@ -83,6 +94,9 @@ class ChannelUiTest {
         ui.onNodeWithText("Settings").performClick()
         ui.onNode(isToggleable()).performScrollTo().performClick()
         click("Save")
+        // The old channel list is already visible when the dialog closes; wait
+        // for the asynchronous protected write and new UI snapshot instead.
+        ui.waitUntil(20000) { (ui.activity.application as MeshApplication).model.screen.light }
         waitFor("Your channels");screenshot("light-channels")
         val snapshot=(ui.activity.application as MeshApplication).model.screen
         assertTrue(snapshot.light);assertEquals(4,snapshot.channels.size)

@@ -11,6 +11,14 @@ enum CheckFailure: Error { case failed(String) }
     // Diagnose native adapter failures before the UI intentionally reduces them
     // to a generic locked/recovery state. Never include key or envelope bytes.
     let probe = try TestDevice()
+    // Exercise the production guard separately: absent simulator metadata must
+    // be refused. The feature fixture explicitly simulates this hardware port.
+    let protectionProbe = probe.root.appendingPathComponent("file-protection-probe")
+    try Data([0]).write(to: protectionProbe, options: .completeFileProtection)
+    try FileManager.default.setAttributes([.protectionKey: FileProtectionType.complete], ofItemAtPath: protectionProbe.path)
+    let protectionValue = try FileManager.default.attributesOfItem(atPath: protectionProbe.path)[.protectionKey] as? String
+    if protectionValue == FileProtectionType.complete.rawValue { try StorageVault.requireCompleteProtection(protectionProbe) }
+    else { try refuses("native verifier refuses absent Complete protection") { try StorageVault.requireCompleteProtection(protectionProbe) } }
     do { _ = try probe.identity.create(); _ = try probe.identity.load() }
     catch { throw CheckFailure.failed("identity adapter creation: \(error)") }
     do { try probe.storage.create(); try probe.storage.reopen() }
@@ -62,6 +70,10 @@ enum CheckFailure: Error { case failed(String) }
     try check(a.model.state.locked && a.radio!.submitted == sent, "protected egress invalidation")
     a.protection.unlocked = true; a.model.load()
     try check(a.model.state.onboarded && !a.model.state.locked, "unlock reopens existing identity")
+    a.databaseProtection.available = false; a.model.refresh()
+    try check(a.databaseProtection.calls > 0 && a.model.state.locked, "file protection failure closes the feature owner")
+    a.databaseProtection.available = true; a.model.load()
+    try check(a.model.state.onboarded && !a.model.state.locked, "file protection recovery reopens existing identity")
     b.model.stop()
     a.model.changeFriend(a.model.state.friends[0], replace: true)
     try check(a.model.state.friends[0].replacing && a.model.state.archives.count == 1, "replacement keeps separate archive")

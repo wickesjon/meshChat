@@ -80,10 +80,21 @@ final class CipherConnection: SqlDatabase, @unchecked Sendable {
     private let folder: URL
     private let files: IdentityStorage
     private let protection: IdentityProtection
-    init(folder: URL, files: IdentityStorage, protection: IdentityProtection) { self.folder = folder; self.files = files; self.protection = protection }
+    private let protectDatabase: @MainActor (URL) throws -> Void
+    init(folder: URL, files: IdentityStorage, protection: IdentityProtection,
+         protectDatabase: @escaping @MainActor (URL) throws -> Void = StorageVault.requireCompleteProtection) {
+        self.folder = folder; self.files = files; self.protection = protection; self.protectDatabase = protectDatabase
+    }
     static func native() throws -> StorageVault {
         let folder = try FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: false).appendingPathComponent("meshchat-storage-v1", isDirectory: true)
-        return StorageVault(folder: folder, files: try AppleIdentityStorage(name: "meshchat-storage-v1"), protection: AppleIdentityProtection(tag: "org.meshchat.storage.wrapping.v1"))
+        return StorageVault(folder: folder, files: try AppleIdentityStorage(name: "meshchat-storage-v1"), protection: AppleIdentityProtection(tag: "org.meshchat.storage.wrapping.v1"), protectDatabase: requireCompleteProtection)
+    }
+    static func requireCompleteProtection(_ database: URL) throws {
+        #if os(iOS)
+        try FileManager.default.setAttributes([.protectionKey: FileProtectionType.complete], ofItemAtPath: database.path)
+        // Foundation returns the NSString raw value. Missing/weak protection fails closed.
+        guard try FileManager.default.attributesOfItem(atPath: database.path)[.protectionKey] as? String == FileProtectionType.complete.rawValue else { throw IdentityFailure.provider }
+        #endif
     }
     private func sync(_ directory: URL) throws {
         let fd = Darwin.open(directory.path, O_RDONLY); guard fd >= 0 else { throw IdentityFailure.provider }
@@ -122,12 +133,7 @@ final class CipherConnection: SqlDatabase, @unchecked Sendable {
             connection.close()
         } catch { connection.close(); throw error }
         try protection.requireUnlocked()
-        #if os(iOS)
-        try FileManager.default.setAttributes([.protectionKey: FileProtectionType.complete], ofItemAtPath: database.path)
-        // Foundation documents this dictionary value as NSString, rather than
-        // the Swift RawRepresentable wrapper used when setting the attribute.
-        guard try FileManager.default.attributesOfItem(atPath: database.path)[.protectionKey] as? String == FileProtectionType.complete.rawValue else { throw IdentityFailure.provider }
-        #endif
+        try protectDatabase(database)
         if create { try sync(folder); try files.delete(.journal) }
         return result
     }

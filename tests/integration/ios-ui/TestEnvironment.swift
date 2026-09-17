@@ -39,6 +39,18 @@ import Security
 
 @MainActor final class TestClock { var now: UInt64 = 0 }
 
+// A synthetic hardware file-protection boundary, never linked into the app.
+// SQLCipher and the actual filesystem/backup-exclusion adapter remain real.
+@MainActor final class TestDatabaseProtection {
+    var available = true
+    var calls = 0
+    func requireComplete(_ file: URL) throws {
+        calls += 1
+        guard available else { throw IdentityFailure.locked }
+        guard FileManager.default.fileExists(atPath: file.path) else { throw IdentityFailure.provider }
+    }
+}
+
 /// Only the physical port is synthetic. All framing, admission, authorization,
 /// crypto, queues, callbacks and UI state use production owners.
 @MainActor final class TestRadio: MeshRadio, IOSGattPort {
@@ -82,6 +94,7 @@ import Security
 @MainActor final class TestDevice {
     let root: URL, clock: TestClock
     let fileTrace = TestFileTrace()
+    let databaseProtection = TestDatabaseProtection()
     let protection: TestProtection, staffProtection: TestProtection
     let identity: IdentityProvider, storage: EncryptedStorage, staff: StaffKeyVault
     var radio: TestRadio?
@@ -93,7 +106,7 @@ import Security
         protection = TestProtection(root.appendingPathComponent("identity-key"))
         staffProtection = TestProtection(root.appendingPathComponent("staff-key"))
         let folder = root.appendingPathComponent("database", isDirectory: true)
-        let vault = StorageVault(folder: folder, files: TracedTestFiles(folder, "storage", fileTrace), protection: TestProtection(root.appendingPathComponent("storage-key")))
+        let vault = StorageVault(folder: folder, files: TracedTestFiles(folder, "storage", fileTrace), protection: TestProtection(root.appendingPathComponent("storage-key")), protectDatabase: databaseProtection.requireComplete)
         staff = StaffKeyVault(files: AppleIdentityStorage(folder: root.appendingPathComponent("staff", isDirectory: true)), protection: staffProtection)
         identity = IdentityProvider(storage: TracedTestFiles(root.appendingPathComponent("identity", isDirectory: true), "identity", fileTrace), protection: protection, state: FeatureResetStore(storage: vault, staff: staff))
         storage = EncryptedStorage(identity: identity, vault: vault)

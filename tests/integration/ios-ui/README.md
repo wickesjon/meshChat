@@ -12,7 +12,7 @@ The runner derives a separate test application project from the production
 target under `.work/ios-ui/`. It replaces only the entry point and adds test
 fixtures. Production SwiftUI, model, encrypted SQLCipher storage, Rust core,
 driver, framing and cryptography remain in the test application. Synthetic
-wrapping and the framed radio port are confined to this test directory and are
+wrapping, the hardware file-protection boundary and the framed radio port are confined to this test directory and are
 never compiled into the shipping app. The test bundle identifier is separate.
 
 `FeatureChecks.swift` tests confirmation, persistence, signed/plaintext/DM trust
@@ -21,6 +21,13 @@ read-only history, QR decoding, event/staff lifecycle, offline entitlement cache
 reset and key loss. `UITests.swift` uses XCUITest to operate the shipping views
 and retains screenshots containing only disposable public test data. Generated
 staff credentials are not screenshots or uploaded fixtures.
+
+The simulator can omit Complete file-protection metadata. The production file
+verifier is exercised separately and must refuse absent metadata; the native
+factory always uses that strict verifier. Feature fixtures explicitly inject a
+synthetic availability gate at this hardware boundary and verify refusal/recovery.
+They still use actual SQLCipher, files, backup exclusion and generation binding.
+No simulated file-protection result certifies MC-044 hardware behavior.
 
 The result bundle and build/test log stay under `.work/ios-ui/`; a passing result
 requires all three tests to pass, including opposite-direction message-ID

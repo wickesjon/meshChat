@@ -18,7 +18,7 @@ class StatsUiTest {
     private fun awaitState(check:()->Boolean)=ui.waitUntil(120000) {assertFalse(model.screen.locked);check()}
     private fun click(text:String) {val n=ui.onNodeWithText(text);runCatching {n.assertIsDisplayed()}.onFailure {n.performScrollTo()};n.performClick()}
     private fun screenshot(name:String) {
-        ui.waitForIdle();val bitmap=checkNotNull(InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot())
+        ui.waitForIdle();val automation=InstrumentationRegistry.getInstrumentation().uiAutomation;automation.waitForIdle(500,5000);val bitmap=checkNotNull(automation.takeScreenshot())
         File(context.filesDir,"mc042-$name.png").outputStream().use {bitmap.compress(Bitmap.CompressFormat.PNG,100,it)}
     }
     @Test fun localPanelAndExplicitAggregateImageExport() {

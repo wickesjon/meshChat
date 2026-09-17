@@ -62,8 +62,12 @@ Implemented: bounded shared native counters and explicit session reset; fresh de
 ## Review and merge
 
 - Branch: `ticket/MC-042-honest-contribution-and-power-feedback`.
-- Review/PR: pending.
+- Review/PR: [PR #37](https://github.com/wickesjon/meshChat/pull/37).
 - Squash commit title: `MC-042: Honest contribution and power feedback`.
 - Completion becomes effective only when the reviewed squash commit lands on main.
 
 Additional scope under standing approval: `tests/integration/ffi/main.swift` calls the new stats consumer trace from `tests/integration/stats/StatsChecks.swift`, reusing its existing synthetic SQL callback harness. Native Swift/Android checks validate the new exported record and reset/share methods.
+
+### Initial review and validation corrections
+
+Separate Terra medium source review PASS at `b871cc3448e90ae5f5d15126d15f906e23f4e8e9`, with no actionable findings. Full Rust debug/release suites pass 205 tests each, plus release build/storage policy/dependency gates. Initial Android stats emulator acceptance passes panel/selection/reset/image bounds; the exported image was inspected. Android lint requires the already available Kotlin bitmap factory, now used. The initial Mac Swift consumer trace passes, but its app compile correctly rejects iOS-16-only Transferable/ShareLink against the supported iOS15 deployment target. The component now uses NavigationView and UIActivityViewController without raising the supported minimum or removing export. A new Mac build and follow-up source review are required. Screenshot capture now waits for native dialog animations to settle before visual inspection; no product behavior changes in that test correction.

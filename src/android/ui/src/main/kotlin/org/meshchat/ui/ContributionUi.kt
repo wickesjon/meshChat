@@ -11,6 +11,7 @@ import android.text.Layout
 import android.text.StaticLayout
 import android.text.TextPaint
 import androidx.core.content.FileProvider
+import androidx.core.graphics.createBitmap
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -31,7 +32,7 @@ internal object ContributionExport {
         val text=contributionShareText(stats,received,sent,relayed)
         val paint=TextPaint().apply {color=Color.rgb(24,35,32);textSize=40f;typeface=Typeface.create("sans-serif",Typeface.NORMAL);isAntiAlias=true}
         val layout=StaticLayout.Builder.obtain(text,0,text.length,paint,960).setAlignment(Layout.Alignment.ALIGN_NORMAL).setLineSpacing(12f,1f).build()
-        return Bitmap.createBitmap(1080,layout.height+120,Bitmap.Config.ARGB_8888).also {bitmap->
+        return createBitmap(1080,layout.height+120).also {bitmap->
             val canvas=Canvas(bitmap);canvas.drawColor(Color.rgb(246,250,247));canvas.translate(60f,60f);layout.draw(canvas)
         }
     }

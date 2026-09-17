@@ -1,6 +1,4 @@
 import SwiftUI
-import CoreTransferable
-import UniformTypeIdentifiers
 import UIKit
 
 /// MC-035 connects the production protected transport snapshot/reset to this view.
@@ -45,11 +43,12 @@ struct ContributionPanel: View {
     }
 }
 
-private struct ContributionImage: Transferable {
-    let data: Data
-    static var transferRepresentation: some TransferRepresentation {
-        DataRepresentation(exportedContentType: .png) { $0.data }
+private struct ContributionShare: UIViewControllerRepresentable {
+    let image: UIImage
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: [image], applicationActivities: nil)
     }
+    func updateUIViewController(_ controller: UIActivityViewController, context: Context) {}
 }
 private struct ContributionPreview: View {
     let stats: TransportStats
@@ -57,6 +56,8 @@ private struct ContributionPreview: View {
     @State private var received = false
     @State private var sent = false
     @State private var relayed = false
+    @State private var showShare = false
+    @State private var shareImage: UIImage?
     private var text: String { contributionShareText(stats: stats, received: received, sent: sent, relayed: relayed) }
     private var image: UIImage {
         let attributes: [NSAttributedString.Key: Any] = [.font: UIFont.systemFont(ofSize: 40), .foregroundColor: UIColor.darkText]
@@ -69,7 +70,7 @@ private struct ContributionPreview: View {
         }
     }
     var body: some View {
-        NavigationStack {
+        NavigationView {
             Form {
                 Text("Frozen preview. Only selected local aggregates are included in the image.")
                 Toggle("Received activity", isOn: $received)
@@ -77,14 +78,12 @@ private struct ContributionPreview: View {
                 Toggle("Live chat relays", isOn: $relayed)
                 if received || sent || relayed {
                     Text(text)
-                    let rendered = image
-                    if let data = rendered.pngData() {
-                        ShareLink(item: ContributionImage(data: data), preview: SharePreview("Local contribution", image: Image(uiImage: rendered))) { Text("Share image") }
-                    }
+                    Button("Share image") { shareImage = image; showShare = true }
                 }
             }
             .navigationTitle("Choose what to share")
             .toolbar { Button("Cancel") { dismiss() } }
+            .sheet(isPresented: $showShare) { if let shareImage { ContributionShare(image: shareImage) } }
         }
     }
 }

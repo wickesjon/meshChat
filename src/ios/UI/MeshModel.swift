@@ -27,13 +27,15 @@ struct MeshState {
     private let identity: IdentityProvider
     private let storage: EncryptedStorage
     private let staff: StaffKeyVault
-    private var core: NativeTransport?, owner: NativeChannels?, radio: IOSGattRadio?
+    private var core: NativeTransport?, owner: NativeChannels?, radio: (any MeshRadio)?
+    private let makeRadio: @MainActor (NativeTransport, MeshRadioCallbacks) -> any MeshRadio
     private var joined = ["#general", "#event updates", "#confessions"]
     private var muted: Set<String> = []
     private var links: [UInt64: LinkHandle] = [:]
     private var pending: [UInt64: (Data, Set<UInt64>)] = [:]
     private var cookie: UInt64 = 3, announceAt: UInt64 = 0, epoch: UInt64 = 0
     private var replacingIdentity = false
+    private var pendingPublicLink: (String, Bool)?
     private var eventURI: String?, staffCandidate = Data(), staffAt: UInt64 = 0
     private var pulse: Task<Void, Never>?
     private let clock: @MainActor () -> UInt64
@@ -43,8 +45,14 @@ struct MeshState {
         return MeshModel(identity: identity, storage: EncryptedStorage(identity: identity, vault: vault), staff: staff)
     }
     init(identity: IdentityProvider, storage: EncryptedStorage, staff: StaffKeyVault,
-         clock: @escaping @MainActor () -> UInt64 = IOSGattRadio.now) {
+         clock: @escaping @MainActor () -> UInt64 = IOSGattRadio.now,
+         makeRadio: @escaping @MainActor (NativeTransport, MeshRadioCallbacks) -> any MeshRadio = MeshModel.nativeRadio) {
         self.identity = identity; self.storage = storage; self.staff = staff; self.clock = clock
+        self.makeRadio = makeRadio
+    }
+    static func nativeRadio(_ core: NativeTransport, _ callbacks: MeshRadioCallbacks) -> any MeshRadio {
+        IOSGattRadio(core: core, protectedAvailable: callbacks.available, event: callbacks.event,
+                     state: callbacks.state, catchUp: callbacks.catchUp, egress: callbacks.egress)
     }
     deinit { pulse?.cancel() }
     private var wall: Int64 { Int64(Date().timeIntervalSince1970) }
@@ -88,6 +96,7 @@ struct MeshState {
         }
         state.onboarded = true; state.loading = false; state.locked = false
         startPulse()
+        if let pending = pendingPublicLink { pendingPublicLink = nil; shareInput(pending.0, scanned: pending.1) }
     }
     func load() {
         if state.onboarded { refresh(); return }
@@ -97,7 +106,7 @@ struct MeshState {
         perform {
             try storage.reopen()
             guard let profile = try setting("ui-profile-v1")?.split(separator: "|", maxSplits: 2, omittingEmptySubsequences: false), profile.count == 3,
-                  let avatar = UInt8(profile[0]), (1...8).contains(avatar) else { throw IdentityFailure.recoveryRequired }
+                  let avatar = UInt8(profile[0]), (1...8).contains(avatar & 15) else { throw IdentityFailure.recoveryRequired }
             state.nickname = try channelNickname(raw: String(profile[2])); state.avatar = avatar
             let cosmetics = try setting("ui-cosmetics-v1")?.split(separator: "|", maxSplits: 1, omittingEmptySubsequences: false)
             state.theme = cosmetics?.first.map(String.init) ?? "afterhours"
@@ -110,13 +119,13 @@ struct MeshState {
         }
     }
     func create(nickname: String, avatar: UInt8) { perform {
-        guard !state.onboarded, (1...8).contains(avatar) else { return }
+        guard !state.onboarded, (1...8).contains(avatar & 15) else { return }
         state.nickname = try channelNickname(raw: nickname); state.avatar = avatar
         if !replacingIdentity { _ = try identity.create(); try storage.create() }
         try persist(); try initialize(); replacingIdentity = false; try refreshThrowing()
     } }
     func updateProfile(nickname: String, avatar: UInt8, theme: String, color: UInt32?) { perform {
-        guard (1...8).contains(avatar) else { throw ChannelError.Invalid }
+        guard (1...8).contains(avatar & 15) else { throw ChannelError.Invalid }
         state.nickname = try channelNickname(raw: nickname); state.avatar = avatar
         state.theme = ThemeTokens.selected(theme, active: store?.active == true).id
         state.nicknameRGB = store?.active == true ? color.flatMap { $0 <= 0xffffff ? $0 : nil } : nil
@@ -193,6 +202,11 @@ struct MeshState {
     func cancelProposal() { clearCandidates() }
     func shareInput(_ uri: String, scanned: Bool = false) { perform {
         clearCandidates()
+        guard uri.utf8.count <= 2048 else { throw ChannelError.Invalid }
+        if !state.onboarded {
+            guard (try? eventProposal(uri: uri)) != nil || (try? channelLink(uri: uri)) != nil || (try? friendProposal(uri: uri)) != nil else { throw ChannelError.Invalid }
+            pendingPublicLink = (uri, scanned); return
+        }
         if let event = try? eventProposal(uri: uri) { eventURI = uri; state.eventProposal = event; return }
         if let channel = try? channelLink(uri: uri) { state.channelProposal = channel; return }
         let proposal = try friendProposal(uri: uri)
@@ -265,15 +279,15 @@ struct MeshState {
     func connect() { perform {
         guard state.onboarded, radio == nil else { return }
         let core = try requiredCore(); epoch += 1; let generation = epoch
-        let next = IOSGattRadio(core: core, protectedAvailable: { [weak self] in self?.state.onboarded == true },
+        let next = makeRadio(core, MeshRadioCallbacks(available: { [weak self] in self?.state.onboarded == true },
             event: { [weak self] id, event in guard let self, self.epoch == generation else { return }; self.event(id, event) },
             state: { [weak self] value in guard let self, self.epoch == generation else { return }; self.radioState(value) },
             catchUp: { [weak self] ids in guard let self, self.epoch == generation else { return }; self.catchUp(ids) },
-            egress: { [weak self] send, submit in guard let self else { return false }; return try self.egress(send, submit) })
+            egress: { [weak self] send, submit in guard let self else { return false }; return try self.egress(send, submit) }))
         radio = next; next.start(); next.setPower(state.power); announceAt = 0; try refreshThrowing()
     } }
     func stop() {
-        epoch += 1; let old = radio; radio = nil; old?.stop(); links.removeAll()
+        epoch += 1; let old = radio; radio = nil; old?.stop(.stopped); links.removeAll()
         for (_, item) in pending where state.sendStates[item.0] != "Handed to mesh · delivery unknown" { state.sendStates[item.0] = "Not sent · retry" }
         pending.removeAll(); state.peers = 0; state.status = "Nearby connection is off"
     }
@@ -295,8 +309,8 @@ struct MeshState {
         case .foreground: state.status = "Searching for nearby people…"
         case .backgroundLimited: state.status = "iOS background relay is limited. Open the app for catch-up."
         case .restoring: state.status = "Restoring nearby connections; old radio state is discarded."
-        case .permissionRequired: state.status = "Allow Bluetooth access in Settings, then reconnect."
-        case .radioOff: state.status = "Turn on Bluetooth to connect."
+        case .permissionRequired: stop(); state.status = "Allow Bluetooth access in Settings, then reconnect."
+        case .radioOff: stop(); state.status = "Turn on Bluetooth to connect."
         case .starting: state.status = "Starting nearby connections…"
         case .stopped, .unavailable: stop()
         }
@@ -374,6 +388,7 @@ struct MeshState {
         return sent.queued
     }
     func send(_ text: String, pinExpiry: UInt32? = nil) { perform {
+        guard radio != nil, !links.isEmpty else { throw MessagingError.Busy }
         if let direct = state.direct {
             guard !state.directArchived, let friend = state.friends.first(where: { $0.keys == direct.keys && !$0.replacing }) else { throw MessagingError.Stale }
             if try submitProtected({ core, token in try storage.operation { db in try identity.messaging { try core.sendDirect(store: db, provider: $0, friend: friend.handle, content: .chat(text: text), cookie: token, now: clock(), wall: wall) } } }) { state.posted += 1 }
@@ -397,6 +412,7 @@ struct MeshState {
         cookie += 1; let token = cookie, id = bytes.subdata(in: 4..<12)
         let queued = Set(links.keys.filter { radio.enqueue($0, bytes: bytes, traffic: .own, cookie: token) })
         guard !queued.isEmpty else { throw MessagingError.Busy }
+        if state.sendStates.count >= 100, let key = state.sendStates.keys.first { state.sendStates.removeValue(forKey: key) }
         pending[token] = (id, queued); state.sendStates[id] = "Queued · delivery unknown"
         _ = try storage.operation { try requiredOwner().accept(store: $0, receipt: ChannelReceipt(link: nil, bytes: bytes, intake: .unverified, own: true, wall: wall, now: clock())) }
     }

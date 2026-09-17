@@ -11,6 +11,23 @@ enum IOSRadioState: Equatable {
     case permissionRequired, radioOff, locked, unavailable
 }
 
+@MainActor protocol MeshRadio: AnyObject {
+    var appliedPower: TransportPower? { get }
+    func start()
+    func stop(_ reason: IOSRadioState)
+    func setPower(_ setting: TransportPowerSetting)
+    @discardableResult func operation(_ work: (NativeTransport) throws -> TransportEffects) -> Bool
+    func enqueue(_ id: UInt64, bytes: Data, traffic: TransportTraffic, cookie: UInt64) -> Bool
+}
+
+@MainActor struct MeshRadioCallbacks {
+    let available: () -> Bool
+    let event: (UInt64, TransportEvent) -> Void
+    let state: (IOSRadioState) -> Void
+    let catchUp: ([UInt64]) -> Void
+    let egress: (TransportSend, () -> Bool) throws -> Bool
+}
+
 /// Production service UUIDs, deliberately separate from the MC-004 probe.
 @MainActor
 private enum MeshGattIds {
@@ -53,7 +70,7 @@ private final class IOSPeripheralCallbacks: NSObject, @preconcurrency CBPeripher
 }
 
 @MainActor
-final class IOSGattRadio: NSObject, IOSGattPort, @preconcurrency CBCentralManagerDelegate,
+final class IOSGattRadio: NSObject, IOSGattPort, MeshRadio, @preconcurrency CBCentralManagerDelegate,
     @preconcurrency CBPeripheralDelegate, @preconcurrency CBPeripheralManagerDelegate {
     private struct Client {
         let id: UInt64

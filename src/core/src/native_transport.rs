@@ -836,6 +836,15 @@ impl NativeTransport {
                 if matches!(accepted, Ok(crate::sync::session::Received::Page { .. })) {
                     s.continue_catchup(&link, &mut out)?;
                 }
+                // Preserve the diagnostic wrapper event for existing adapters;
+                // DeferredSync itself still grants no history or live intake.
+                if let Outcome::Complete { len, .. } = result {
+                    out.events.push(TransportEvent::Received {
+                        link,
+                        bytes: output[..len].to_vec(),
+                        intake: TransportIntake::DeferredSync,
+                    });
+                }
                 return Ok(out);
             }
             if let Outcome::Complete { len, state, kind } = result {

@@ -1,8 +1,22 @@
 import SwiftUI
 import UIKit
 
-private let animals = ["🐈", "🦊", "🐼", "🐸", "🦉", "🐰", "🐢", "🦋"]
-private let reactions = ["👍", "❤️", "😂", "🎉", "🔥", "👀", "🙏", "👎"]
+private let animals = Array(meshAnimals.dropFirst())
+private let reactions = meshReactions
+
+private struct AvatarPicker: View {
+    @Binding var value: UInt8
+    var body: some View {
+        MeshAvatar(value: value)
+        Picker("Animal avatar", selection: Binding(get: { value & 15 }, set: { value = (value & 240) | $0 })) {
+            ForEach(0..<animals.count, id: \.self) { Text(animals[$0]).tag(UInt8($0 + 1)) }
+        }
+        Picker("Avatar color", selection: Binding(get: { value >> 4 }, set: { value = ($0 << 4) | (value & 15) })) {
+            ForEach(0..<16, id: \.self) { index in Text("Color \(index + 1)").tag(UInt8(index)) }
+        }
+        Text("Animal and avatar color are free for everyone.").font(.caption)
+    }
+}
 
 private struct ConfirmAction: Identifiable {
     let id = UUID(), title: String, explanation: String, action: () -> Void
@@ -86,7 +100,7 @@ struct MeshView: View {
             Text(state.catchup).font(.caption)
             ForEach(state.channels, id: \.name) { channel in Button { model.select(channel.name) } label: {
                 HStack {
-                    Image(systemName: "lock.open")
+                    VStack { MeshIcon(name: channel.glyph); MeshIcon(name: "open-lock") }
                     VStack(alignment: .leading, spacing: 5) {
                         Text(verbatim: channel.name.replacingOccurrences(of: "|", with: " ")).font(.headline)
                         Text(channel.anonymous ? "Fresh identity for every post" : channel.private ? "Anyone with the words can read" : "Open to everyone").font(.caption)
@@ -147,7 +161,7 @@ private struct OnboardingView: View {
             Text("Nearby, together").font(.caption); Text("Welcome to MeshChat").font(.largeTitle)
             if step == 0 {
                 TextField("Nickname", text: $nickname).textInputAutocapitalization(.never).disableAutocorrection(true)
-                Picker("Animal avatar", selection: $avatar) { ForEach(0..<animals.count, id: \.self) { Text(animals[$0]).tag(UInt8($0 + 1)) } }
+                AvatarPicker(value: $avatar)
                 Text("Nicknames are public claims. A nickname never proves that someone is staff or a verified friend.")
             } else if step == 1 {
                 Text("Bluetooth connects nearby phones. Tap Connect when you are ready to grant access. Camera access is optional and requested only when scanning.")
@@ -213,7 +227,7 @@ private struct ChatView: View {
                     ForEach(Array(state.rows.enumerated()), id: \.offset) { _, row in VStack(alignment: .leading, spacing: 6) {
                         if let petname = row.verifiedPetname { Label { Text(verbatim: petname) } icon: { Image(systemName: "checkmark.shield.fill") }.padding(5).background(Color.green.opacity(0.15)) }
                         HStack {
-                            Text(animals[Int(max(1, min(8, row.avatar))) - 1])
+                            MeshAvatar(value: state.selected == "#confessions" ? 0 : row.avatar)
                             Text(verbatim: row.nickname).foregroundColor(ThemeTokens.color(theme.readableNickname(row.nicknameRgb ?? theme.text))).lineLimit(1)
                             Text(String(row.sender.map { String(format: "%02x", $0) }.joined().suffix(4))).font(.caption)
                         }
@@ -243,10 +257,11 @@ private struct ChatView: View {
         ScrollView(.horizontal) { HStack {
             ForEach(0..<8, id: \.self) { index in Button {
                 model.react(id, code: UInt8(index), remove: own == UInt8(index))
-            } label: { Text("\(reactions[index]) \(index < counts.count ? counts[index] : 0)") }
+            } label: { HStack { MeshIcon(name: reactions[index]); Text(index < counts.count && counts[index] >= 30 ? "30+" : "\(index < counts.count ? counts[index] : 0)") }.frame(minWidth: 44, minHeight: 44) }
                 .accessibilityLabel("Reaction \(reactions[index]); tap again to remove your reaction")
                 .disabled(state.directArchived)
             }
+            if counts.count > 8, counts[8] > 0 { Text("+1 · \(counts[8] >= 30 ? "30+" : String(counts[8]))").accessibilityLabel("Other reactions") }
         } }
     }
 }
@@ -380,7 +395,7 @@ private struct SettingsView: View {
         NavigationView { Form {
             Section("Make it yours") {
                 TextField("Nickname", text: $nickname).disableAutocorrection(true)
-                Picker("Animal avatar", selection: $avatar) { ForEach(0..<8, id: \.self) { Text(animals[$0]).tag(UInt8($0 + 1)) } }
+                AvatarPicker(value: $avatar)
             }
             if let store = model.store { SupporterSettings(store: store, theme: $theme, nicknameRGB: $color) }
             Section("Nearby connection power") {

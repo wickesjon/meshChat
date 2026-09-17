@@ -33,7 +33,7 @@ Also permitted: this ticket and generated ticketboard index/diagram changes requ
 - [x] Adding friends, encrypted send/receive, reactions, restart and friend removal work end to end.
 - [x] Deep-link and scanned-key flows require explicit trust confirmation; spoofed nicknames cannot gain a verified badge.
 - [x] Explicit user-selected replacement blocks stale-pin sends until confirmed re-pairing; network claims cannot disable existing pins and no UI action causes plaintext DM fallback.
-- [ ] Relevant checks pass, evidence is recorded, required review is complete, and the ticket is squash merged to main.
+- [x] Relevant checks pass, evidence is recorded, required review is complete, and the ticket is squash merged to main.
 
 ## Potential fallbacks
 
@@ -44,12 +44,12 @@ A triggered fallback must be recorded with evidence. It does not authorize weake
 
 ## Evidence
 
-Implementation and required local/native acceptance pass; follow-up review and squash merge remain. Hard dependencies are complete on main `dd9e006eaf6844ff128ea0a4c7000e26c9216391` after MC-028 PR #30. The proposal below is prepared on this ticket's dedicated branch. The user approved the integration extension on 2026-09-17 UTC; implementation proceeds within its recorded limits. Feature implementation and automated checks are recorded in [the integration report](../../testing/MC-029-android-messaging.md). All six channel/friend emulator phases, including the review fix regression, pass. The hosted iOS matrix passes. See the report for commands, counts, versions, artifact hashes and applicability; final reviewed revision is recorded in PR #31 to avoid a self-referential commit hash.
+Implementation, required local/native acceptance and independent Terra follow-up review pass. The staged completion becomes effective only upon the authorized squash merge of PR #31. Hard dependencies are complete on main `dd9e006eaf6844ff128ea0a4c7000e26c9216391` after MC-028 PR #30. The proposal below is prepared on this ticket's dedicated branch. The user approved the integration extension on 2026-09-17 UTC; implementation proceeds within its recorded limits. Feature implementation and automated checks are recorded in [the integration report](../../testing/MC-029-android-messaging.md). All six channel/friend emulator phases, including the review fix regression, pass. The hosted iOS matrix passes. See the report for commands, counts, versions, artifact hashes and applicability; final reviewed revision is recorded in PR #31 to avoid a self-referential commit hash.
 
 ## Review and merge
 
 - Branch: `ticket/MC-029-android-friends-and-encrypted-messaging-ui`.
-- Review/PR: [PR #31](https://github.com/wickesjon/meshChat/pull/31). Terra medium reviewed `545158ea3859732d3889189e1159a151887bf934`: one P2 full-archive refusal/disconnect issue, fixed with passing affected Android validation and awaiting follow-up review; no blocking security regressions found in the reviewed paths.
+- Review/PR: [PR #31](https://github.com/wickesjon/meshChat/pull/31). Terra medium reviewed `545158ea3859732d3889189e1159a151887bf934`: one P2 full-archive refusal/disconnect issue, resolved at `4ed8a3398421c80ecc274817a6cc9f1bffe660f2`; follow-up review approved with no new actionable issues and passing affected Android validation; no blocking security regressions found in the reviewed paths.
 - Squash commit title: `MC-029: Android friends and encrypted messaging UI`.
 - Completion becomes effective only when the reviewed squash commit lands on main.
 

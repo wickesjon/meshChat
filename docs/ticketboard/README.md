@@ -45,7 +45,7 @@ After edits run `python tests/ticketboard/validate.py --write`; then run `python
 | [MC-026](complete/MC-026-ios-corebluetooth-driver.md) | iOS CoreBluetooth driver | complete | MC-004, MC-016, MC-024 |
 | [MC-027](backlog/MC-027-cross-platform-radio-interoperability.md) | Cross-platform radio interoperability | backlog | MC-026, MC-023, MC-022, MC-035 |
 | [MC-028](complete/MC-028-android-shell-and-channel-chat.md) | Android shell and channel chat | complete | MC-018, MC-023, MC-011, MC-024, MC-022 |
-| [MC-029](inreview/MC-029-android-friends-and-encrypted-messaging-ui.md) | Android friends and encrypted messaging UI | inreview | MC-028, MC-020 |
+| [MC-029](complete/MC-029-android-friends-and-encrypted-messaging-ui.md) | Android friends and encrypted messaging UI | complete | MC-028, MC-020 |
 | [MC-030](backlog/MC-030-android-organizer-ui-and-staff-provisioning.md) | Android organizer UI and staff provisioning | backlog | MC-028, MC-021, MC-041 |
 | [MC-031](backlog/MC-031-offline-sharing-and-installed-app-link-support.md) | Offline sharing and installed-app link support | backlog | MC-011, MC-028 |
 | [MC-032](backlog/MC-032-supporter-entitlements-and-accessible-cosmetics.md) | Supporter entitlements and accessible cosmetics | backlog | MC-028, MC-006 |

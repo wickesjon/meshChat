@@ -8,6 +8,10 @@ publish.workspace = true
 [lib]
 crate-type = ["lib", "cdylib", "staticlib"]
 
+[[test]]
+name = "native_channels"
+path = "../../tests/integration/android-ui/channels.rs"
+
 [dependencies]
 uniffi = { version = "=0.29.4", default-features = false }
 thiserror = "=2.0.12"

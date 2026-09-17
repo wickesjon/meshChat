@@ -133,4 +133,15 @@ class EncryptedStorage(private val identity:IdentityProvider,private val vault:S
     fun deleteHistory(conversation:ByteArray,direct:Boolean) {operation{it.deleteHistory(conversation,direct)}}
     fun ambiguousTarget(subject:ByteArray,messageId:ByteArray):Boolean = operation{it.ambiguousTarget(subject,messageId)}
     fun prune(){operation{it.prune(System.currentTimeMillis()/1000)}}
+    /** Only public identity/friend state escapes construction; the database and
+     * wrapping key are closed/cleared before returning to the feature owner. */
+    fun transport(instance: ULong, now: ULong): NativeTransport = operation { store ->
+        NativeTransport(store, identity.load().identity, instance, now)
+    }
+    fun channelAccept(owner: NativeChannels, link: LinkHandle?, bytes: ByteArray, intake: TransportIntake,
+        own: Boolean, now: ULong): Boolean = operation { store ->
+        owner.accept(store, ChannelReceipt(link, bytes, intake, own, System.currentTimeMillis()/1000, now))
+    }
+    fun channelHistory(owner: NativeChannels, name: String, nickname: String): List<ChannelMessage> =
+        operation { owner.history(it, name, nickname) }
 }

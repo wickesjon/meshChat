@@ -489,3 +489,197 @@ fn public_friend_vector_requires_real_signature_before_connection_activity() {
     assert_eq!(observed[0].first_valid_ms, Some(1000));
     assert_eq!(observed[0].last_valid_ms, Some(2000));
 }
+
+fn ios_owner(seed: u8) -> NativeTransport {
+    let identity = IdentityKeySession::import_unlocked(vec![seed; 64], vec![seed; 16]).unwrap();
+    let store = EncryptedStore::open(
+        Box::new(database::Database::new()),
+        vec![seed; 16],
+        true,
+        Some(200_000),
+    )
+    .unwrap();
+    NativeTransport::new_ios(store, identity.public_identity().unwrap(), seed.into(), 0).unwrap()
+}
+#[test]
+fn ios_caps_readiness_and_backpressure_are_separate_from_android_completion() {
+    let a = ios_owner(80);
+    let (b, _) = owner(81);
+    let al = ready(&a, TransportRole::Central, 182, 512, 0);
+    let bl = ready(&b, TransportRole::Peripheral, 512, 512, 0);
+    handshake(&a, &b, &al, &bl);
+    assert_eq!(
+        a.update_power(Some(TransportPowerSetting::Normal), 100, true, 0, 0)
+            .unwrap()
+            .link_limit,
+        4
+    );
+    a.enqueue(al.clone(), chat(90, 5), TransportTraffic::Own, 90, 1000)
+        .unwrap();
+    a.set_writable(al.clone(), false, 1000).unwrap();
+    assert!(a.tick(5000).unwrap().sends.is_empty());
+    a.readiness(al.clone(), 5000).unwrap();
+    let first = a.tick(5000).unwrap().sends.remove(0);
+    a.backpressure(al.clone(), first.token, 5000).unwrap();
+    assert_eq!(
+        a.complete(al.clone(), first.token, true, 5000).unwrap_err(),
+        TransportError::Stale
+    );
+    assert!(a.tick(10_000).unwrap().events.is_empty()); // no Android five-second timeout
+    assert!(a.tick(10_000).unwrap().sends.is_empty());
+    a.readiness(al.clone(), 10_000).unwrap();
+    let second = a.tick(10_000).unwrap().sends.remove(0);
+    assert_eq!(second.bytes, first.bytes);
+    a.backpressure(al.clone(), second.token, 10_000).unwrap();
+    a.readiness(al.clone(), 11_000).unwrap();
+    let third = a.tick(11_000).unwrap().sends.remove(0);
+    assert_eq!(third.bytes, first.bytes); // multiple queue-fulls are not native failures
+    assert!(
+        a.complete(al.clone(), third.token, true, 11_000)
+            .unwrap()
+            .events
+            .iter()
+            .any(|e| matches!(
+                e,
+                TransportEvent::Finished {
+                    cookie: 90,
+                    status: TransportStatus::NativeComplete,
+                    ..
+                }
+            ))
+    );
+    assert!(a.tick(25_999).unwrap().events.is_empty());
+    assert!(
+        a.tick(26_000)
+            .unwrap()
+            .events
+            .contains(&TransportEvent::Closed { link: al.clone() })
+    );
+    assert_eq!(a.readiness(al, 26_000).unwrap_err(), TransportError::Stale);
+}
+#[test]
+fn ios_capacity_includes_setup_and_power_shrink_preserves_admission() {
+    let a = ios_owner(82);
+    let permits: Vec<_> = (0..4)
+        .map(|i| a.admit_connection(vec![i; 16], 0).unwrap())
+        .collect();
+    assert_eq!(
+        a.admit_connection(vec![9; 16], 0).unwrap_err(),
+        TransportError::Busy
+    );
+    let p = a
+        .update_power(Some(TransportPowerSetting::Saver), 10, false, 4, 0)
+        .unwrap();
+    assert_eq!(p.link_limit, 3);
+    assert_eq!(p.cancelled_admissions, vec![permits[3]]);
+    a.update_power(Some(TransportPowerSetting::Normal), 100, true, 0, 0)
+        .unwrap();
+    a.admit_connection(vec![10; 16], 0).unwrap();
+    assert_eq!(
+        a.admit_connection(vec![11; 16], 0).unwrap_err(),
+        TransportError::Busy
+    );
+}
+#[test]
+fn ios_property_polling_does_not_refresh_liveness_but_inbound_does() {
+    let a = ios_owner(83);
+    let (b, _) = owner(84);
+    let al = ready(&a, TransportRole::Peripheral, 146, 512, 0);
+    let bl = ready(&b, TransportRole::Central, 512, 512, 0);
+    // Roles need no alternate wire format; exchange explicitly in these roles.
+    let af = a.tick(0).unwrap().sends.remove(0);
+    let bf = b.tick(0).unwrap().sends.remove(0);
+    a.receive(al.clone(), bf.bytes.len() as u64, bf.bytes, 0)
+        .unwrap();
+    b.receive(bl.clone(), af.bytes.len() as u64, af.bytes, 0)
+        .unwrap();
+    a.complete(al.clone(), af.token, true, 0).unwrap();
+    b.complete(bl, bf.token, true, 0).unwrap();
+    let raw = chat(85, 5);
+    let mut frame = vec![0, 0, 0, raw.len() as u8];
+    frame.extend(raw);
+    a.receive(al.clone(), frame.len() as u64, frame, 14_000)
+        .unwrap();
+    a.set_writable(al.clone(), true, 28_999).unwrap();
+    assert!(a.tick(28_999).unwrap().events.is_empty());
+    assert!(
+        a.tick(29_000)
+            .unwrap()
+            .events
+            .contains(&TransportEvent::Closed { link: al })
+    );
+}
+
+#[test]
+fn native_sync_wrappers_remain_deferred_and_use_the_paced_bounded_scheduler() {
+    let a = ios_owner(86);
+    let (b, _) = owner(87);
+    let al = ready(&a, TransportRole::Central, 182, 512, 0);
+    let bl = ready(&b, TransportRole::Peripheral, 512, 512, 0);
+    handshake(&a, &b, &al, &bl);
+    assert!(a.enqueue_sync(al.clone(), vec![0; 10], 3, 0).is_err());
+    let raw = chat(88, 256);
+    let mut body = vec![0, 1, 0, 0, 0, 0, 0, 0, 0];
+    body.extend_from_slice(&(raw.len() as u16).to_be_bytes());
+    body.extend(raw);
+    a.enqueue_sync(al.clone(), body.clone(), 88, 1000).unwrap();
+    let mut received = Vec::new();
+    for now in [1000, 2000, 3000] {
+        let frame = a.tick(now).unwrap().sends.remove(0);
+        received.extend(
+            b.receive(bl.clone(), frame.bytes.len() as u64, frame.bytes, now)
+                .unwrap()
+                .events,
+        );
+        a.complete(al.clone(), frame.token, true, now).unwrap();
+    }
+    assert_eq!(
+        received,
+        vec![TransportEvent::Received {
+            link: bl,
+            bytes: body,
+            intake: TransportIntake::DeferredSync
+        }]
+    );
+}
+
+#[test]
+fn ios_submission_crossing_object_deadline_preserves_terminal_effects() {
+    for queue_full in [false, true] {
+        let a = ios_owner(89);
+        let (b, _) = owner(90);
+        let al = ready(&a, TransportRole::Central, 182, 512, 0);
+        let bl = ready(&b, TransportRole::Peripheral, 512, 512, 0);
+        handshake(&a, &b, &al, &bl);
+        a.enqueue(al.clone(), chat(91, 256), TransportTraffic::Own, 91, 1000)
+            .unwrap();
+        let first = a.tick(1000).unwrap().sends.remove(0);
+        a.complete(al.clone(), first.token, true, 1000).unwrap();
+        for now in [10_000, 20_000] {
+            a.readiness(al.clone(), now).unwrap();
+            a.set_writable(al.clone(), false, now).unwrap();
+        }
+        a.readiness(al.clone(), 30_999).unwrap();
+        let frame = a.tick(30_999).unwrap().sends.remove(0);
+        let result = if queue_full {
+            a.backpressure(al.clone(), frame.token, 31_000)
+        } else {
+            a.complete(al.clone(), frame.token, true, 31_000)
+        }
+        .unwrap();
+        assert_eq!(
+            result.events,
+            vec![TransportEvent::Finished {
+                link: al.clone(),
+                cookie: 91,
+                status: TransportStatus::Expired
+            }]
+        );
+        assert!(a.tick(31_000).unwrap().sends.is_empty());
+        assert_eq!(
+            a.complete(al.clone(), frame.token, true, 31_000)
+                .unwrap_err(),
+            TransportError::Stale
+        );
+    }
+}

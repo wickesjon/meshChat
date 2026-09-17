@@ -13,7 +13,7 @@ These instructions apply to the entire meshChat repository.
 ## Request and repository boundaries
 
 - Modify only files necessary for the approved request and the active ticket's permitted paths. No unrelated cleanup, refactoring, dependency updates, formatting sweeps or opportunistic fixes.
-- Do not widen the request or change a product/security requirement through an implementation shortcut. If necessary work exceeds the ticket or request, record a blocker and obtain an explicit scope decision before doing that work.
+- Do not widen the request or change a product/security requirement through an implementation shortcut. User standing approval (2026-09-17): necessary ticket scope extensions are approved when all changes stay inside this repository. Record the additional paths, purpose and validation in the active ticket before implementing; do not ask again for a repository-local path extension. This does not authorize unrelated work, weakened product/security requirements or waived validation/review/release gates.
 - Do not create, edit, move or delete files outside the resolved repository root. Do not use symlinks, junctions, external worktrees or generated output paths to evade this boundary. Reading reference documentation is allowed.
 - Preserve unrelated user changes. Never overwrite, discard or stage them incidentally.
 - Do not change global Git configuration, external projects, machine security settings or remote services as a side effect of ticket work.
@@ -27,7 +27,7 @@ These instructions apply to the entire meshChat repository.
 4. Move the ticket through `backlog/` → `inprogress/` → `inreview/` → `complete/`. The folder is the status source of truth; never keep duplicate copies.
 5. Keep `depends_on` authoritative. After a move or dependency change, run `python tests/ticketboard/validate.py --write`, then the default validator. It checks cycles, IDs, missing dependencies and generated index/diagram consistency.
 6. Keep changes within the ticket's permitted paths. Record implementation choices, validation evidence, deviations and the branch/review reference in the ticket.
-7. A fallback is conditional, not automatic permission to weaken an invariant or expand scope. Record its trigger and evidence; obtain approval for any changed scope or acceptance requirement.
+7. A fallback is conditional, not automatic permission to weaken an invariant or expand scope. Record its trigger and evidence. Necessary repository-local scope extensions have the standing approval above; changed acceptance requirements still require explicit approval.
 
 ## Review and squash merge to main
 

@@ -27,7 +27,7 @@ import androidx.compose.ui.unit.sp
 import uniffi.meshchat_core.*
 
 @Composable
-fun MeshApp(model: MeshModel, permissions: () -> Unit, scan: () -> Unit = {}, buySupporter: ()->Unit = {}, restoreSupporter: ()->Unit = {}) {
+fun MeshApp(model: MeshModel, permissions: () -> Unit, scan: () -> Unit = {}, scanStaff: () -> Unit = {}, buySupporter: ()->Unit = {}, restoreSupporter: ()->Unit = {}) {
     val s = model.screen
     val colors = meshColors(Themes.selected(s.theme,s.supporter))
     MaterialTheme(colorScheme=colors) {
@@ -42,7 +42,7 @@ fun MeshApp(model: MeshModel, permissions: () -> Unit, scan: () -> Unit = {}, bu
                 }
                 !s.onboarded -> Onboarding(model,s,permissions)
                 s.beaconRequested || s.beacon?.active == true -> BeaconScreen(s,model::exitBeacon,model::startRadio,permissions)
-                else -> Home(model,s,permissions,scan,buySupporter,restoreSupporter)
+                else -> Home(model,s,permissions,scan,scanStaff,buySupporter,restoreSupporter)
             }
         }
     }
@@ -102,7 +102,7 @@ private fun ProfilePicker(value: UByte,changed: (UByte)->Unit) {
 }
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun Home(model: MeshModel,s: MeshScreenState,permissions: () -> Unit,scan: () -> Unit,buySupporter: ()->Unit,restoreSupporter: ()->Unit) {
+private fun Home(model: MeshModel,s: MeshScreenState,permissions: () -> Unit,scan: () -> Unit,scanStaff: () -> Unit,buySupporter: ()->Unit,restoreSupporter: ()->Unit) {
     var tab by rememberSaveable { mutableIntStateOf(0) }
     var settings by remember { mutableStateOf(false) }
     var join by remember { mutableStateOf(false) }
@@ -126,7 +126,7 @@ private fun Home(model: MeshModel,s: MeshScreenState,permissions: () -> Unit,sca
     }}) { pad ->
         Column(Modifier.padding(pad).fillMaxSize()) {
             s.error?.let { Text(it,Modifier.fillMaxWidth().padding(16.dp),color=MaterialTheme.colorScheme.error) }
-            if(s.direct!=null)DirectChat(model,s) else if(s.selected!=null)Chat(model,s) else when(tab) {
+            if(s.direct!=null)DirectChat(model,s) else if(s.selected?.name=="#event updates")EventChat(model,s,scan,scanStaff) else if(s.selected!=null)Chat(model,s) else when(tab) {
                 0 -> LazyColumn(Modifier.fillMaxSize(),contentPadding=PaddingValues(20.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
                     item { Text("Your channels",fontSize=22.sp,fontWeight=FontWeight.SemiBold); Text("Open conversations. Readable on air.",color=MaterialTheme.colorScheme.onSurfaceVariant) }
                     items(s.channels,key={it.name}) { channel -> Surface(onClick={model.select(channel.name)},shape=RoundedCornerShape(18.dp),color=MaterialTheme.colorScheme.surface) {
@@ -143,6 +143,7 @@ private fun Home(model: MeshModel,s: MeshScreenState,permissions: () -> Unit,sca
             }
         }
     }
+    OrganizerConfirmation(model,s)
     FriendConfirmation(model,s)
     ChannelConfirmation(model,s)
     if(linkInput)ShareInput(model) {linkInput=false}

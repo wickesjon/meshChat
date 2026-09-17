@@ -25,6 +25,10 @@ data class DirectThread(val keys: ByteArray, val petname: String, val archived: 
 data class DirectRow(val message: DirectMessage, val sendState: String)
 data class ChatRow(val message: ChannelMessage, val sendState: String)
 data class MeshScreenState(
+    val events: List<EventCard> = emptyList(), val eventProposal: EventProposal? = null,
+    val staffProposal: StaffCard? = null, val staff: StaffCard? = null, val staffPresent: Boolean = false,
+    val staffReady: Boolean = false, val staffStatus: String? = null, val eventRows: List<EventMessage> = emptyList(),
+    val discoveries: List<String> = emptyList(),
     val friends: List<FriendCard> = emptyList(), val friendCode: FriendProposal? = null,
     val proposal: FriendProposal? = null, val proposalScanned: Boolean = false, val replacingFriend: FriendCard? = null,
     val direct: DirectThread? = null, val directRows: List<DirectRow> = emptyList(), val archives: List<FriendProposal> = emptyList(),
@@ -50,8 +54,13 @@ class MeshModel(private val context: Context) {
     private val main = Handler(Looper.getMainLooper())
     private val queue = ThreadPoolExecutor(1, 1, 0, TimeUnit.MILLISECONDS, ArrayBlockingQueue(64))
     private val vault = StorageVault.android(context)
-    private val identity = IdentityProvider.android(context, vault)
-    private val storage = EncryptedStorage(identity, vault)
+    private val staffVault = StaffKeyVault.android(context)
+    private val identity = IdentityProvider.android(context, IdentityResetStore {staffVault.clearIdentityState();vault.clearIdentityState()})
+    private val storage = EncryptedStorage(identity, vault,staffVault)
+    private var pendingEvent: Pair<String,EventProposal>? = null
+    private var pendingStaff: ByteArray? = null
+    private var pendingStaffCard: StaffCard? = null
+    private var staffCandidateAt = 0uL
     private var owner: NativeChannels? = null
     private var transport: NativeTransport? = null
     private var cards = emptyList<FriendCard>()
@@ -101,6 +110,9 @@ class MeshModel(private val context: Context) {
         try { queue.execute {
             if (overflow.getAndSet(false)) { unavailable(); return@execute }
             try { action() }
+            catch (_: OrganizerException.Invalid) { report("Invalid event or staff credential. Existing trust was preserved.") }
+            catch (_: OrganizerException.Authority) { report("Event authority is unavailable or expired. Scan and confirm a current official code.") }
+            catch (_: OrganizerException.Busy) { report("Organizer work is busy. Connect to nearby people or wait, then retry.") }
             catch (_: MessagingException.Invalid) { report("Check the friend code or message. No friend was added.") }
             catch (_: MessagingException.Stale) { report("This friend identity changed or is awaiting replacement. Scan and confirm its code again.") }
             catch (_: MessagingException.Busy) { report("Not sent. Connect to nearby people or wait for queue space, then retry.") }
@@ -192,6 +204,7 @@ class MeshModel(private val context: Context) {
         radio?.configureBeacon(false,false); radio?.powerSetting(value); refresh()
     }
     fun beacon(manual: Boolean, automatic: Boolean) = work {
+        if((manual||automatic)&&staffVault.present()) {report("Forget the staff key before enabling Beacon Mode.");return@work}
         beaconRequested=manual; autoBeacon=automatic; power=TransportPowerSetting.AUTO
         persist(); radio?.configureBeacon(manual,automatic)
         if(manual || automatic)startRadio()
@@ -243,6 +256,15 @@ class MeshModel(private val context: Context) {
             notice="Beacon Mode ended at 30% battery. Your channels and history are unchanged."
             persist(); radio?.configureBeacon(false,autoBeacon)
         }
+        if(pendingStaff!=null && now()-staffCandidateAt>=60000uL)clearOrganizerCandidate()
+        val events=coreWork {storage.events(it)}
+        var staffStatus:String?=null
+        val staff=try {if(staffVault.signingAllowed())storage.staffCard() else null} catch (_:IdentityProviderException) {staffStatus="Staff key unavailable. Forget it and explicitly reprovision.";null}
+        val wall=System.currentTimeMillis()/1000
+        val ready=staff!=null && wall in staff.notBefore.toLong()..staff.notAfter.toLong() && events.any { card -> card.active && java.security.MessageDigest.getInstance("SHA-256").digest(card.event.key).copyOf(8).contentEquals(staff.rootId) }
+        if(staff!=null&&!ready)staffStatus="Staff authority expired, not yet active, or its event is not adopted. Posting is disabled."
+        val eventRows=if(selected=="#event updates")coreWork {storage.eventMessages(it,now())} else emptyList()
+        val discoveries=coreWork {it.eventDiscoveries(now())}
         val n = checkNotNull(owner)
         n.setCosmetics(supporter,if(supporter)nicknameRgb else null)
         val rows = selected?.let { name -> coreWork { storage.messagingHistory(it, n, name, profile) } } ?: emptyList()
@@ -250,7 +272,8 @@ class MeshModel(private val context: Context) {
         val dmRows = direct?.let { thread -> coreWork { storage.directHistory(it, thread.keys, now()) } } ?: emptyList()
         selected?.let { previews[it] = rows.lastOrNull()?.text ?: "Quiet so far" }
         val wait = selected?.let { n.waitMs(it, false, now()) } ?: 0uL
-        publish(MeshScreenState(friends = cards, friendCode = myCode, proposal = proposal, proposalScanned = proposalScanned,
+        publish(MeshScreenState(events=events,eventProposal=pendingEvent?.second,staffProposal=pendingStaffCard,
+            staff=staff,staffPresent=staffVault.present(),staffReady=ready,staffStatus=staffStatus,eventRows=eventRows,discoveries=discoveries,friends = cards, friendCode = myCode, proposal = proposal, proposalScanned = proposalScanned,
             replacingFriend = replacingFriend, direct = direct, archives = archives.filter { old -> cards.none { it.keys.contentEquals(old.keys) } },
             directRows = dmRows.map { DirectRow(it, receipts[key(it.id)] ?: if(it.own) "Stored locally - delivery unknown" else "Encrypted") },
             loading = false, onboarded = true, nickname = profile, avatar = avatar, light = light,
@@ -263,6 +286,7 @@ class MeshModel(private val context: Context) {
     fun send(text: String) = work {
         notice = null
         val name = selected ?: return@work
+        if(name=="#event updates" && coreWork {storage.events(it)}.any {it.active}) {report("Use the Event Staff composer with a current credential.");return@work}
         if (links.isEmpty() || radio == null) { refresh("Not sent. Connect to nearby people, then retry."); return@work }
         if (pending.size >= 32) { refresh("Not sent. The send queue is full; try again shortly."); return@work }
         val bytes = checkNotNull(owner).compose(name, profile, avatar, text, (System.currentTimeMillis()/1000).toUInt(), now())
@@ -377,7 +401,7 @@ class MeshModel(private val context: Context) {
         transport=storage.transport(instance,now()); myCode=storage.friendCode(profile); archives=storage.archives()
     }
     private fun clearMessaging() {
-        channelProposal=null
+        channelProposal=null; clearOrganizerCandidate()
         transport?.close(); transport=null; cards=emptyList(); myCode=null; proposal=null
         proposalScanned=false; replacingFriend=null; direct=null; archives=emptyList()
     }
@@ -409,13 +433,15 @@ class MeshModel(private val context: Context) {
     }
     fun cancelProposal() = work {proposal=null;proposalScanned=false;refresh()}
     fun shareInput(uri: String, scanned: Boolean = false) = work {
-        channelProposal=null; proposal=null; proposalScanned=false
+        channelProposal=null; proposal=null; proposalScanned=false;clearOrganizerCandidate()
+        val event=try {eventProposal(uri)} catch (_:OrganizerException.Invalid) {null}
+        if(event!=null) {pendingEvent=uri to event;refresh();return@work}
         val channel=try { channelLink(uri) } catch (_: ChannelException.Invalid) { null }
         if(channel!=null) {
             channelProposal=channel;notice=null;refresh()
         } else {
             val decoded=try {friendProposal(uri)} catch (_: MessagingException.Invalid) {
-                report("Check the channel or friend link. Nothing was joined or pinned.");return@work
+                report("Check the channel, friend or public event link. Nothing was joined or pinned.");return@work
             }
             if(replacingFriend!=null && !scanned) {report("Replacement requires a fresh scan of the new device's code.");return@work}
             proposal=decoded;proposalScanned=scanned;notice=null;refresh()
@@ -470,12 +496,51 @@ class MeshModel(private val context: Context) {
         submitProtected {core,token->storage.sendDirect(core,pin.handle,DirectContent.Reaction(message.id,message.ownReaction==code,code),token,now())}
         refresh()
     }
+    private fun clearOrganizerCandidate() {pendingEvent=null;pendingStaff?.fill(0);pendingStaff=null;pendingStaffCard=null}
+    fun cancelOrganizer() = work {clearOrganizerCandidate();refresh()}
+    fun foregrounded() {
+        val revision=staffVault.requestForeground()
+        work {staffVault.resumeForeground(revision);load()}
+    }
+    fun backgrounded() {
+        staffVault.background() // Immediate, independent of the model queue.
+        work {clearOrganizerCandidate();transport?.forgetStaffOperations();if(loaded)refresh()}
+    }
+    fun staffInput(value:String) = work {
+        clearOrganizerCandidate()
+        if(!loaded||beaconRequested||autoBeacon) {report("Turn off Beacon Mode before provisioning staff.");return@work}
+        val candidate=value.toByteArray(Charsets.UTF_8)
+        try {pendingStaffCard=staffProposal(value);pendingStaff=candidate;staffCandidateAt=now();refresh()}
+        catch(e:Exception) {candidate.fill(0);throw e}
+    }
+    fun adoptEvent() = work {
+        val candidate=pendingEvent ?: return@work
+        coreWork {storage.adoptEvent(it,candidate.first,now())};clearOrganizerCandidate();refresh("Event adopted after your confirmation.")
+    }
+    fun removeEvent(key:ByteArray) = work {coreWork {storage.removeEvent(it,key)};refresh("Event removed. Its messages no longer grant authority.")}
+    fun confirmStaff() = work {
+        val candidate=pendingStaff ?: return@work
+        pendingStaff=null;pendingStaffCard=null
+        try {
+            if(now()-staffCandidateAt>=60000uL||beaconRequested||autoBeacon) {report("Provisioning expired. Scan again.");return@work}
+            coreWork {storage.importStaff(it,candidate,now())};refresh("Staff credential imported. Its expiry is unchanged.")
+        } finally {candidate.fill(0)}
+    }
+    fun forgetStaff() = work {coreWork {storage.forgetStaff(it)};refresh("Staff key forgotten. Reprovision explicitly to post again.")}
+    fun sendEvent(text:String,pin:UInt?) = work {
+        if(beaconRequested||autoBeacon||!staffVault.present()) {report("A current staff credential is required.");return@work}
+        if(submitProtected {core,token->storage.postEvent(core,profile,text,avatar,pin,token,now())})posted++
+        refresh()
+    }
     private val pulseQueued = AtomicBoolean(false)
     private val pulse = object : Runnable {
         override fun run() {
             if(pulseQueued.compareAndSet(false,true)) work {
                 try { if (loaded) {
-                    if(links.isNotEmpty()) coreWork {storage.retryMessages(it,now())}
+                    if(links.isNotEmpty()) {
+                        coreWork {storage.retryMessages(it,now())}
+                        radio?.operation {storage.organizerTick(it,now())}
+                    }
                     if (links.isNotEmpty() && now() >= announceAt) {
                         val bytes = checkNotNull(transport).beaconAnnounce(checkNotNull(owner).announce(profile, avatar, links.size.toUByte(), (System.currentTimeMillis()/1000).toUInt()))
                         submitProtected { core, token -> storage.sendSigned(core, bytes, token, now()) }

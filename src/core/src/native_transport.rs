@@ -13,6 +13,8 @@ use crate::{
 mod beacon;
 #[path = "native_messaging.rs"]
 pub mod messaging;
+#[path = "native_organizer.rs"]
+pub mod organizer;
 pub use beacon::BeaconStatus;
 use sha2::{Digest, Sha256};
 use std::sync::{Arc, Mutex};
@@ -170,6 +172,7 @@ struct Runtime {
     ingress: Ingress,
     friends: Friends,
     messaging: messaging::Messaging,
+    organizer: organizer::NativeOrganizer,
     relay: Relay,
     links: Vec<Link>,
     admissions: Vec<Admission>,
@@ -215,6 +218,7 @@ impl Runtime {
                 continue;
             }
             self.messaging.finished(&mut self.friends, &event);
+            self.organizer.finished(&event);
             if event.cookie >= 3 {
                 out.events.push(TransportEvent::Finished {
                     link: event.link,
@@ -784,6 +788,12 @@ impl NativeTransport {
                 // unsolicited stored wrapper never becomes live CHAT here.
             }
             if let Outcome::Complete { len, state, .. } = result {
+                if !matches!(
+                    state,
+                    State::Duplicate | State::DeferredSync | State::Control
+                ) {
+                    s.organizer_received(&link, &output[..len], now, &mut out)?;
+                }
                 if state != State::DeferredSync && state != State::Control {
                     let now = s.now;
                     s.relay
@@ -923,6 +933,7 @@ impl NativeTransport {
             let index = s.index(&send.link)?;
             let token = s.next()?;
             let (protected, pin) = s.messaging.egress_guard(&send.link, send.cookie);
+            let protected = protected || s.organizer.guarded(&send.link, send.cookie);
             let link = &mut s.links[index];
             link.pending = Some(PendingSend {
                 protected,
@@ -1105,6 +1116,7 @@ impl NativeTransport {
                 now: monotonic_ms,
                 ingress,
                 friends,
+                organizer: organizer::NativeOrganizer::new(&identity)?,
                 messaging: messaging::Messaging::new(identity)?,
                 relay,
                 links: Vec::with_capacity(limit),

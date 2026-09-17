@@ -117,7 +117,7 @@ class StorageVault internal constructor(
     }
 }
 
-class EncryptedStorage(private val identity:IdentityProvider,private val vault:StorageVault) {
+class EncryptedStorage(private val identity:IdentityProvider,private val vault:StorageVault,private val staff:StaffKeyVault?=null) {
     private fun <T> operation(create:Boolean=false,now:Long?=System.currentTimeMillis()/1000,work:(EncryptedStore)->T):T = IdentityProvider.withOperation {
         val generation=identity.load().identity.generation
         vault.access(generation,create,now,work)
@@ -169,9 +169,45 @@ class EncryptedStorage(private val identity:IdentityProvider,private val vault:S
      * database/session are closed before returning; callbacks never hold keys. */
     fun messageEgress(core: NativeTransport, send: TransportSend, submit: () -> Boolean): Boolean = IdentityProvider.withOperation {
         if (core.messageNeedsAuthorization(send.link, send.token)) {
-            operation { core.authorizeMessageEgress(it, send.link, send.token) }
+            val organizer=operation {
+                val guarded=core.authorizeOrganizerEgress(it,send.link,send.token,System.currentTimeMillis()/1000)
+                if(!guarded)core.authorizeMessageEgress(it, send.link, send.token)
+                guarded
+            }
+            if(organizer)return@withOperation staff?.submitForeground(submit) ?: false
         }
         submit()
+    }
+
+    fun events(core: NativeTransport): List<EventCard> = operation { core.eventCards(it,System.currentTimeMillis()/1000) }
+    fun adoptEvent(core: NativeTransport,uri:String,now:ULong) = operation { core.confirmEvent(it,uri,now,System.currentTimeMillis()/1000) }
+    fun removeEvent(core:NativeTransport,key:ByteArray) = operation { core.removeEvent(it,key,System.currentTimeMillis()/1000) }
+    fun eventMessages(core:NativeTransport,now:ULong):List<EventMessage> = operation { core.eventMessages(it,System.currentTimeMillis()/1000,now) }
+    fun importStaff(core:NativeTransport,candidate:ByteArray,now:ULong) = operation { store ->
+        checkNotNull(staff).importConfirmed(identity.load().identity.generation,candidate) { uri ->
+            core.importStaffKey(store,uri,now,System.currentTimeMillis()/1000).use { it.invalidate() }
+        }
+    }
+    fun staffCard():StaffCard? {
+        val owner=staff ?: return null
+        if(!owner.present())return null
+        return IdentityProvider.withOperation { owner.access(identity.load().identity.generation,::staffProposal) }
+    }
+    fun forgetStaff(core:NativeTransport) = IdentityProvider.withOperation {
+        core.forgetStaffOperations();checkNotNull(staff).forget()
+    }
+    fun organizerTick(core:NativeTransport,now:ULong):TransportEffects = operation {
+        val wall=System.currentTimeMillis()/1000
+        val card=try {if(staff?.signingAllowed()==true)staffCard() else null} catch (_:IdentityProviderException) {null}
+        core.organizerTick(it,card?.takeIf {c->wall in c.notBefore.toLong()..c.notAfter.toLong()}?.credential,now,wall)
+    }
+    fun postEvent(core:NativeTransport,nickname:String,text:String,avatar:UByte,pin:UInt?,cookie:ULong,now:ULong):MessageSubmission = operation { store ->
+        checkNotNull(staff).access(identity.load().identity.generation) { uri ->
+            core.importStaffKey(store,uri,now,System.currentTimeMillis()/1000).use { session ->
+                try { core.postEvent(store,session,nickname,text,avatar,pin,cookie,now,System.currentTimeMillis()/1000) }
+                finally {session.invalidate()}
+            }
+        }
     }
 
     /** Bounded encrypted navigation index for retained old-identity histories.

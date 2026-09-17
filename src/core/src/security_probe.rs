@@ -99,3 +99,39 @@ pub fn probe_agreement_matches(
         .fold(0_u8, |d, (a, b)| d | (a ^ b))
         == 0)
 }
+
+/// MC-041 synthetic native fixture only. Runs the actual confirmation-gated
+/// organizer methods against the fixture's store; never ships in the app.
+/// No seed or session is returned. FFI strings may have native copies, so this
+/// adapter must only receive disposable synthetic provisioning material.
+#[uniffi::export]
+pub fn probe_organizer_import(
+    store: std::sync::Arc<crate::storage::EncryptedStore>,
+    own: crate::identity::PublicIdentity,
+    event: String,
+    staff: String,
+    wall: i64,
+) -> Result<bool, ProbeError> {
+    let staff = Zeroizing::new(staff);
+    let operation = || -> Result<bool, crate::organizer::Error> {
+        let mut organizer = crate::organizer::Organizer::new(&own)?;
+        let mut ingress = crate::ingress::Ingress::new(41, 1, 0)?;
+        let event = crate::links::parse(&event).map_err(|_| crate::organizer::Error::Invalid)?;
+        if !organizer.adopt(&mut ingress, &store, event, 0, Some(wall))? {
+            return Ok(false);
+        }
+        let crate::links::UnconfirmedProposal::Staff(proposal) =
+            crate::links::parse(&staff).map_err(|_| crate::organizer::Error::Invalid)?
+        else {
+            return Ok(false);
+        };
+        let Some(session) =
+            organizer.import_staff(&mut ingress, &store, proposal, 1000, Some(wall))?
+        else {
+            return Ok(false);
+        };
+        session.invalidate();
+        Ok(true)
+    };
+    operation().map_err(|_| ProbeError::InvalidInput)
+}

@@ -1,5 +1,6 @@
 [workspace]
-members = ["src/core"]
+members = ["src/core", "src/organizer-tools"]
+default-members = ["src/core"]
 resolver = "2"
 
 [workspace.package]

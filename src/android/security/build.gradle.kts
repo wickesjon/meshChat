@@ -23,11 +23,19 @@ android {
     sourceSets.getByName("androidTest").java.srcDir("../../../tests/bench/security/android")
     sourceSets.getByName("androidTest").java.srcDir("../../../tests/integration/storage/android")
     sourceSets.getByName("androidTest").manifest.srcFile("../../../tests/integration/storage/android/AndroidManifest.xml")
+    sourceSets.getByName("test").java.srcDir("../../../tests/integration/organizer-tools/kotlin")
+    testOptions.unitTests.all {
+        it.systemProperty("jna.library.path", file("../../../.work/security-target/debug").absolutePath)
+        it.systemProperty("jna.tmpdir", file("../../../.work/tmp").absolutePath)
+    }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
     lint { warningsAsErrors = true; abortOnError = true; disable += setOf("GradleDependency", "AndroidGradlePluginVersion") }
 }
 kotlin.compilerOptions { jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17); allWarningsAsErrors.set(true) }
 dependencies {
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("net.java.dev.jna:jna:5.17.0")
+    testImplementation("com.google.zxing:core:3.4.1")
     implementation("androidx.annotation:annotation:1.9.1")
     implementation("net.java.dev.jna:jna:5.17.0@aar")
     implementation(files("../../../.work/security-sqlcipher/sqlcipher-4.17.0-aligned.aar"))

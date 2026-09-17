@@ -33,12 +33,13 @@ class GattDriver(
     private val peers = linkedMapOf<Long, Peer>()
     private var serial = 0L
     private var stopped = false
+    private var linkLimit = 6
     var stagingDrops = 0uL
         private set
     private fun dropped() { if (stagingDrops < ULong.MAX_VALUE) stagingDrops++ }
 
     private fun reserve(address: String, role: TransportRole): Peer? {
-        if (stopped || peers.size >= 6 || peers.values.any { it.address == address && it.role == role }) return null
+        if (stopped || peers.size >= linkLimit || peers.values.any { it.address == address && it.role == role }) return null
         val digest = java.security.MessageDigest.getInstance("SHA-256").digest(address.toByteArray(Charsets.US_ASCII)).copyOf(16)
         val permit = try { core.admitConnection(digest, clock()) } catch (_: TransportException.Busy) { return null }
         if (serial == Long.MAX_VALUE) { core.cancelConnection(permit, clock()); stop(); return null }
@@ -128,6 +129,21 @@ class GattDriver(
             val link = peers[id]?.link ?: return@guarded false
             try { effects(core.prepareProof(link, provider, clock())); true } catch (_: TransportException.Busy) { false }
         } } finally { provider.invalidate() }
+    }
+    fun connections(): List<ConnectionInfo> = guarded(emptyList()) {
+        val observations = core.observations(clock()).associateBy { it.link }
+        peers.values.map { p ->
+            val observation = observations[p.link]
+            ConnectionInfo(p.id, p.address, p.born, observation?.firstValidMs, observation?.novelty?.toInt())
+        }
+    }
+    fun power(setting: TransportPowerSetting?, battery: Int, charging: Boolean, visible: Int): TransportPower? = guarded(null) {
+        if (battery !in 0..100) return@guarded null
+        val result = core.updatePower(setting, battery.toUByte(), charging, visible.coerceIn(0, 64).toUShort(), clock())
+        linkLimit = result.linkLimit.toInt()
+        peers.values.filter { it.admission in result.cancelledAdmissions }.map { it.id }.forEach(::close)
+        effects(result.effects)
+        result
     }
     fun tick() = guarded(Unit) {
         val now = clock()

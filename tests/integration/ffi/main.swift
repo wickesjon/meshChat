@@ -119,6 +119,19 @@ func transportTrace() throws {
     _ = try b.receive(link: bl, reportedBytes: 71, bytes: ap.bytes, now: 1000)
     _ = try a.complete(link: al, token: ap.token, success: true, now: 1000)
     _ = try b.complete(link: bl, token: bp.token, success: true, now: 1000)
+    let vectorFile = URL(fileURLWithPath: FileManager.default.currentDirectoryPath).appendingPathComponent("tests/vectors/crypto/friend-v1.tsv")
+    let vectorLine = try String(contentsOf: vectorFile, encoding: .utf8).split(separator: "\n").first { $0.hasPrefix("peer_chat\t") }!
+    let hex = Array(vectorLine.split(separator: "\t")[1].utf8)
+    let signed = stride(from: 0, to: hex.count, by: 2).map { UInt8(String(bytes: hex[$0..<$0+2], encoding: .utf8)!, radix: 16)! }
+    var frame = Data([0, 0, UInt8(signed.count >> 8), UInt8(signed.count & 255)] + signed)
+    frame[frame.count - 1] ^= 1
+    _ = try b.receive(link: bl, reportedBytes: UInt64(frame.count), bytes: frame, now: 1000)
+    let unverified = try b.observations(now: 1000)
+    precondition(unverified.count == 1 && unverified[0].firstValidMs == nil)
+    frame[frame.count - 1] ^= 1
+    _ = try b.receive(link: bl, reportedBytes: UInt64(frame.count), bytes: frame, now: 1000)
+    let activity = try b.observations(now: 1000)
+    precondition(activity[0].firstValidMs == 1000 && activity[0].link == bl)
     _ = try a.disconnect(link: al, now: 1001)
     do { _ = try a.complete(link: al, token: ap.token, success: true, now: 1001); fatalError("accepted stale callback") } catch TransportError.Stale {}
     _ = try b.disconnect(link: bl, now: 1001)
@@ -126,6 +139,17 @@ func transportTrace() throws {
     _ = try b.tick(now: 1001)
     guard let last = try b.tick(now: 6001).events.last, case let .closed(link) = last else { fatalError("missing timeout") }
     precondition(link == stalled)
+    let saver = try b.updatePower(setting: .saver, batteryPercent: 40, charging: false, visiblePeers: 4, now: 6001)
+    precondition(saver.saver && saver.linkLimit == 3 && saver.scanOffMs == 50000 && saver.announceMs == 60000)
+    _ = try b.updatePower(setting: .auto, batteryPercent: 41, charging: false, visiblePeers: 4, now: 6001)
+    let waiting = try b.updatePower(setting: nil, batteryPercent: 41, charging: false, visiblePeers: 4, now: 66000)
+    precondition(waiting.saver)
+    let normal = try b.updatePower(setting: nil, batteryPercent: 41, charging: false, visiblePeers: 4, now: 66001)
+    precondition(!normal.saver && normal.linkLimit == 6)
+    let observations = try b.observations(now: 66001)
+    precondition(observations.isEmpty())
 }
 try transportTrace()
 print("MC-023 Swift real HELLO/proof, capacity refusal, stale callback and timeout passed")
+
+print("MC-024 Swift power policy, Auto hysteresis and bounded observations passed")

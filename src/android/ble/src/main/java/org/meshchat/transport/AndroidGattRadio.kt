@@ -3,6 +3,11 @@ package org.meshchat.transport
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.KeyguardManager
+import android.app.ActivityManager
+import android.content.Intent
+import android.content.IntentFilter
+import android.os.BatteryManager
+import android.location.LocationManager
 import android.bluetooth.*
 import android.bluetooth.le.*
 import android.content.Context
@@ -24,7 +29,7 @@ object MeshGatt {
     fun allowed(context: Context): Boolean {
         val permissions = if (Build.VERSION.SDK_INT >= 31) listOf(
             Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT,
-            Manifest.permission.BLUETOOTH_ADVERTISE, Manifest.permission.ACCESS_COARSE_LOCATION,
+            Manifest.permission.BLUETOOTH_ADVERTISE,
         ) else listOf(Manifest.permission.ACCESS_FINE_LOCATION)
         return permissions.all { context.checkSelfPermission(it) == PackageManager.PERMISSION_GRANTED }
     }
@@ -39,6 +44,7 @@ class AndroidGattRadio(
     private val context: Context,
     core: NativeTransport,
     event: (Long, TransportEvent) -> Unit,
+    private val status: (RadioState) -> Unit = {},
     private val stopped: () -> Unit = {},
 ) : GattRadio {
     private class Client(val gatt: BluetoothGatt) {
@@ -49,7 +55,23 @@ class AndroidGattRadio(
     private val handler = Handler(Looper.getMainLooper())
     private val manager = context.getSystemService(BluetoothManager::class.java)
     private val adapter = manager.adapter
-    private val driver = GattDriver(core, this, { SystemClock.elapsedRealtime().toULong() }, event)
+    private val clock = { SystemClock.elapsedRealtime().toULong() }
+    private val selection = ConnectionPolicy(clock)
+    private val scanning = ScanPolicy(clock)
+    private val driver = GattDriver(core, this, clock, event)
+    private var setting: TransportPowerSetting? = TransportPowerSetting.AUTO
+    private var nextPolicy = 0uL
+    private var scanMode = ScanMode.OFF
+    private var state = RadioState.STOPPED
+    private var foreground = true
+    private var saver = false
+    private var linkLimit = 6
+    private var powerStatus: PowerStatus? = null
+    fun currentPower(): PowerStatus? = synchronized(gate) { powerStatus }
+    data class PowerStatus(val saver: Boolean, val linkLimit: Int, val batteryTier: Int, val announceMs: ULong)
+    private fun report(value: RadioState) { if (state != value) { state = value; status(value) } }
+    fun currentState(): RadioState = synchronized(gate) { state }
+    fun powerSetting(value: TransportPowerSetting) = guarded { setting = value; nextPolicy = 0uL; policy() }
     private val clients = mutableMapOf<Long, Client>()
     private val peripherals = mutableMapOf<Long, BluetoothDevice>()
     private var server: BluetoothGattServer? = null
@@ -65,15 +87,15 @@ class AndroidGattRadio(
     private val notifications = NotificationQueue(::submitNotification) { id, success -> driver.completed(id, success) }
     private val timer = object : Runnable {
         override fun run() {
-            guarded { driver.tick() }
+            guarded { driver.tick(); if (clock() >= nextPolicy) policy() }
             synchronized(gate) { if (running) handler.postDelayed(this, 100) }
         }
     }
 
     fun start() = synchronized(gate) {
-        if (running || !MeshGatt.allowed(context) || adapter?.isEnabled != true) return@synchronized
+        if (running) return@synchronized
         running = true
-        guarded { openServer(); startScan(); handler.post(timer) }
+        guarded { openServer(); if (running) { policy(); if (running) handler.post(timer) } }
     }
     fun send(id: Long, bytes: ByteArray, traffic: TransportTraffic, cookie: ULong): Boolean {
         var accepted = false
@@ -89,23 +111,76 @@ class AndroidGattRadio(
     private fun guarded(work: () -> Unit): Unit = synchronized(gate) {
         if (!running) return@synchronized
         try {
-            if (!MeshGatt.allowed(context) || adapter?.isEnabled != true || context.getSystemService(KeyguardManager::class.java).isDeviceLocked) {
-                stop(); return@synchronized
+            val unavailable = when {
+                !MeshGatt.allowed(context) -> RadioState.PERMISSION_REQUIRED
+                adapter?.isEnabled != true -> RadioState.RADIO_DISABLED
+                context.getSystemService(KeyguardManager::class.java).isDeviceLocked -> RadioState.LOCKED
+                else -> null
             }
+            if (unavailable != null) { stop(unavailable); return@synchronized }
             work()
-        } catch (_: SecurityException) { stop() } catch (_: IllegalStateException) { stop() }
+        } catch (_: SecurityException) { stop(RadioState.PERMISSION_REQUIRED) } catch (_: IllegalStateException) { stop(RadioState.STOPPED) }
     }
-    private fun startScan() {
-        val native = adapter?.bluetoothLeScanner ?: return
+    private fun policy() {
+        nextPolicy = clock() + 1_000uL
+        val memory = ActivityManager.RunningAppProcessInfo()
+        ActivityManager.getMyMemoryState(memory)
+        foreground = memory.importance <= ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND
+        val battery = context.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+            ?: run { stop(RadioState.STOPPED); return }
+        val level = battery.getIntExtra(BatteryManager.EXTRA_LEVEL, -1)
+        val scale = battery.getIntExtra(BatteryManager.EXTRA_SCALE, -1)
+        if (level < 0 || scale <= 0 || level > scale) { stop(RadioState.STOPPED); return }
+        val visible = selection.visible(driver.connections())
+        val result = driver.power(setting, (level.toLong() * 100 / scale).toInt(),
+            (battery.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0)) != 0, visible)
+            ?: run { stop(RadioState.STOPPED); return }
+        setting = null
+        saver = result.saver
+        linkLimit = result.linkLimit.toInt()
+        powerStatus = PowerStatus(saver, linkLimit, result.batteryTier.toInt(), result.announceMs)
+        val proximity = context.checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+        if (!proximity) selection.clearRssi()
+        val restriction = discoveryRestriction(Build.VERSION.SDK_INT, foreground,
+            context.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED,
+            context.getSystemService(LocationManager::class.java).isLocationEnabled,
+            context.checkSelfPermission(Manifest.permission.ACCESS_BACKGROUND_LOCATION) == PackageManager.PERMISSION_GRANTED)
+        val mode = scanning.mode(saver, visible, foreground, restriction == null)
+        changeScan(mode)
+        report(if (restriction != null) restriction
+            else if (scanning.retrying || (mode != ScanMode.OFF && scanner == null)) RadioState.DISCOVERY_PAUSED else RadioState.ACTIVE)
+        val plan = selection.plan(driver.connections(), linkLimit)
+        plan.close.forEach { driver.lost(it) }
+        plan.connect?.let { address ->
+            // Teardown may replace the whole server, so recheck current slots.
+            if (selection.allowed(address, driver.connections(), linkLimit)) {
+                selection.attempted(address)
+                driver.connect(address)
+            }
+        }
+    }
+    private fun changeScan(mode: ScanMode) {
+        if (mode == scanMode && (mode == ScanMode.OFF || scanner != null)) return
+        scanner?.let { adapter?.bluetoothLeScanner?.stopScan(it) }
+        scanner = null
+        scanMode = mode
+        if (mode == ScanMode.OFF) return
+        val native = adapter?.bluetoothLeScanner ?: run { scanning.failed(); report(RadioState.DISCOVERY_PAUSED); return }
         val listener = object : ScanCallback() {
             override fun onScanResult(callbackType: Int, result: ScanResult) = guarded {
-                if (scanner === this) driver.connect(result.device.address)
+                if (scanner === this) {
+                    val proximity = context.checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+                    scanning.discovered(); scanning.received()
+                    selection.discovered(result.device.address, if (proximity) result.rssi else null)
+                }
             }
-            override fun onScanFailed(errorCode: Int) = guarded { if (scanner === this) scanner = null }
+            override fun onScanFailed(errorCode: Int) = guarded {
+                if (scanner === this) { scanner = null; scanning.failed(); report(RadioState.DISCOVERY_PAUSED) }
+            }
         }
         scanner = listener
         native.startScan(listOf(ScanFilter.Builder().setServiceUuid(ParcelUuid(MeshGatt.SERVICE)).build()),
-            ScanSettings.Builder().setScanMode(ScanSettings.SCAN_MODE_BALANCED).build(), listener)
+            ScanSettings.Builder().setScanMode(if (mode == ScanMode.BURST) ScanSettings.SCAN_MODE_LOW_LATENCY else ScanSettings.SCAN_MODE_BALANCED).build(), listener)
     }
     override fun connect(id: Long, address: String): Boolean {
         val device = adapter?.getRemoteDevice(address) ?: return false
@@ -183,9 +258,9 @@ class AndroidGattRadio(
         private fun id(device: BluetoothDevice): Long? = peripherals.entries.firstOrNull { it.value == device }?.key
         override fun onServiceAdded(status: Int, service: BluetoothGattService) = current {
             if (status != BluetoothGatt.GATT_SUCCESS || service.uuid != MeshGatt.SERVICE) { stop(); return@current }
-            val native = adapter?.bluetoothLeAdvertiser ?: return@current
+            val native = adapter?.bluetoothLeAdvertiser ?: run { stop(RadioState.DISCOVERY_PAUSED); return@current }
             val listener = object : AdvertiseCallback() {
-                override fun onStartFailure(errorCode: Int) = current { if (advertiser === this) advertiser = null }
+                override fun onStartFailure(errorCode: Int) = current { if (advertiser === this) stop(RadioState.DISCOVERY_PAUSED) }
             }
             advertiser = listener
             native.startAdvertising(AdvertiseSettings.Builder().setConnectable(true).setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_BALANCED).build(),
@@ -200,7 +275,9 @@ class AndroidGattRadio(
                 if (device.address in refusedAddresses || refusedAddresses.size >= 6) {
                     server?.cancelConnection(device); return@current
                 }
-                val handle = driver.incoming(device.address)
+                val handle = if (selection.allowed(device.address, driver.connections(), linkLimit, inbound = true)) {
+                    selection.attempted(device.address); driver.incoming(device.address)
+                } else null
                 if (handle == null) {
                     if (peripherals.isEmpty()) resetServer()
                     else { refusedAddresses.add(device.address); server?.cancelConnection(device) }
@@ -276,6 +353,8 @@ class AndroidGattRadio(
         else { rx.value = bytes; server?.notifyCharacteristicChanged(device, rx, false) == true }
     }
     override fun close(id: Long) {
+        val address = clients[id]?.gatt?.device?.address ?: peripherals[id]?.address
+        address?.let { selection.disconnected(it) }
         clients.remove(id)?.gatt?.let { gatt -> cleanup { gatt.disconnect() }; cleanup { gatt.close() } }
         if (peripherals.containsKey(id)) resetServer()
     }
@@ -300,9 +379,10 @@ class AndroidGattRadio(
     private inline fun cleanup(work: () -> Unit) {
         try { work() } catch (_: SecurityException) { } catch (_: IllegalStateException) { }
     }
-    fun stop(): Unit = synchronized(gate) {
+    fun stop(reason: RadioState = RadioState.STOPPED): Unit = synchronized(gate) {
         if (!running) return@synchronized
         running = false
+        report(reason)
         handler.removeCallbacks(timer)
         // Each native resource is attempted even if permission vanished midway.
         try { scanner?.let { adapter?.bluetoothLeScanner?.stopScan(it) } } catch (_: SecurityException) { }

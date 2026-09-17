@@ -1,14 +1,15 @@
 //! Native GATT lifecycle around the existing handshake, intake and scheduler.
 //! Transport admission never grants display, identity or delivery authority.
 use crate::{
-    LinkHandle, SendPath, framing,
+    LinkHandle, SendPath, codec, framing,
     friends::{Friends, Role},
     identity::{IdentityKeySession, PublicIdentity},
     ingress::{Ingress, Outcome, State},
-    power::Platform,
+    power::{self, Platform},
     relay::{self, Relay},
     storage::EncryptedStore,
 };
+use sha2::{Digest, Sha256};
 use std::sync::{Arc, Mutex};
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error, uniffi::Error)]
@@ -95,6 +96,37 @@ pub struct TransportConnection {
     pub link: LinkHandle,
     pub effects: TransportEffects,
 }
+/// User settings only; Beacon integration remains MC-033.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum TransportPowerSetting {
+    Auto,
+    Normal,
+    Saver,
+}
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct TransportPower {
+    pub saver: bool,
+    pub link_limit: u16,
+    pub battery_tier: u8,
+    pub scan_on_ms: u64,
+    pub scan_off_ms: u64,
+    pub announce_ms: u64,
+    pub cancelled_admissions: Vec<u64>,
+    pub effects: TransportEffects,
+}
+/// Local connection-selection hints, never identity, display or delivery authority.
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct TransportObservation {
+    pub link: LinkHandle,
+    /// Budget-admitted, text-valid clear CHAT/ANNOUNCE, including an explicitly
+    /// work-budgeted full-key friend signature check. Opaque/encrypted and
+    /// unverified signed bytes never refresh this timestamp. No trust is granted.
+    pub last_valid_ms: Option<u64>,
+    pub first_valid_ms: Option<u64>,
+    /// Missing local samples or expired/absent peer digest means unknown.
+    /// Per-mille of local recent IDs absent from the advisory peer digest.
+    pub novelty: Option<u16>,
+}
 struct PendingSend {
     token: u64,
     attempt: relay::Attempt,
@@ -109,6 +141,9 @@ struct Link {
     proof: Option<[u8; 66]>,
     proof_queued: bool,
     pending: Option<PendingSend>,
+    last_valid_ms: Option<u64>,
+    first_valid_ms: Option<u64>,
+    digest: Option<(u64, [u8; 256])>,
 }
 struct Admission {
     token: u64,
@@ -124,6 +159,9 @@ struct Runtime {
     links: Vec<Link>,
     admissions: Vec<Admission>,
     failed: bool,
+    power: power::Policy,
+    link_limit: usize,
+    recent: Vec<([u8; 8], u64)>,
 }
 impl Runtime {
     fn next(&mut self) -> Result<u64, TransportError> {
@@ -146,6 +184,7 @@ impl Runtime {
             return Err(TransportError::Unavailable);
         }
         self.now = now;
+        self.recent.retain(|(_, at)| now - *at < 60_000);
         self.admissions.retain(|a| now < a.born + 30_000);
         self.ingress
             .advance(now)
@@ -205,6 +244,82 @@ impl Runtime {
             });
         }
         Ok(())
+    }
+    fn consolidate(&mut self, out: &mut TransportEffects) -> Result<(), TransportError> {
+        for link in self.friends.duplicate_links_to_close() {
+            self.close(&link, out)?;
+        }
+        Ok(())
+    }
+    fn remember(&mut self, id: [u8; 8]) {
+        if self.recent.iter().any(|(old, _)| *old == id) {
+            return;
+        }
+        if self.recent.len() == 200 {
+            self.recent.remove(0);
+        }
+        self.recent.push((id, self.now));
+    }
+    /// Activity-only verification does not resolve pending content, write history,
+    /// pin identity or confer display authority. The content owner still performs
+    /// its own charged acceptance. First signed content and every signed ANNOUNCE
+    /// include a full key; missing-key packets remain ineligible for this hint.
+    fn signed_activity(&mut self, index: usize, raw: &[u8]) -> bool {
+        let Ok(packet) = codec::parse(raw, codec::Context::Live) else {
+            return false;
+        };
+        let signature = match packet.payload() {
+            codec::Payload::Chat {
+                signature: codec::Signature::Friend(sig),
+                ..
+            } if packet.header().channel_id != [0x0e, 0x9d, 0x09, 0x74] => sig,
+            codec::Payload::Announce {
+                signature: Some(sig),
+                ..
+            } => sig,
+            _ => return false,
+        };
+        let Some(key) = signature
+            .public_key
+            .and_then(|key| <[u8; 32]>::try_from(key).ok())
+        else {
+            return false;
+        };
+        let link = &self.links[index].handle;
+        let Ok(Some(permit)) = self.ingress.begin_signature(link, raw, self.now) else {
+            return false;
+        };
+        if self.ingress.finish_work(permit).is_err() {
+            return false;
+        }
+        // MC-008 friend-sign/v1: same immutable-header/body transcript as Friends.
+        let body = &raw[26..raw.len() - 64];
+        let mut transcript = b"meshfest/friend-sign/v1\0".to_vec();
+        transcript.extend_from_slice(&raw[..3]);
+        transcript.extend_from_slice(&raw[4..26]);
+        transcript.extend_from_slice(&(body.len() as u16).to_be_bytes());
+        transcript.extend_from_slice(body);
+        Sha256::digest(key)[..8] == packet.header().sender_id
+            && crate::friends::verify(&key, &transcript, signature.signature)
+            && crate::text::validate_payload(packet.payload()).is_ok()
+    }
+    fn activity(&mut self, index: usize, raw: &[u8]) {
+        let Ok(packet) = codec::parse(raw, codec::Context::Live) else {
+            return;
+        };
+        match packet.payload() {
+            codec::Payload::Chat { .. } => {
+                self.links[index].last_valid_ms = Some(self.now);
+                self.links[index].first_valid_ms.get_or_insert(self.now);
+                self.remember(packet.header().message_id);
+            }
+            codec::Payload::Announce { digest, .. } => {
+                self.links[index].last_valid_ms = Some(self.now);
+                self.links[index].first_valid_ms.get_or_insert(self.now);
+                self.links[index].digest = digest.try_into().ok().map(|bytes| (self.now, bytes));
+            }
+            _ => {}
+        }
     }
     fn enqueue(
         &mut self,
@@ -282,8 +397,129 @@ impl NativeTransport {
                 links: Vec::with_capacity(6),
                 admissions: Vec::with_capacity(6),
                 failed: false,
+                power: power::Policy::new(Platform::Android, monotonic_ms),
+                link_limit: 6,
+                recent: Vec::with_capacity(200),
             }),
         })
+    }
+    /// None retains the current user setting and Auto hysteresis. Mode changes
+    /// preserve all node/address credits; cancelled setup permits are returned
+    /// so the native owner can release those resources too.
+    pub fn update_power(
+        &self,
+        setting: Option<TransportPowerSetting>,
+        battery_percent: u8,
+        charging: bool,
+        visible_peers: u16,
+        now: u64,
+    ) -> Result<TransportPower, TransportError> {
+        if battery_percent > 100 || visible_peers > 64 {
+            return Err(TransportError::Invalid);
+        }
+        let mut s = self.state.lock().map_err(|_| TransportError::Unavailable)?;
+        s.clock(now)?;
+        let input = power::Inputs {
+            battery_percent,
+            charging,
+            visible_peers: usize::from(visible_peers),
+            auto_beacon: false,
+        };
+        let params = if let Some(setting) = setting {
+            s.power.set(
+                match setting {
+                    TransportPowerSetting::Auto => power::Setting::Auto,
+                    TransportPowerSetting::Normal => power::Setting::Normal,
+                    TransportPowerSetting::Saver => power::Setting::Saver,
+                },
+                input,
+                now,
+            )
+        } else {
+            s.power.update(input, now)
+        }
+        .map_err(|_| TransportError::Invalid)?;
+        let mut out = TransportEffects::default();
+        let mut cancelled = Vec::new();
+        while s.links.len() + s.admissions.len() > params.max_links {
+            if let Some(admission) = s.admissions.pop() {
+                cancelled.push(admission.token);
+            } else {
+                let link = s
+                    .links
+                    .last()
+                    .ok_or(TransportError::Unavailable)?
+                    .handle
+                    .clone();
+                s.close(&link, &mut out)?;
+            }
+        }
+        let tier = if charging || battery_percent == 100 {
+            3
+        } else if battery_percent < 15 {
+            0
+        } else if battery_percent < 40 {
+            1
+        } else {
+            2
+        };
+        s.ingress
+            .set_link_limit(params.max_links)
+            .map_err(|_| TransportError::Unavailable)?;
+        s.relay
+            .set_power(params.mode, tier, now)
+            .map_err(|_| TransportError::Unavailable)?;
+        s.link_limit = params.max_links;
+        Ok(TransportPower {
+            saver: params.mode == power::Mode::Saver,
+            link_limit: params.max_links as u16,
+            battery_tier: tier,
+            scan_on_ms: params.scan_on_ms,
+            scan_off_ms: params.scan_off_ms,
+            announce_ms: params.announce_ms,
+            cancelled_admissions: cancelled,
+            effects: out,
+        })
+    }
+    pub fn observations(&self, now: u64) -> Result<Vec<TransportObservation>, TransportError> {
+        let mut s = self.state.lock().map_err(|_| TransportError::Unavailable)?;
+        s.clock(now)?;
+        Ok(s.links
+            .iter()
+            .map(|link| {
+                let novelty = link
+                    .digest
+                    .as_ref()
+                    .filter(|(at, _)| now - *at < 60_000)
+                    .filter(|_| !s.recent.is_empty())
+                    .map(|(_, bits)| {
+                        let absent = s
+                            .recent
+                            .iter()
+                            .filter(|(id, _)| {
+                                let mut hash = Sha256::new();
+                                hash.update(b"meshfest-digest-v1");
+                                hash.update(id);
+                                let digest = hash.finalize();
+                                let a = u64::from_be_bytes(digest[..8].try_into().unwrap()) % 2048;
+                                let b =
+                                    u64::from_be_bytes(digest[8..16].try_into().unwrap()) % 2048;
+                                !(0..6).all(|i| {
+                                    let p = ((a + i * b) % 2048) as usize;
+                                    bits[p / 8] & (0x80 >> (p % 8)) != 0
+                                })
+                            })
+                            .count();
+                        (absent * 1000 / s.recent.len()) as u16
+                    });
+                TransportObservation {
+                    link: link.handle.clone(),
+                    last_valid_ms: link.last_valid_ms,
+                    first_valid_ms: link.first_valid_ms,
+                    novelty,
+                }
+            })
+            .collect())
     }
     /// Reserve BEFORE initiating a central connection or accepting a peripheral.
     /// Address is a process-local 16-byte digest, not an authenticated identity.
@@ -291,7 +527,7 @@ impl NativeTransport {
         let address = address.try_into().map_err(|_| TransportError::Invalid)?;
         let mut s = self.state.lock().map_err(|_| TransportError::Unavailable)?;
         s.clock(now)?;
-        if s.links.len() + s.admissions.len() >= 6
+        if s.links.len() + s.admissions.len() >= s.link_limit
             || !s
                 .ingress
                 .connection_attempt(address, now)
@@ -373,6 +609,9 @@ impl NativeTransport {
             proof: None,
             proof_queued: false,
             pending: None,
+            last_valid_ms: None,
+            first_valid_ms: None,
+            digest: None,
         });
         let mut out = TransportEffects::default();
         if let Err(error) = s.enqueue(&link, &hello, relay::Traffic::Transport(2), 1, &mut out) {
@@ -457,6 +696,13 @@ impl NativeTransport {
                 )
                 .map_err(|_| TransportError::Stale)?;
             if let Outcome::Complete { len, state, .. } = result {
+                let clear = matches!(state, State::Unverified | State::Duplicate)
+                    && output.get(2).is_some_and(|flags| flags & 7 == 0);
+                let signed = matches!(state, State::Pending | State::PendingDuplicate)
+                    && s.signed_activity(i, &output[..len]);
+                if clear || signed {
+                    s.activity(i, &output[..len]);
+                }
                 let intake = match state {
                     State::Unverified => TransportIntake::Unverified,
                     State::Opaque => TransportIntake::Opaque,
@@ -472,6 +718,7 @@ impl NativeTransport {
                 });
             }
         }
+        s.consolidate(&mut out)?;
         Ok(out)
     }
     /// Trusted protocol-owner egress. Caller must already have applied the
@@ -504,6 +751,11 @@ impl NativeTransport {
             cookie,
             &mut out,
         )?;
+        if let Ok(packet) = codec::parse(&bytes, codec::Context::Live) {
+            if packet.header().kind == 1 {
+                s.remember(packet.header().message_id);
+            }
+        }
         Ok(out)
     }
     /// One bounded batch, at most one outstanding GATT value per live link.
@@ -602,6 +854,7 @@ impl NativeTransport {
             s.close(&link, &mut out)?;
         }
         Runtime::results(events, &mut out);
+        s.consolidate(&mut out)?;
         Ok(out)
     }
     /// Any capacity change, permission loss, radio disable, lock or native

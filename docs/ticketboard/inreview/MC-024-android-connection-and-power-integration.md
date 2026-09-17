@@ -18,7 +18,7 @@ Implement post-handshake duplicate-link resolution, bounded connection slots, no
 
 ## Scope
 
-Permitted paths (relative to repository root): `src/android/ble/**`, `src/android/power/**`, `tests/bench/android/**`.
+Permitted paths (relative to repository root): `src/android/ble/**`, `src/android/power/**`, `tests/bench/android/**`, `src/core/src/native_transport.rs`, `tests/integration/transport/**`, `tests/integration/ffi/**`, `docs/testing/**`.
 
 Also permitted: this ticket and generated ticketboard index/diagram changes required by its workflow. No unrelated file changes or work outside the repository. Read the [design](../../mesh-chat-design.md), its §0 corrections, and the [active plan](../implementation-plan.md). A necessary change outside these paths needs an explicit scope decision.
 
@@ -46,7 +46,7 @@ A triggered fallback must be recorded with evidence. It does not authorize weake
 
 Scheduling approved 2026-09-14 in [the validation policy](../../decisions/local-validation-policy.md#physical-acceptance-scheduling--approved-2026-09-14). Physical OEM acceptance transfers to MC-025; native build checks and bounded-state regression tests remain implementation gates.
 
-Not implemented. Record commands, versions, reproducible inputs and results here. For manual/hardware checks include device/OS, duration and report paths. No test or review is claimed yet.
+Implementation and validation are in progress on the dedicated branch. No physical test or completed review is claimed. The current evidence below supersedes this ticket's original backlog state.
 
 ## Review and merge
 
@@ -55,19 +55,19 @@ Not implemented. Record commands, versions, reproducible inputs and results here
 - Squash commit title: `MC-024: Android connection and power integration`.
 - Completion becomes effective only when the reviewed squash commit lands on main.
 
-## Proposed core-interface scope extension
+## Approved core-interface scope extension
 
-Status: awaiting explicit scope decision. No MC-024 production implementation has started.
+Status: approved by the user on 2026-09-16. Implementation starts after both hard dependencies completed on main.
 
 ### Evidence of the gap
 
-MC-024 permits only `src/android/ble/**`, `src/android/power/**` and `tests/bench/android/**`, plus its own ticket and generated board. Its acceptance requires authenticated duplicate-link consolidation and the existing core Auto/Saver/Normal policy.
+Before the extension, MC-024 permitted only `src/android/ble/**`, `src/android/power/**` and `tests/bench/android/**`, plus its own ticket and generated board. Its acceptance requires authenticated duplicate-link consolidation and the existing core Auto/Saver/Normal policy.
 
 The completed MC-023 `NativeTransport` owns Friends, Ingress and Relay privately and currently fixes admission at six Normal-mode links. Rust already implements `Friends::duplicate_links_to_close` in `src/core/src/friends/proof.rs`, `power::Policy`, `Relay::set_power` and `Ingress::set_link_limit`, but none of those operations is exported by the transport owner. Kotlin cannot reach them through generated bindings. Recreating authenticated arbitration or resetting the core to switch modes would violate existing ownership/budget invariants.
 
-### Narrow extension requested
+### Approved narrow extension
 
-Add `src/core/src/native_transport.rs`, `tests/integration/transport/**`, `tests/integration/ffi/**`, and `docs/testing/**` to MC-024, solely for this integration and evidence. Reuse the existing test registration and module; no manifest, dependency, lockfile or wire-contract change is proposed. Existing dependencies MC-023 and MC-014 already cover Friends through MC-023/MC-019.
+Approved additional paths: `src/core/src/native_transport.rs`, `tests/integration/transport/**`, `tests/integration/ffi/**`, and `docs/testing/**` to MC-024, solely for this integration and evidence. Reuse the existing test registration and module; no manifest, dependency, lockfile or wire-contract change is proposed. Existing dependencies MC-023 and MC-014 already cover Friends through MC-023/MC-019.
 
 Extend the production transport boundary to apply the existing core power policy and authenticated duplicate-link recommendations, and return bounded, explicitly qualified connection observations required by native selection. Core parsing/authentication remains in Rust. Raw byte arrival, HELLO claims, opaque traffic and pending verification must not be reported as valid CHAT/ANNOUNCE or authenticated peer novelty; expose qualification explicitly and test invalid traffic against idle eviction. Native code uses local discovery/RSSI, core observations and lifecycle state to schedule connections/scans; peer claims never grant identity or display authority. Do not export raw private keys or retain unlocked sessions.
 
@@ -79,8 +79,20 @@ Exercise both proved duplicate roles, unproved/sole asymmetric links, repeated m
 
 Run Rust formatting/clippy/debug/release/security gates, real Kotlin and Swift binding regressions, Android build/lint/APK checks and affected Mac native checks. Use the ready-PR, separate Terra medium review, correction and squash-merge flow. Physical OEM/radio/battery acceptance remains MC-025; protected-key and independent assessment requirements remain unchanged.
 
-### Decision requested
+### Scope decision
 
-Approve these four additional path groups for MC-024 while preserving the current product, wire and security requirements. Until approval, the ticket remains backlog and only this proposal is drafted.
+The user approved these four additional path groups for MC-024 while preserving the current product, wire and security requirements.
 
-Drafted on the dedicated MC-024 branch from main `c3462db52d143a97e36a27524ccabd92b1610b46` after MC-023 PR #27 merged. Both hard dependencies are complete. The blocker is the explicit scope decision above; permitted paths remain unchanged pending that decision.
+Drafted on the dedicated MC-024 branch from main `c3462db52d143a97e36a27524ccabd92b1610b46` after MC-023 PR #27 merged. Both hard dependencies are complete. The explicit scope decision is now approved; implementation is in progress within the extended paths.
+
+## Implementation candidate
+
+The approved bridge applies the existing core Auto/Normal/Saver policy, updates ingress/scheduler limits without resetting credits, returns cancellation effects for cap shrink, and consolidates duplicate connections through the existing proved-session ordering. Core observations expose first/latest qualifying activity and bounded, expiring advisory digest overlap. Full-key friend signatures use an additional budgeted strict activity check; pending content acceptance remains separate. No native parser, key retention, dependency or wire change was introduced.
+
+The Android driver uses a bounded 64-record connection policy, unseen/novelty/RSSI selection, reserved exploration slots, five-minute initial-idle blacklist, bounded reconnect/scanning backoff and explicit degraded/stopped states. Existing server-epoch teardown semantics remain conservative. Battery/charging and actual foreground state drive the core policy; fine/background location restrictions pause scanning visibly. Provider lock/radio/permission loss and service stop close the generation. The application can read the applied ANNOUNCE cadence and battery tier; later feature owners supply actual announcement content.
+
+Implementation choices, application-entry obligations, activity qualification, bounds, source references and remaining physical ownership are recorded in [the connection-policy guide](../../testing/MC-024-android-connection-policy.md).
+
+Current local evidence: Rust/cargo 1.85.1, Python 3.14.4, JDK 17.0.15+6, Gradle 8.13 and Kotlin 2.2.0. All 160 core tests pass in debug and release; formatting and all-target/all-feature clippy with warnings denied pass. Dependency advisory/bans/licenses/sources checks pass with only existing unmatched allowance warnings. Host binding generation and Android arm64-v8a/x86_64 release builds pass with NDK 27.3.13750724. The first Android debug/release/lint candidate and its JVM suite passed; final policy/FFI regressions and Mac execution are still pending. An initial nullable battery-read compiler error and a Windows DLL-in-use rebuild were corrected/sequenced; neither failed invocation is counted as passed. Logs are in `.work/mc024/`.
+
+Review and applicable native completion remain mandatory before merge. No physical radio, OEM, battery or protected-key certification is claimed.

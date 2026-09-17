@@ -261,6 +261,18 @@ jobs:
                 CODE_SIGNING_ALLOWED=NO build
             done
           done
+      - name: Native iOS feature and UI acceptance
+        run: python3 -B tests/integration/ios-ui/run_apple.py
+      - name: Retain synthetic iOS UI acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: mc035-ios-ui
+          include-hidden-files: true
+          retention-days: 7
+          path: |
+            .work/ios-ui/native.log
+            .work/ios-ui/results-*.xcresult
       - name: Build unsigned iOS BLE probe
         run: |
           mkdir -p .work/tmp .work/ble-module-cache

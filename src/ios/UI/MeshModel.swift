@@ -268,7 +268,7 @@ struct MeshState {
         defer { clearCandidates() }
         try storage.operation { db in
             try staff.importConfirmed(generation: identity.load().identity.generation, candidate: &staffCandidate) { uri in
-                let session = try requiredCore().importStaffKey(store: db, uri: uri, now: clock(), wall: wall); try session.invalidate()
+                let session = try requiredCore().importStaffKey(store: db, uri: uri, now: clock(), wall: wall); session.invalidate()
             }
         }
         try refreshThrowing()
@@ -395,7 +395,7 @@ struct MeshState {
         } else if let name = state.selected {
             if name == "#event updates" && state.events.contains(where: { $0.active }) {
                 if try submitProtected({ core, token in try storage.operation { db in try staff.access(generation: identity.load().identity.generation) { uri in
-                    let session = try core.importStaffKey(store: db, uri: uri, now: clock(), wall: wall); defer { try? session.invalidate() }
+                    let session = try core.importStaffKey(store: db, uri: uri, now: clock(), wall: wall); defer { session.invalidate() }
                     return try core.postEvent(store: db, session: session, nickname: state.nickname, text: text, avatar: state.avatar, pinExpiry: pinExpiry, cookie: token, now: clock(), wall: wall)
                 } } }) { state.posted += 1 }
             } else {

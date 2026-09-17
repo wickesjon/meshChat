@@ -39,6 +39,7 @@ android {
         getByName("test").java.srcDir(rootProject.file("../../tests/integration/ffi/kotlin"))
         getByName("test").java.srcDir(rootProject.file("../../tests/integration/android-ui/kotlin"))
         getByName("androidTest").java.srcDir(rootProject.file("../../tests/integration/android-ui/android"))
+        getByName("androidTest").assets.srcDir(rootProject.file("../../.work/mc030/fixtures"))
         getByName("test").java.srcDir(rootProject.file("../../tests/integration/sharing/kotlin"))
         getByName("androidTest").java.srcDir(rootProject.file("../../tests/integration/sharing/android"))
         getByName("test").java.srcDir(rootProject.file("../../tests/integration/billing/kotlin"))

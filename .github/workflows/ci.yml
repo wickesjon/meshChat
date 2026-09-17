@@ -123,6 +123,8 @@ jobs:
         run: |
           python3 -B src/android/security/build_sqlcipher.py
           python3 -B src/android/ui/build_graphics.py
+      - name: Generate synthetic organizer fixtures
+        run: cargo test --locked -p meshchat-core --test native_organizer generate_native_organizer_fixtures
       - name: Android build and lint
         working-directory: src/android
         run: |
@@ -174,6 +176,7 @@ jobs:
           python3 -B tests/bench/security/run_android_emulator.py --serial emulator-5554
           python3 -B tests/integration/storage/run_android.py --serial emulator-5554
           python3 -B tests/integration/android-ui/run_emulator.py --serial emulator-5554
+          python3 -B tests/integration/android-ui/run_organizer_emulator.py --serial emulator-5554
           python3 -B tests/integration/android-ui/run_friends_emulator.py --serial emulator-5554
           python3 -B tests/integration/sharing/run_android.py --serial emulator-5554
           python3 -B tests/integration/billing/run_android.py --serial emulator-5554
@@ -188,6 +191,7 @@ jobs:
           path: |
             .work/mc028/screenshots
             .work/mc029/screenshots/*.png
+            .work/mc030/screenshots/*.png
             .work/mc032/screenshots/*.png
             .work/mc033/screenshots/*.png
             .work/security-sqlcipher/sqlcipher-4.17.0-aligned.aar
@@ -221,6 +225,7 @@ jobs:
           python3 -B src/core/build_bindings.py ios
       - name: Swift host FFI regression
         run: |
+          cargo test --locked -p meshchat-core --test native_organizer generate_native_organizer_fixtures
           xcrun swiftc -swift-version 6 -warnings-as-errors -D MC026_DRIVER_TESTS \
             -module-cache-path "$PWD/.work/clang-module-cache" \
             -I .work/ffi/swift -Xcc -fmodule-map-file=.work/ffi/swift/meshchat_coreFFI.modulemap \

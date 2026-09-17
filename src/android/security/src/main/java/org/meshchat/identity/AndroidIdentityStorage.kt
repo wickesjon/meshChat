@@ -65,7 +65,7 @@ internal class AndroidIdentityStorage(context: Context, name: String = "meshchat
     }
 }
 
-internal class AndroidIdentityProtection(private val context: Context, private val alias: String = "org.meshchat.identity.wrapping.v1") : IdentityProtection {
+internal class AndroidIdentityProtection(private val context: Context, private val alias: String = "org.meshchat.identity.wrapping.v1", private val plainSize: IntRange = 64..64) : IdentityProtection {
     private val keyguard get() = context.getSystemService(KeyguardManager::class.java)
     private fun store() = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
     override fun requireUnlocked() {
@@ -100,7 +100,7 @@ internal class AndroidIdentityProtection(private val context: Context, private v
         cipher.iv + cipher.doFinal(plain)
     }
     override fun open(cipher: ByteArray, aad: ByteArray): ByteArray = operation {
-        if (cipher.size != 12 + 64 + 16) throw IdentityProviderException(IdentityFailure.INVALID_INPUT)
+        if (cipher.size - 28 !in plainSize) throw IdentityProviderException(IdentityFailure.INVALID_INPUT)
         val engine = Cipher.getInstance("AES/GCM/NoPadding")
         engine.init(Cipher.DECRYPT_MODE, key(), GCMParameterSpec(128, cipher.copyOfRange(0, 12)))
         engine.updateAAD(aad)

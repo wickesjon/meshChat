@@ -529,6 +529,9 @@ impl NativeTransport {
         if pending.token != token {
             return Err(MessagingError::Stale);
         }
+        if s.organizer.guarded(&link, pending.cookie) {
+            return Err(MessagingError::Unavailable); // Requires wall-clock organizer revalidation.
+        }
         if let Some(pin) = pending.pin.clone() {
             s.friends.validate_send(&store, &pin)?;
         }

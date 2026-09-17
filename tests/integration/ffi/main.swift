@@ -223,3 +223,29 @@ func messagingTrace() throws {
     print("MC-029 Swift inert proposals, full tuple, opaque pin handle and replacement/removal PASS")
 }
 try messagingTrace()
+
+func organizerTrace() throws {
+    let source=try String(contentsOfFile:".work/mc030/fixtures/events.tsv",encoding:.utf8)
+    let fixtures=Dictionary(uniqueKeysWithValues:source.split(separator:"\n").map {line in
+        let p=line.split(separator:"\t",maxSplits:1);return (String(p[0]),String(p[1]))
+    })
+    let wall=Int64(Date().timeIntervalSince1970)
+    let db=try TransportSql();defer {db.finish()}
+    let identity=try IdentityKeySession.importUnlocked(material:Data(repeating:30,count:64),generation:Data(repeating:30,count:16))
+    let own=try identity.publicIdentity()
+    let store=try EncryptedStore.open(db:db,generation:own.generation,create:true,now:wall)
+    let core=try NativeTransport(store:store,identity:own,instanceNonce:30,monotonicMs:0)
+    let event=try eventProposal(uri:fixtures["event"]!)
+    let before=try core.eventCards(store:store,wall:wall);precondition(before.isEmpty)
+    do {_=try core.importStaffKey(store:store,uri:fixtures["staff"]!,now:0,wall:wall);fatalError("unadopted import")}
+    catch OrganizerError.Authority {}
+    try core.confirmEvent(store:store,uri:fixtures["event"]!,now:0,wall:wall)
+    let cards=try core.eventCards(store:store,wall:wall);precondition(cards.count==1 && cards[0].active && event.fingerprint.count==79)
+    let session=try core.importStaffKey(store:store,uri:fixtures["staff"]!,now:1000,wall:wall);session.invalidate()
+    do {_=try core.importStaffKey(store:store,uri:fixtures["expired"]!,now:1000,wall:wall);fatalError("expired import")}
+    catch OrganizerError.Authority {}
+    try core.removeEvent(store:store,key:event.key,wall:wall)
+    let removed=try core.eventCards(store:store,wall:wall);precondition(removed.isEmpty)
+    print("MC-030 Swift production organizer adoption, protected-session boundary and expired import PASS; synthetic SQL")
+}
+try organizerTrace()

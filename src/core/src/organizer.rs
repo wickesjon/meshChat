@@ -696,6 +696,7 @@ impl Organizer {
         let mut provenance = subject.clone();
         provenance.extend_from_slice(&root.bundle);
         provenance.extend_from_slice(&authority.credential);
+        provenance.extend_from_slice(&root.revision.to_be_bytes());
         let mut immutable = raw.to_vec();
         immutable[3] = 0;
         Ok(store.accept_authenticated(
@@ -857,6 +858,91 @@ impl Organizer {
         }
         *posted = true;
         Ok(Some(raw))
+    }
+    /// Already budget-admitted control bytes from the native transport owner.
+    pub(crate) fn admitted_control(
+        &mut self,
+        raw: &[u8],
+        now: u64,
+    ) -> Result<Option<Vec<u8>>, Error> {
+        self.advance(now, None)?;
+        let packet = codec::parse(raw, codec::Context::Live).map_err(|_| Error::Invalid)?;
+        match packet.payload() {
+            codec::Payload::CredentialOffer(c) => self.cache(c.raw, None, false),
+            codec::Payload::CredentialRequest {
+                root_id,
+                staff_key_id,
+            } => {
+                let matches = self
+                    .cache
+                    .iter()
+                    .filter(|c| {
+                        codec::credential(&c.raw).is_ok_and(|v| {
+                            v.root_id == root_id && hint(v.staff_public_key) == staff_key_id
+                        })
+                    })
+                    .collect::<Vec<_>>();
+                if let [value] = matches.as_slice() {
+                    return Ok(Some(value.raw.clone()));
+                }
+            }
+            _ => {}
+        }
+        Ok(None)
+    }
+    /// History provenance is written only by authenticated acceptance. Rebind
+    /// the exact stored root bundle to the current adoption before displaying.
+    pub(crate) fn historical_authority(
+        &mut self,
+        store: &EncryptedStore,
+        item: &HistoryItem,
+        wall: i64,
+    ) -> Result<Option<Authority>, Error> {
+        self.reload(store, Some(wall))?;
+        let p = &item.provenance;
+        if p.len() < 288 || p[0] != 3 {
+            return Ok(None);
+        }
+        if store.ambiguous_target(p[..65].to_vec(), item.message_id.clone())? {
+            return Ok(None);
+        }
+        if p.len() != 166 + 114 + usize::from(p[215]) + 8 {
+            return Ok(None);
+        }
+        let revision = u64::from_be_bytes(p[p.len() - 8..].try_into().unwrap());
+        let Some(root) = self
+            .roots
+            .iter()
+            .find(|r| r.key == p[1..33] && r.bundle == p[65..166] && r.revision == revision)
+        else {
+            return Ok(None);
+        };
+        let c = codec::credential(&p[166..p.len() - 8]).map_err(|_| Error::Invalid)?;
+        if c.staff_public_key != &p[33..65] {
+            return Ok(None);
+        }
+        let packet =
+            codec::parse(&item.body, codec::Context::StoredChat).map_err(|_| Error::Invalid)?;
+        let pin_expiry = match packet.payload() {
+            codec::Payload::Chat {
+                signature:
+                    codec::Signature::Organizer {
+                        pin_state: 1,
+                        pin_expiry,
+                        ..
+                    },
+                ..
+            } if pin_expiry <= c.not_after && pin_expiry <= root.expiry => Some(pin_expiry),
+            _ => None,
+        };
+        Ok(Some(Authority {
+            root: root.key,
+            revision: root.revision,
+            staff: p[33..65].try_into().unwrap(),
+            credential: p[166..p.len() - 8].to_vec(),
+            generation: self.generation,
+            pin_expiry,
+        }))
     }
     pub fn cache_count(&self) -> usize {
         self.cache.len()

@@ -17,6 +17,7 @@ pub mod links;
 pub mod native_channels;
 pub mod native_transport;
 pub use native_transport::messaging as native_messaging;
+pub use native_transport::organizer as native_organizer;
 pub mod organizer;
 pub mod power;
 pub mod relay;

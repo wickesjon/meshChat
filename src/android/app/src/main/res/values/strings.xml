@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">MeshChat</string>
+    <string name="private_staff_scan">Private staff provisioning · do not share or photograph</string>
 </resources>

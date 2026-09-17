@@ -768,7 +768,8 @@ impl NativeTransport {
                         now,
                         &mut |_| {},
                     );
-                    return Ok(out);
+                    // Preserve the existing read-only Received event for native
+                    // consumers; the cache owner has already handled serving.
                 }
                 // Requesting/history presentation is owned separately; an
                 // unsolicited stored wrapper never becomes live CHAT here.

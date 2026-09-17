@@ -26,6 +26,9 @@ class BeaconUiTest {
             assertTrue("Manual mode must reopen from encrypted settings",model.screen.beaconRequested)
             assertTrue(model.screen.autoBeacon)
         }
+        // This emulator may have no Bluetooth radio. Activation must still
+        // attempt the real service and report its actual platform limitation.
+        waitFor {model.screen.status!="Nearby connection is off"}
         ui.onNodeWithText("Hold 2 seconds to exit").performScrollTo().assertIsDisplayed()
         ui.onNodeWithText("Hold 2 seconds to exit").performTouchInput {click()}
         assertTrue("A pocket tap must not exit",model.screen.beaconRequested)

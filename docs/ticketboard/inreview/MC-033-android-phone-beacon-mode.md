@@ -59,8 +59,9 @@ Implemented: existing Beacon core policy, bounded native cache/SYNC serving, pow
 ## Review and merge
 
 - Branch: `ticket/MC-033-android-phone-beacon-mode`.
-- Review/PR: pending.
+- Review/PR: [PR #34](https://github.com/wickesjon/meshChat/pull/34). Separate `gpt-5.6-terra` medium review at `336fcd7189b16846aaff49d032dd0fc4d6fc6b30` found one P1: enabling/restoring Beacon preferences did not start an absent transport service. The fix starts the existing service through its unchanged permission/lock checks. No other actionable findings; final follow-up review and evidence remain pending. Native validation also found a missing accessible exit grouping and a Swift compatibility expectation for the existing SYNC-request diagnostic event; both are corrected and require reruns.
 - Squash commit title: `MC-033: Android phone Beacon Mode`.
 - Completion becomes effective only when the reviewed squash commit lands on main.
+
 
 

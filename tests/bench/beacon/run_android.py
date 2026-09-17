@@ -35,5 +35,5 @@ for phase in phases:
         if data.startswith(b'\x89PNG\r\n\x1a\n'):
             (out/(name+'.png')).write_bytes(data)
     if 'OK (1 test)' not in result or 'FAILURES' in result or 'INSTRUMENTATION_CODE: -1' not in result:
-        raise RuntimeError('Billing phase failed: '+phase)
+        raise RuntimeError('Beacon phase failed: '+phase)
 print('PASS: synthetic Beacon phases '+', '.join(phases)+'; physical endurance and battery certification pending')

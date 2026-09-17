@@ -127,7 +127,10 @@ class MeshModel(private val context: Context) {
         put("ui-cosmetics-v1", "$theme|${nicknameRgb?.toString() ?: ""}")
     }
     fun load() = work {
-        if (loaded) { refresh(); return@work }
+        if (loaded) {
+            if(beaconRequested || autoBeacon)startRadio()
+            refresh(); return@work
+        }
         val info = try { identity.load() } catch (e: IdentityProviderException) {
             if (e.failure == IdentityFailure.MISSING) { publish(MeshScreenState(loading = false)); return@work }; throw e
         }
@@ -148,6 +151,7 @@ class MeshModel(private val context: Context) {
         owner = NativeChannels(info.identity, now()); initializeMessaging(); loaded = true
         previews.clear(); unread.clear()
         for (name in joined) previews[name] = coreWork { storage.messagingHistory(it, checkNotNull(owner), name, profile) }.lastOrNull()?.text ?: "Quiet so far"
+        if(beaconRequested || autoBeacon)startRadio()
         refresh()
     }
     /** Called only from the final explicit onboarding action. */
@@ -189,7 +193,9 @@ class MeshModel(private val context: Context) {
     }
     fun beacon(manual: Boolean, automatic: Boolean) = work {
         beaconRequested=manual; autoBeacon=automatic; power=TransportPowerSetting.AUTO
-        persist(); radio?.configureBeacon(manual,automatic); refresh()
+        persist(); radio?.configureBeacon(manual,automatic)
+        if(manual || automatic)startRadio()
+        refresh()
     }
     fun exitBeacon() = beacon(false,false)
     fun select(name: String?) = work { notice = null; direct = null; selected = name?.let { channelInfo(it).name }; selected?.let { unread[it] = 0 }; refresh() }

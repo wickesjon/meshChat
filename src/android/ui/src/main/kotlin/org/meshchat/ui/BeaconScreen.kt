@@ -62,7 +62,7 @@ internal fun BeaconScreen(s: MeshScreenState, exit: () -> Unit, connect: () -> U
             s.error?.let { Text(it,color=MaterialTheme.colorScheme.error) }
             if(b==null)TextButton(onClick=connect) { Text("Connect nearby") }
             Box(Modifier.fillMaxWidth().heightIn(min=64.dp).background(MaterialTheme.colorScheme.surface)
-                .semantics { onLongClick("Exit Beacon Mode") { exit();true } }
+                .semantics(mergeDescendants=true) { onLongClick("Exit Beacon Mode") { exit();true } }
                 .pointerInput(exit) { detectTapGestures(onPress={
                     coroutineScope {
                         val held=launch { delay(2_000);exit() }

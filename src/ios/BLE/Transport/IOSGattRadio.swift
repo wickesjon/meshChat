@@ -99,10 +99,11 @@ final class IOSGattRadio: NSObject, IOSGattPort, @preconcurrency CBCentralManage
     init(core: NativeTransport, protectedAvailable: @escaping () -> Bool,
          event: @escaping (UInt64, TransportEvent) -> Void,
          state: @escaping (IOSRadioState) -> Void,
-         catchUp: @escaping ([UInt64]) -> Void) {
+         catchUp: @escaping ([UInt64]) -> Void,
+         egress: ((TransportSend, () -> Bool) throws -> Bool)? = nil) {
         self.protectedAvailable = protectedAvailable; receiveEvent = event; changed = state; self.catchUp = catchUp
         super.init()
-        driver = IOSGattDriver(core: core, port: self, clock: Self.now)
+        driver = IOSGattDriver(core: core, port: self, clock: Self.now, egress: egress)
     }
     static func now() -> UInt64 {
         var info = mach_timebase_info_data_t()
@@ -347,6 +348,10 @@ final class IOSGattRadio: NSObject, IOSGattPort, @preconcurrency CBCentralManage
         return accepted
     }
     func event(_ id: UInt64, _ event: TransportEvent) { receiveEvent(id, event) }
+    @discardableResult
+    func operation(_ work: (NativeTransport) throws -> TransportEffects) -> Bool {
+        guard available() else { return false }; return driver.operation(work)
+    }
     func enqueue(_ id: UInt64, bytes: Data, traffic: TransportTraffic, cookie: UInt64) -> Bool {
         guard available() else { return false }; return driver.enqueue(id, bytes: bytes, traffic: traffic, cookie: cookie)
     }

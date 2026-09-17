@@ -150,7 +150,8 @@ final class CipherConnection: SqlDatabase, @unchecked Sendable {
     private let identity: IdentityProvider
     private let vault: StorageVault
     init(identity: IdentityProvider, vault: StorageVault) { self.identity = identity; self.vault = vault }
-    private func operation<T>(create: Bool = false, _ work: (EncryptedStore) throws -> T) throws -> T {
+    /// Synchronous feature operations never retain the store/connection after return.
+    func operation<T>(create: Bool = false, _ work: (EncryptedStore) throws -> T) throws -> T {
         let generation = try identity.load().identity.generation
         let now = Int64(Date().timeIntervalSince1970)
         return try vault.access(generation: generation, create: create, now: now, work: work)

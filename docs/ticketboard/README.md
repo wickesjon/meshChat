@@ -51,7 +51,7 @@ After edits run `python tests/ticketboard/validate.py --write`; then run `python
 | [MC-032](complete/MC-032-supporter-entitlements-and-accessible-cosmetics.md) | Supporter entitlements and accessible cosmetics | complete | MC-028, MC-006 |
 | [MC-033](complete/MC-033-android-phone-beacon-mode.md) | Android phone Beacon Mode | complete | MC-024, MC-018, MC-028 |
 | [MC-034](backlog/MC-034-android-beta-integration-gate.md) | Android beta integration gate | backlog | MC-025, MC-029, MC-030, MC-031, MC-032, MC-033, MC-042, MC-022, MC-043 |
-| [MC-035](backlog/MC-035-ios-feature-parity-and-lifecycle-ui.md) | iOS feature parity and lifecycle UI | backlog | MC-026, MC-022, MC-029, MC-030, MC-031, MC-032, MC-042 |
+| [MC-035](inprogress/MC-035-ios-feature-parity-and-lifecycle-ui.md) | iOS feature parity and lifecycle UI | inprogress | MC-026, MC-022, MC-029, MC-030, MC-031, MC-032, MC-042 |
 | [MC-036](backlog/MC-036-integrated-security-and-resource-regression-gate.md) | Integrated security and resource regression gate | backlog | MC-022, MC-027, MC-033 |
 | [MC-037](backlog/MC-037-independent-security-assessment-and-remediation.md) | Independent security assessment and remediation | backlog | MC-034, MC-035, MC-036, MC-044 |
 | [MC-038](backlog/MC-038-mixed-platform-scale-and-battery-field-validation.md) | Mixed-platform scale and battery field validation | backlog | MC-034, MC-035, MC-036 |

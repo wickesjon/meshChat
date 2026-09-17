@@ -4,6 +4,25 @@
     classes = {};
     objectVersion = 56;
     objects = {
+        D00000000000000000000000 = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Security/IdentityProvider.swift; sourceTree = "<group>"; };
+        E00000000000000000000000 = { isa = PBXBuildFile; fileRef = D00000000000000000000000; };
+        D00000000000000000000001 = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Security/EncryptedStorage.swift; sourceTree = "<group>"; };
+        E00000000000000000000001 = { isa = PBXBuildFile; fileRef = D00000000000000000000001; };
+        D00000000000000000000002 = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Security/StaffKeyVault.swift; sourceTree = "<group>"; };
+        E00000000000000000000002 = { isa = PBXBuildFile; fileRef = D00000000000000000000002; };
+        D00000000000000000000003 = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BLE/Transport/IOSGattDriver.swift; sourceTree = "<group>"; };
+        E00000000000000000000003 = { isa = PBXBuildFile; fileRef = D00000000000000000000003; };
+        D00000000000000000000004 = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BLE/Transport/IOSGattRadio.swift; sourceTree = "<group>"; };
+        E00000000000000000000004 = { isa = PBXBuildFile; fileRef = D00000000000000000000004; };
+        D00000000000000000000005 = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UI/MeshModel.swift; sourceTree = "<group>"; };
+        E00000000000000000000005 = { isa = PBXBuildFile; fileRef = D00000000000000000000005; };
+        D00000000000000000000006 = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UI/MeshView.swift; sourceTree = "<group>"; };
+        E00000000000000000000006 = { isa = PBXBuildFile; fileRef = D00000000000000000000006; };
+        D00000000000000000000007 = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UI/Sharing.swift; sourceTree = "<group>"; };
+        E00000000000000000000007 = { isa = PBXBuildFile; fileRef = D00000000000000000000007; };
+        F00000000000000000000001 = { isa = XCRemoteSwiftPackageReference; repositoryURL = "https://github.com/sqlcipher/SQLCipher.swift.git"; requirement = { kind = revision; revision = 205df55271aa1ba512a9bfe3fd1813bc9ac52a19; }; };
+        F00000000000000000000002 = { isa = XCSwiftPackageProductDependency; package = F00000000000000000000001; productName = SQLCipher; };
+        F00000000000000000000003 = { isa = PBXBuildFile; productRef = F00000000000000000000002; };
         B00000000000000000000004 = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UI/ContributionPanel.swift; sourceTree = "<group>"; };
         C00000000000000000000004 = { isa = PBXBuildFile; fileRef = B00000000000000000000004; };
         B00000000000000000000000 = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Billing/EntitlementPolicy.swift; sourceTree = "<group>"; };
@@ -27,10 +46,11 @@
             projectDirPath = "";
             projectRoot = "";
             targets = (A00000000000000000000004);
+            packageReferences = (F00000000000000000000001);
         };
         A00000000000000000000002 = {
             isa = PBXGroup;
-            children = (B00000000000000000000004, B00000000000000000000000, B00000000000000000000001, B00000000000000000000002, B00000000000000000000003, A00000000000000000000005, A00000000000000000000016, A00000000000000000000003);
+            children = (D00000000000000000000000, D00000000000000000000001, D00000000000000000000002, D00000000000000000000003, D00000000000000000000004, D00000000000000000000005, D00000000000000000000006, D00000000000000000000007, B00000000000000000000004, B00000000000000000000000, B00000000000000000000001, B00000000000000000000002, B00000000000000000000003, A00000000000000000000005, A00000000000000000000016, A00000000000000000000003);
             sourceTree = "<group>";
         };
         A00000000000000000000003 = {
@@ -45,6 +65,7 @@
             buildPhases = (A00000000000000000000007, A00000000000000000000008, A00000000000000000000009);
             buildRules = ();
             dependencies = ();
+            packageProductDependencies = (F00000000000000000000002);
             name = MeshChat;
             productName = MeshChat;
             productReference = A00000000000000000000006;
@@ -66,13 +87,13 @@
         A00000000000000000000007 = {
             isa = PBXSourcesBuildPhase;
             buildActionMask = 2147483647;
-            files = (C00000000000000000000004, C00000000000000000000000, C00000000000000000000001, C00000000000000000000002, C00000000000000000000003, A0000000000000000000000A, A00000000000000000000017);
+            files = (E00000000000000000000000, E00000000000000000000001, E00000000000000000000002, E00000000000000000000003, E00000000000000000000004, E00000000000000000000005, E00000000000000000000006, E00000000000000000000007, C00000000000000000000004, C00000000000000000000000, C00000000000000000000001, C00000000000000000000002, C00000000000000000000003, A0000000000000000000000A, A00000000000000000000017);
             runOnlyForDeploymentPostprocessing = 0;
         };
         A00000000000000000000008 = {
             isa = PBXFrameworksBuildPhase;
             buildActionMask = 2147483647;
-            files = ();
+            files = (F00000000000000000000003);
             runOnlyForDeploymentPostprocessing = 0;
         };
         A00000000000000000000009 = {
@@ -115,10 +136,11 @@
             isa = XCBuildConfiguration;
             buildSettings = {
                 SWIFT_INCLUDE_PATHS = "$(SRCROOT)/../../.work/ffi/swift";
-                OTHER_SWIFT_FLAGS = "$(inherited) -Xcc -fmodule-map-file=$(SRCROOT)/../../.work/ffi/swift/meshchat_coreFFI.modulemap";
+                OTHER_SWIFT_FLAGS = "$(inherited) -Xcc -DSQLITE_HAS_CODEC -Xcc -fmodule-map-file=$(SRCROOT)/../../.work/ffi/swift/meshchat_coreFFI.modulemap";
                 LIBRARY_SEARCH_PATHS = "$(SRCROOT)/../../.work/ffi/$(PLATFORM_NAME)";
                 OTHER_LDFLAGS = "$(inherited) -lmeshchat_core -framework Security";
-                GENERATE_INFOPLIST_FILE = YES;
+                GENERATE_INFOPLIST_FILE = NO;
+                INFOPLIST_FILE = MeshChat/Info.plist;
                 INFOPLIST_KEY_UILaunchScreen_Generation = YES;
                 INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
                 PRODUCT_BUNDLE_IDENTIFIER = org.meshchat.app;
@@ -133,10 +155,11 @@
             isa = XCBuildConfiguration;
             buildSettings = {
                 SWIFT_INCLUDE_PATHS = "$(SRCROOT)/../../.work/ffi/swift";
-                OTHER_SWIFT_FLAGS = "$(inherited) -Xcc -fmodule-map-file=$(SRCROOT)/../../.work/ffi/swift/meshchat_coreFFI.modulemap";
+                OTHER_SWIFT_FLAGS = "$(inherited) -Xcc -DSQLITE_HAS_CODEC -Xcc -fmodule-map-file=$(SRCROOT)/../../.work/ffi/swift/meshchat_coreFFI.modulemap";
                 LIBRARY_SEARCH_PATHS = "$(SRCROOT)/../../.work/ffi/$(PLATFORM_NAME)";
                 OTHER_LDFLAGS = "$(inherited) -lmeshchat_core -framework Security";
-                GENERATE_INFOPLIST_FILE = YES;
+                GENERATE_INFOPLIST_FILE = NO;
+                INFOPLIST_FILE = MeshChat/Info.plist;
                 INFOPLIST_KEY_UILaunchScreen_Generation = YES;
                 INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
                 PRODUCT_BUNDLE_IDENTIFIER = org.meshchat.app;

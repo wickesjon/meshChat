@@ -25,6 +25,7 @@ final class IOSGattDriver {
     private let core: NativeTransport
     private unowned let port: any IOSGattPort
     private let clock: @MainActor () -> UInt64
+    private let egress: ((TransportSend, () -> Bool) throws -> Bool)?
     private var peers: [UInt64: Peer] = [:]
     private var serial: UInt64 = 0
     private var limit = 4
@@ -35,8 +36,9 @@ final class IOSGattDriver {
     var ids: [UInt64] { peers.keys.sorted() }
 
     /// Supply NativeTransport.newIos backed by the application's protected store.
-    init(core: NativeTransport, port: any IOSGattPort, clock: @escaping @MainActor () -> UInt64) {
-        self.core = core; self.port = port; self.clock = clock
+    init(core: NativeTransport, port: any IOSGattPort, clock: @escaping @MainActor () -> UInt64,
+         egress: ((TransportSend, () -> Bool) throws -> Bool)? = nil) {
+        self.core = core; self.port = port; self.clock = clock; self.egress = egress
     }
     private func guarded<T>(_ fallback: T, _ body: () throws -> T) -> T {
         guard !stopped else { return fallback }
@@ -138,6 +140,10 @@ final class IOSGattDriver {
         }
     }
     func tick() { guarded(()) { try advance() } }
+    @discardableResult
+    func operation(_ work: (NativeTransport) throws -> TransportEffects) -> Bool {
+        guarded(false) { apply(try work(core)); return true }
+    }
     private func advance() throws {
         let now = clock()
         blocked = blocked.filter { now < $0.value }
@@ -169,7 +175,17 @@ final class IOSGattDriver {
             do {
                 // CoreBluetooth is called on this same serialized queue. False
                 // means queue-full/readiness loss, never successful delivery.
-                if port.writable(p.id) && port.submit(p.id, send.bytes) {
+                var accepted = false
+                if port.writable(p.id) {
+                    if let egress { accepted = try egress(send) { port.submit(p.id, send.bytes) } }
+                    else {
+                        // Probe consumers may omit a gate, but authenticated
+                        // application traffic must never bypass protected recheck.
+                        guard try !core.messageNeedsAuthorization(link: send.link, token: send.token) else { stop(); return }
+                        accepted = port.submit(p.id, send.bytes)
+                    }
+                }
+                if accepted {
                     apply(try core.complete(link: send.link, token: send.token, success: true, now: clock()))
                 } else { apply(try core.backpressure(link: send.link, token: send.token, now: clock())) }
             } catch { stop(); return }

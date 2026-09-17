@@ -29,9 +29,10 @@ names = ['dark-chat','light-channels','reopened-chat','large-text-composer',
 for name in names:
     (out/(name+'.png')).unlink(missing_ok=True)
 for phase in ['create','reopen','composer']:
+    print('MC-028 UI phase: '+phase, flush=True)
     run('shell','input','keyevent','224');run('shell','input','keyevent','82')
     run('shell','am','force-stop',package)
-    output = run('shell','am','instrument','-w','-e','phase',phase,'-e','class','org.meshchat.ui.ChannelUiTest',
+    output = run('shell','am','instrument','-w','-r','-e','phase',phase,'-e','class','org.meshchat.ui.ChannelUiTest',
                  package+'.test/androidx.test.runner.AndroidJUnitRunner').decode()
     print(output)
     # Retain available synthetic screenshots even when an assertion fails.
@@ -39,7 +40,9 @@ for phase in ['create','reopen','composer']:
         try:
             data = subprocess.check_output([str(adb), '-s', args.serial, 'exec-out', 'run-as',
                 package, 'cat', 'files/mc028-'+name+'.png'], stderr=subprocess.PIPE, timeout=30)
-            (out/(name+'.png')).write_bytes(data)
+            # exec-out can report a missing remote file as stdout with exit 0.
+            if data.startswith(b'\x89PNG\r\n\x1a\n'):
+                (out/(name+'.png')).write_bytes(data)
         except subprocess.CalledProcessError:
             pass  # Later/failed phases need not have created this screenshot.
     if 'OK (1 test)' not in output or 'FAILURES' in output or 'INSTRUMENTATION_CODE: -1' not in output:

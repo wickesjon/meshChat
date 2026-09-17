@@ -98,6 +98,21 @@ the rebuilt AARs and synthetic UI screenshots for seven days.
 
 ## Current evidence
 
-Implementation is pending final native/package/emulator validation and independent
-PR review. The ticket/PR records exact revisions and final results; this guide
-does not convert an unavailable or failed check into a pass.
+Production revision `270a0af` passed separate Terra review, Rust/JVM/Swift checks,
+Android and iOS builds, and Android encrypted-storage emulator checks. The final
+channel UI suite also passes locally on an isolated API-29 x86_64 emulator with
+Windows WHPX acceleration. All four synthetic screenshots were inspected.
+The ticket/PR records exact revisions, commands, failures and superseding results;
+physical certification remains MC-025/043.
+
+For local UI reruns, use the full production app and test APK (not the earlier
+compile-only workaround), set `ANDROID_HOME` to the installed SDK, and keep
+`ANDROID_USER_HOME`, `ANDROID_EMULATOR_HOME`, `ANDROID_AVD_HOME` and temporary
+output inside the repository. Start only the dedicated synthetic AVD and pass
+its explicit serial to `run_emulator.py`. The tested local serial is
+`emulator-5580`; never substitute a physical-device serial. The runner clears
+only `org.meshchat.app` on that emulator. It waits for asynchronous protected
+screen transitions and requests raw instrumentation results, preserving every
+assertion. Per-state deadlines are functional test limits, not performance
+measurements. Screenshot collection retains actual PNGs and rejects missing-file
+text returned by adb.

@@ -30,10 +30,10 @@ Also permitted: this ticket and generated ticketboard index/diagram changes requ
 
 ## Exit criteria
 
-- [ ] Channel join/send/receive/react flows work with the real core and retain history after restart.
-- [ ] Anonymous posts use disposable identity and neutral avatar; UI never calls plaintext channels encrypted.
-- [ ] Accessibility, byte-boundary, unsafe-text, disconnected and rate-limited states pass UI checks.
-- [ ] Relevant checks pass, evidence is recorded, required review is complete, and the ticket is squash merged to main.
+- [x] Channel join/send/receive/react flows work with the real core and retain history after restart.
+- [x] Anonymous posts use disposable identity and neutral avatar; UI never calls plaintext channels encrypted.
+- [x] Accessibility, byte-boundary, unsafe-text, disconnected and rate-limited states pass UI checks.
+- [x] Relevant checks pass and evidence is recorded. Completion is staged for final Terra review and squash merge; it becomes effective only on main.
 
 ## Potential fallbacks
 
@@ -44,14 +44,14 @@ A triggered fallback must be recorded with evidence. It does not authorize weake
 
 ## Evidence
 
-Implemented on the dedicated branch; final native/package/emulator checks and independent review are pending. See [the reproducible Android UI guide](../../testing/android-channel-ui.md) for feature ownership, bounded-state limits and commands.
+Implemented and tested on the dedicated branch; final completion metadata and test-harness fixes require the final Terra review before squash merge. See [the reproducible Android UI guide](../../testing/android-channel-ui.md) for feature ownership, bounded-state limits and commands.
 
 - Production Compose app reuses the protected identity/SQLCipher/GATT owners. New Rust channel exports reuse frozen codec/text/channel policies, separate unverified display from trust and persist local-arrival history/reactions.
 - Eight Rust feature regressions include a real three-node relay, disposable Confessions identities, Unicode/byte limits, rate limits, failed storage retry, and orphan cap/expiry/disconnect behavior. Actual generated Kotlin and Swift traces extend the native FFI gates.
 - Emulator acceptance uses explicit synthetic fixtures and the real protected app; actual RF/hardware certification remains MC-025/043. This triggers the documented deterministic-fixture fallback while native checks remain required.
 - Compose BOM 2025.05.01 introduces graphics-path 1.0.1. Its unaligned RELRO was detected before packaging; the pinned matching source is rebuilt with both 16 KB flags under the approved UI path, preserving its Java/resources/licenses. Both locally rebuilt ABIs pass ELF alignment; production package checks remain mandatory.
 - Local app and emulator-test Kotlin compilation passed with JDK 17.0.15+6/Gradle 8.13/Kotlin 2.2.0. An ignored compile-only init script uses the existing original SQLCipher API jar because aligned SQLCipher is built on Linux. It cannot package or execute tests; this is compilation evidence only, not packaged SQLCipher evidence.
-- PR and exact final reviewed/validated revisions will be recorded after publishing; no review or hardware pass is claimed yet.
+- The following dated validation/review entries supersede the initial compilation-only evidence. No hardware certification is claimed.
 
 ## Review and merge
 
@@ -89,7 +89,7 @@ Proposal prepared on dedicated branch ticket/MC-028-android-shell-and-channel-ch
 
 ### Initial PR review and validation
 
-- Separate `gpt-5.6-terra`/medium worker reviewed `ea3d1329f6ab9d9040c4e8ae3627fdbc900fc940` against main `af7680a49dae969470cf8b1e70fda2d4aea59b7d`. Outcome: one P1, pending signed CHAT could enter ordinary unverified history/display. Fixed by refusing pending work in Kotlin and Rust, rejecting semantic signed/encrypted flags at the unsigned boundary, and filtering them from its history. A corrupted signed golden-vector regression asserts neither pending nor misclassified signed CHAT persists. Relay behavior stays unchanged. Follow-up review is required.
+- Separate `gpt-5.6-terra`/medium worker reviewed `ea3d1329f6ab9d9040c4e8ae3627fdbc900fc940` against main `af7680a49dae969470cf8b1e70fda2d4aea59b7d`. Outcome: one P1, pending signed CHAT could enter ordinary unverified history/display. Fixed by refusing pending work in Kotlin and Rust, rejecting semantic signed/encrypted flags at the unsigned boundary, and filtering them from its history. A corrupted signed golden-vector regression asserts neither pending nor misclassified signed CHAT persists. Relay behavior stays unchanged. Follow-up review passed at `270a0af28cb612cd30bff9199d0caf41938faf47`, as recorded below.
 - At the initial PR revision, local Rust debug/release: 174 tests each; formatting and all-target/all-feature Clippy pass. Both native Android ABIs and host bindings pass. 26 actual JVM tests pass. Dependency advisory/license/bans/source gates pass with cargo-deny 0.20.2. Ticketboard/default and 12 unit tests pass.
 - Measured nickname palette contrast is at least 7.70:1 on dark surfaces and 6.07:1 on light; primary message text is 14.25:1 dark and 15.65:1 light. Emulator large-text verification remains required.
 - Hosted run `35184834984` passed Rust and ticketboard. Android stopped at the source archive checksum before app packaging: the downloaded archive wrapper differed. The fix checksums the entire sorted set of file names and contents before extraction, retaining the pinned release and rejecting changed content. Rebuilt SQLCipher from that run is artifact `10481996081`; its downloaded ZIP SHA-256 is `2944089ee0aad571d5f36d3185a33a51b9248bf14e1a1f176695111047417ce8`. It is used only for local native validation; no failed job is claimed as a pass.
@@ -104,10 +104,22 @@ Production revision: `270a0af28cb612cd30bff9199d0caf41938faf47`.
 - Local production app: `:app:assembleDebug :app:assembleRelease :app:assembleDebugAndroidTest :app:lintDebug :app:testDebugUnitTest` passes with JDK 17.0.15+6/Gradle 8.13/Kotlin 2.2.0; all seven app JVM FFI tests pass. Both APKs pass `tests/integration/android-ui/check_apk.py` and build-tools 35.0.0 `zipalign -c -P 16 4`. A transient Windows Gradle cache rename failure was resolved by rerunning unchanged commands, without disabling checks.
 - The locally validated Debug APK SHA-256 is `3b24933b9dfb137ad8da8c52a88d32441dd9153456a9dd0a3fb0ce51167516be`; Release unsigned is `22755ace0fa800e66cfcc622faf30cbac0885f98985d0d6f68d3771e6cba8ddb`.
 - Hosted run [35185288348](https://github.com/wickesjon/meshChat/actions/runs/35185288348): Rust and ticketboard **PASS**. macOS job `105085990013` **PASS**: actual Swift 6 channel codec/disposable posts/byte limits/persistent reactions, existing transport/driver traces, Xcode 16.4 Debug/Release app and BLE/security device/simulator builds, security interoperability and all five SQLCipher lifecycle phases. The protected macOS test wrapper is synthetic evidence, not hardware certification.
-- Android job `105085989936` passed the source rebuild, production build/lint/unit tests and native-package checks. Its remaining security/emulator checks and screenshot inspection are pending; the ticket is not complete or mergeable under the acceptance policy yet.
+- Android job `105085989936` passed the source rebuild, production build/lint/unit tests, native-package checks and all MC-005/018 emulator checks. Its initial MC-028 UI timeout is recorded below and superseded only by the corrected local UI results; the failed job is not a passing hosted run.
 
 ### Emulator investigation
 
 Run `35185288348` completed: Android production and security builds/lint/package checks passed, as did all MC-005 and MC-018 emulator lifecycle phases. MC-028's create phase timed out at its 20-second wait for the channel list after profile creation; no UI pass or hardware pass is claimed. The runtime cause remains under investigation.
 
 Terra medium independently reviewed `001655a5e7052b6b25142b5db6fcdfae91d813aa`: PASS, no blocking findings. That revision waits for the asynchronous theme write, retains synthetic screenshots on assertion failures, and adds unbuffered CI phase output. Follow-up diagnostics allow up to 120 seconds per protected-state assertion and 600 seconds per complete emulator phase, failing immediately if the protected app reports unavailable. Software-emulated SQLCipher retains its production key-derivation cost; these functional deadlines are not device latency evidence. All existing functional assertions remain required.
+
+
+### Local emulator acceptance and final review scope
+
+- Terra medium reviewed `19c702d098cbb1a7613b868d4356b503a50db583`: **PASS**, no blocking findings. The bounded software-emulation deadlines retain all functional assertions and immediately reject a protected-data failure. Production source is unchanged from reviewed `270a0af`.
+- Local Windows acceleration was already available (WHPX); no host settings were changed. An isolated, hidden `emulator-5580` uses Android Emulator 37.1.11.0 build 15917651, adb 37.0.1-15733141, API 29 default x86_64 revision 8, and repository-local AVD/temp data. Official image ZIP SHA-256: `b5c3fda1f4b4931c30518d342e4ad5f7464945e0cdced3538d4ff2e12f7bf201`; its published SHA-1 was verified before extraction.
+- Local reproduction identified asynchronous navigation assertions that ran before the protected channel read finished, plus a runner expecting the raw Android completion code without requesting raw output. The final test waits for the destination screen, uses `am instrument -w -r`, and refuses non-PNG output when collecting screenshots. The production behavior and acceptance assertions remain unchanged.
+- `python -B tests/integration/android-ui/run_emulator.py --serial emulator-5580` passes all three actual production-app phases: create, force-stop/reopen, and 200% font-scale composer. They cover real protected SQLCipher history/reaction persistence, four subscriptions and light-theme persistence, sanitized nickname/plain native HTML/URL text, unverified chrome, offline-send failure, 280-byte boundary, and real-core rate limit/refill. Raw output requires both `OK (1 test)` and completion code `-1`; assertion failures remain fatal.
+- All four synthetic PNGs were visually inspected: dark chat, light channel list, reopened light chat, and large-text composer. Text and trust indicators remain legible and separate; HTML/URL render literally; the 284-byte draft disables Send. Screenshot files/logs are ignored `.work/mc028/` evidence, not committed personal data. No RF or hardware-protection claim is made.
+- Local-policy applicability: only test/CI logging/documentation changed after production `270a0af`. Its passing Rust, Kotlin, Swift, Android/iOS build/lint/package and MC-005/018 security checks remain applicable. The final changed test APK was rebuilt and run against that exact production app locally. The newer hosted run is supplemental; it is not required to replace successful applicable local validation. Final Terra review of the completion revision is still required and will be recorded in PR #30 before merge.
+
+Final local fixture rerun passed in 12.695 s (create), 5.004 s (reopen), and 5.130 s (composer). Exactly the four required PNGs were retained; missing-file adb text is excluded. Production Debug APK remains SHA-256 `3b24933b9dfb137ad8da8c52a88d32441dd9153456a9dd0a3fb0ce51167516be`; final test APK is `596d3cfb0023f00a91c9f3b2b439ab14a58a9f5b16449831495861ccc8f28c45`. Final changed-test compilation/packaging and `:app:lintDebug` pass. Ticketboard regenerated/default validation, all 12 ticketboard tests, and `git diff --check` pass. The final reviewer should compare this completion revision against main and record the exact revision/outcome in PR #30 before merge.

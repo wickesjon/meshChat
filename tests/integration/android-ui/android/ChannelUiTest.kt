@@ -70,6 +70,7 @@ class ChannelUiTest {
         waitFor("Your channels")
         assertTrue(ui.onAllNodesWithContentDescription("open-lock").fetchSemanticsNodes().size >= 3)
         ui.onNodeWithText("#general").performClick()
+        waitFor("Send")
         ui.onNode(hasSetTextAction()).performTextInput("🎉".repeat(71))
         ui.onNodeWithText("Send").assertIsNotEnabled()
         ui.onNode(hasSetTextAction()).performTextReplacement("Synthetic offline draft")
@@ -98,9 +99,12 @@ class ChannelUiTest {
         ui.onNodeWithText("Unverified").assertExists()
         screenshot("dark-chat")
         ui.onNodeWithText("Back").performClick()
+        waitFor("Your channels")
         click("Join a word-triple channel");click("Join channel")
         awaitState { (ui.activity.application as MeshApplication).model.screen.selected?.private == true }
+        waitFor("Send")
         ui.onNodeWithText("Back").performClick()
+        waitFor("Your channels")
         ui.onNodeWithText("Settings").performClick()
         ui.onNode(isToggleable()).performScrollTo().performClick()
         click("Save")
@@ -116,6 +120,7 @@ class ChannelUiTest {
         val snapshot=(ui.activity.application as MeshApplication).model.screen
         assertTrue(snapshot.light);assertEquals(4,snapshot.channels.size)
         ui.onNodeWithText("#general").performClick()
+        waitFor("Send")
         waitFor("<script>synthetic</script> https://example.org")
         val rows=(ui.activity.application as MeshApplication).model.screen.rows
         assertEquals(1,rows.size);assertEquals(1u.toUShort(),rows.single().message.reactions[3])

@@ -14,7 +14,12 @@ private struct ShareItem: Identifiable {
 struct MeshView: View {
     @ObservedObject var model: MeshModel
     @Environment(\.scenePhase) private var phase
-    @State private var tab = 0, settings = false, join = false, scan = false, input = false, eventSettings = false
+    @State private var tab = 0
+    @State private var settings = false
+    @State private var join = false
+    @State private var scan = false
+    @State private var input = false
+    @State private var eventSettings = false
     @State private var shared: ShareItem?
     @State private var confirmation: ConfirmAction?
     private var state: MeshState { model.state }
@@ -78,6 +83,7 @@ struct MeshView: View {
     private var channelList: some View {
         List {
             Text("Open conversations. Readable on air.").font(.callout)
+            Text(state.catchup).font(.caption)
             ForEach(state.channels, id: \.name) { channel in Button { model.select(channel.name) } label: {
                 HStack {
                     Image(systemName: "lock.open")
@@ -133,7 +139,9 @@ struct MeshView: View {
 
 private struct OnboardingView: View {
     @ObservedObject var model: MeshModel
-    @State private var step = 0, nickname = "", avatar: UInt8 = 1
+    @State private var step = 0
+    @State private var nickname = ""
+    @State private var avatar: UInt8 = 1
     var body: some View {
         VStack(alignment: .leading, spacing: 22) {
             Text("Nearby, together").font(.caption); Text("Welcome to MeshChat").font(.largeTitle)
@@ -161,7 +169,8 @@ private struct ChatView: View {
     let theme: ThemeTokens
     let confirm: (ConfirmAction) -> Void
     let share: (ShareItem) -> Void
-    @State private var text = "", pin = false
+    @State private var text = ""
+    @State private var pin = false
     private var state: MeshState { model.state }
     private var isDirect: Bool { state.direct != nil }
     var body: some View {
@@ -188,6 +197,7 @@ private struct ChatView: View {
                     ForEach(state.directRows, id: \.id) { row in VStack(alignment: .leading, spacing: 6) {
                         Text(row.own ? "You" : state.direct?.nickname ?? "Pinned friend").font(.caption)
                         Text(verbatim: row.text)
+                        if isDirect ? state.delayed.contains(where: { $0.suffix(8) == row.id }) : false { Text("Arrived late via nearby history").font(.caption) }
                         if let status = state.sendStates[row.id] { Text(status).font(.caption) }
                         reactionRow(id: row.id, counts: row.reactions.map(UInt16.init), own: row.ownReaction)
                     }.padding().background(ThemeTokens.color(theme.surface)).cornerRadius(12) }
@@ -210,6 +220,7 @@ private struct ChatView: View {
                         if row.confusable { Text("Nickname resembles yours · identity is unverified").font(.caption) }
                         if let warning = row.claimWarning { Text(verbatim: warning).font(.caption) }
                         Text(verbatim: row.text)
+                        if state.delayed.contains(row.sender + row.id) { Text("Arrived late via nearby history").font(.caption) }
                         if let status = state.sendStates[row.id] { Text(status).font(.caption) }
                         reactionRow(id: row.id, counts: row.reactions, own: row.ownReaction)
                     }.padding().background(ThemeTokens.color(theme.surface)).cornerRadius(12) }
@@ -244,7 +255,9 @@ private struct JoinView: View {
     @ObservedObject var model: MeshModel
     @Environment(\.dismiss) private var dismiss
     private let words = channelWords()
-    @State private var first = "", second = "", third = ""
+    @State private var first = ""
+    @State private var second = ""
+    @State private var third = ""
     private var name: String { [first, second, third].joined(separator: "|") }
     var body: some View {
         NavigationView { Form {
@@ -316,7 +329,8 @@ private struct EventSettings: View {
     @ObservedObject var model: MeshModel
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var phase
-    @State private var staffInput = "", scanStaff = false
+    @State private var staffInput = ""
+    @State private var scanStaff = false
     @State private var confirmation: ConfirmAction?
     var body: some View {
         NavigationView { Form {
@@ -356,8 +370,12 @@ private struct EventSettings: View {
 private struct SettingsView: View {
     @ObservedObject var model: MeshModel
     @Environment(\.dismiss) private var dismiss
-    @State private var nickname = "", avatar: UInt8 = 1, theme = "afterhours", color: UInt32?
-    @State private var contribution = false, reset = false
+    @State private var nickname = ""
+    @State private var avatar: UInt8 = 1
+    @State private var theme = "afterhours"
+    @State private var color: UInt32?
+    @State private var contribution = false
+    @State private var reset = false
     var body: some View {
         NavigationView { Form {
             Section("Make it yours") {

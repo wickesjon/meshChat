@@ -11,6 +11,8 @@ use crate::{
 };
 #[path = "native_beacon.rs"]
 mod beacon;
+#[path = "native_catchup.rs"]
+pub mod catchup;
 #[path = "native_messaging.rs"]
 pub mod messaging;
 #[path = "native_organizer.rs"]
@@ -186,6 +188,7 @@ struct Runtime {
     recent: Vec<([u8; 8], u64)>,
     beacon: beacon::Beacon,
     stats: stats::Stats,
+    catchup: catchup::Catchup,
 }
 impl Runtime {
     fn next(&mut self) -> Result<u64, TransportError> {
@@ -208,7 +211,8 @@ impl Runtime {
             return Err(TransportError::Unavailable);
         }
         self.now = now;
-        self.beacon.advance(now)?;
+        let ended = self.beacon.advance(now)?;
+        self.catchup.ended(ended);
         self.recent.retain(|(_, at)| now - *at < 60_000);
         self.admissions.retain(|a| now < a.born + 30_000);
         self.ingress
@@ -224,7 +228,11 @@ impl Runtime {
                 }
             }
             if event.cookie == 0 {
-                self.beacon.finished(&event, self.now);
+                if event.kind == relay::Kind::Sync {
+                    self.beacon.finished(&event, self.now);
+                } else if event.status != relay::Status::NativeComplete {
+                    self.cancel_catchup(&event.link);
+                }
                 continue;
             }
             self.messaging.finished(&mut self.friends, &event);
@@ -257,6 +265,7 @@ impl Runtime {
         // Friends may already have invalidated this session on a changed HELLO.
         let _ = self.friends.disconnect(&mut self.ingress, link, self.now);
         self.beacon.disconnect(link, self.now);
+        self.catchup.disconnected(link);
         self.messaging.disconnected();
         self.links.remove(index);
         self.results(events, out);
@@ -804,8 +813,30 @@ impl NativeTransport {
                     });
                     return Ok(out);
                 }
-                // Requesting/history presentation is owned separately; an
-                // unsolicited stored wrapper never becomes live CHAT here.
+                // Only the link-bound session can admit stored inner content.
+                let mut ended = Vec::new();
+                let mut received = Vec::new();
+                let Runtime {
+                    beacon, ingress, ..
+                } = &mut *s;
+                let accepted = beacon.sessions.receive_admitted(
+                    &link,
+                    admission,
+                    ingress,
+                    now,
+                    &mut crate::sync::session::Sink {
+                        events: &mut |e| ended.push(e),
+                        messages: &mut |raw, state| received.push((raw.to_vec(), state)),
+                    },
+                );
+                s.catchup.ended(ended);
+                for (raw, state) in received {
+                    s.catchup.received(&link, raw, state, now);
+                }
+                if matches!(accepted, Ok(crate::sync::session::Received::Page { .. })) {
+                    s.continue_catchup(&link, &mut out)?;
+                }
+                return Ok(out);
             }
             if let Outcome::Complete { len, state, kind } = result {
                 if kind == framing::ObjectKind::Logical && output.get(1) == Some(&1) && len >= 26 {
@@ -955,6 +986,11 @@ impl NativeTransport {
             };
             let index = s.index(&send.link)?;
             let token = s.next()?;
+            if send.cookie == 0 && send.kind == relay::Kind::Control {
+                if let Some(request) = s.catchup.token(&send.link) {
+                    let _ = s.beacon.sessions.request_started(request, now);
+                }
+            }
             let (protected, pin) = s.messaging.egress_guard(&send.link, send.cookie);
             let protected = protected || s.organizer.guarded(&send.link, send.cookie);
             increment(&mut s.stats.values.scheduled_frames, 1);
@@ -1157,6 +1193,7 @@ impl NativeTransport {
                 recent: Vec::with_capacity(200),
                 beacon: beacon::Beacon::new(instance_nonce, monotonic_ms)?,
                 stats: stats::Stats::new(monotonic_ms),
+                catchup: catchup::Catchup::default(),
             }),
         })
     }

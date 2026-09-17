@@ -205,7 +205,12 @@ impl NativeChannels {
         own: bool,
         wall: i64,
     ) -> Result<(), ChannelError> {
-        let p = codec::parse(bytes, Context::Live).map_err(|_| ChannelError::Invalid)?;
+        let context = if bytes.get(1) == Some(&1) {
+            Context::StoredChat
+        } else {
+            Context::Live
+        };
+        let p = codec::parse(bytes, context).map_err(|_| ChannelError::Invalid)?;
         let h = p.header();
         store
             .append_unverified(
@@ -226,6 +231,35 @@ impl NativeChannels {
 }
 #[uniffi::export]
 impl NativeChannels {
+    pub(crate) fn accept_stored(
+        &self,
+        store: Arc<EncryptedStore>,
+        raw: &[u8],
+        now: u64,
+        wall: i64,
+    ) -> Result<bool, ChannelError> {
+        self.store(&store)?;
+        drop(self.state(now)?);
+        let packet = codec::parse(raw, Context::StoredChat).map_err(|_| ChannelError::Invalid)?;
+        if packet.header().flags & 7 != 0 {
+            return Ok(false);
+        }
+        text::validate_payload(packet.payload()).map_err(|_| ChannelError::Invalid)?;
+        let h = packet.header();
+        let held = store
+            .history(h.channel_id.to_vec(), false, 100)
+            .map_err(|_| ChannelError::Unavailable)?;
+        if held.iter().any(|row| {
+            row.message_id == h.message_id
+                && row.logical_type == 1
+                && row.body.get(12..20) == Some(&h.sender_id)
+        }) {
+            return Ok(false);
+        }
+        let wall = held.first().map_or(wall, |row| wall.max(row.timestamp));
+        self.save(&store, raw, false, wall)?;
+        Ok(true)
+    }
     #[uniffi::constructor]
     pub fn new(identity: PublicIdentity, now: u64) -> Result<Self, ChannelError> {
         if identity.generation.len() != 16 || now > u64::MAX - 900_000 {
@@ -493,7 +527,12 @@ impl NativeChannels {
         rows.reverse();
         let mut out = vec![];
         for row in &rows {
-            let Ok(p) = codec::parse(&row.body, Context::Live) else {
+            let context = if row.body.get(1) == Some(&1) {
+                Context::StoredChat
+            } else {
+                Context::Live
+            };
+            let Ok(p) = codec::parse(&row.body, context) else {
                 continue;
             };
             if p.header().channel_id != c.id() {

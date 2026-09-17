@@ -16,6 +16,7 @@ struct MeshState {
     var status = "Nearby connection is off", notice: String?, peers = 0, waitSeconds: UInt64 = 0
     var muted = false, previews: [String: String] = [:], unread: [String: Int] = [:]
     var sendStates: [Data: String] = [:], posted = 0
+    var catchup = "Open the app to request bounded nearby history.", delayed: Set<Data> = []
 }
 
 /// All feature/radio operations run synchronously on the main actor. Public UI
@@ -35,14 +36,14 @@ struct MeshState {
     private var replacingIdentity = false
     private var eventURI: String?, staffCandidate = Data(), staffAt: UInt64 = 0
     private var pulse: Task<Void, Never>?
-    private let clock: () -> UInt64
+    private let clock: @MainActor () -> UInt64
     static func native() throws -> MeshModel {
         let vault = try StorageVault.native(), staff = try StaffKeyVault.native()
         let identity = try IdentityProvider.native(state: FeatureResetStore(storage: vault, staff: staff))
         return MeshModel(identity: identity, storage: EncryptedStorage(identity: identity, vault: vault), staff: staff)
     }
     init(identity: IdentityProvider, storage: EncryptedStorage, staff: StaffKeyVault,
-         clock: @escaping () -> UInt64 = IOSGattRadio.now) {
+         clock: @escaping @MainActor () -> UInt64 = IOSGattRadio.now) {
         self.identity = identity; self.storage = storage; self.staff = staff; self.clock = clock
     }
     deinit { pulse?.cancel() }
@@ -125,6 +126,7 @@ struct MeshState {
     private func refreshThrowing() throws {
         let core = try requiredCore(), owner = try requiredOwner()
         try owner.setCosmetics(supporter: store?.active == true, rgb: state.nicknameRGB)
+        try drainCatchup()
         state.channels = try joined.map { try channelInfo(name: $0) }
         state.friends = try storage.operation { try core.friendCards(store: $0, now: clock()) }
         state.archives = try archives()
@@ -200,11 +202,12 @@ struct MeshState {
     func confirmFriend(_ petname: String) { perform {
         guard let proposal = state.friendProposal else { return }
         let core = try requiredCore()
+        stop()
         let effects = try storage.operation { db in try identity.messaging { try core.confirmFriend(store: db, provider: $0, uri: proposal.uri, petname: petname, previous: state.replacement?.handle, now: clock()) } }
         apply(effects); state.replacement = nil; clearCandidates(); try refreshThrowing()
     } }
     func changeFriend(_ friend: FriendCard, replace: Bool) { perform {
-        try archive(friend)
+        try archive(friend); stop()
         let effects = try storage.operation { try requiredCore().changeFriend(store: $0, friend: friend.handle, replace: replace, now: clock()) }
         apply(effects); state.replacement = replace ? friend : nil; state.direct = nil; clearCandidates(); try refreshThrowing()
     } }
@@ -299,14 +302,35 @@ struct MeshState {
         }
     }
     private func catchUp(_ ids: [UInt64]) {
-        // MC-035 shared-core requester integration is required before completion.
-        state.status = ids.isEmpty ? "Searching for nearby people…" : "Foreground connections restored"
+        perform {
+            let core = try requiredCore()
+            for id in ids {
+                guard let link = links[id] else { continue }
+                do { apply(try core.requestCatchup(link: link, now: clock())) }
+                catch TransportError.Busy { continue }
+                catch TransportError.Stale { continue }
+            }
+            try drainCatchup()
+        }
+    }
+    private func drainCatchup() throws {
+        let core = try requiredCore(), owner = try requiredOwner()
+        let progress = try storage.operation { db in try identity.messaging {
+            try core.processCatchup(store: db, provider: $0, owner: owner, now: clock(), wall: wall)
+        } }
+        for key in progress.arrivals {
+            if state.delayed.count >= 100, let old = state.delayed.first { state.delayed.remove(old) }
+            state.delayed.insert(key)
+        }
+        state.catchup = progress.active > 0 ? "Requesting bounded nearby history…" :
+            "Catch-up: \(progress.complete) completed, \(progress.incomplete) limited or interrupted. This does not establish delivery or complete history."
     }
     private func event(_ id: UInt64, _ event: TransportEvent) { perform {
         let core = try requiredCore(), owner = try requiredOwner()
         switch event {
         case let .admitted(link, _, _):
             links[id] = link; announceAt = 0
+            catchUp([id])
             apply(try identity.messaging { try core.prepareProof(link: link, provider: $0, now: clock()) })
         case let .closed(link):
             links.removeValue(forKey: id); try owner.disconnected(link: link, now: clock())

@@ -123,7 +123,7 @@ struct Queued {
     guard: Guard,
 }
 pub(super) struct Messaging {
-    identity: PublicIdentity,
+    pub(super) identity: PublicIdentity,
     dms: dm::Dms,
     queued: Vec<Queued>,
     retry_cursor: usize,
@@ -169,7 +169,7 @@ impl Messaging {
             None => (false, None),
         }
     }
-    fn store(&self, store: &EncryptedStore) -> Result<(), MessagingError> {
+    pub(super) fn store(&self, store: &EncryptedStore) -> Result<(), MessagingError> {
         if store.identity_generation()? != self.identity.generation {
             return Err(MessagingError::Stale);
         }
@@ -760,7 +760,7 @@ impl NativeTransport {
     }
 }
 
-fn authenticate_pending(
+pub(super) fn authenticate_pending(
     s: &mut Runtime,
     store: &EncryptedStore,
     provider: &IdentityKeySession,

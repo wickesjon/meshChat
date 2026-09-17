@@ -127,7 +127,8 @@ final class IOSGattRadio: NSObject, IOSGattPort, @preconcurrency CBCentralManage
         for name in [UIApplication.didBecomeActiveNotification, UIApplication.didEnterBackgroundNotification,
                      UIApplication.protectedDataWillBecomeUnavailableNotification, UIApplication.willTerminateNotification] {
             observers.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] notification in
-                MainActor.assumeIsolated { self?.lifecycle(notification.name) }
+                let eventName = notification.name
+                MainActor.assumeIsolated { self?.lifecycle(eventName) }
             })
         }
         task = Task { @MainActor [weak self] in

@@ -30,9 +30,9 @@ Also permitted: this ticket and generated ticketboard index/diagram changes requ
 
 ## Exit criteria
 
-- [ ] Duplicate simultaneous connections settle deterministically without blocking asymmetric discovery.
-- [ ] Slot-exhaustion and reconnection tests obey device limits and do not accumulate stale resources.
-- [ ] Automated lifecycle/permission/service-stop and threshold tests pass with applicable native checks. Pixel/Samsung/Xiaomi permission, screen-off, OEM termination and measured connection-limit evidence is retained in MC-025.
+- [x] Duplicate simultaneous connections settle deterministically without blocking asymmetric discovery.
+- [x] Slot-exhaustion and reconnection tests obey device limits and do not accumulate stale resources.
+- [x] Automated lifecycle/permission/service-stop and threshold tests pass with applicable native checks. Pixel/Samsung/Xiaomi permission, screen-off, OEM termination and measured connection-limit evidence is retained in MC-025.
 - [ ] Relevant checks pass, evidence is recorded, required review is complete, and the ticket is squash merged to main.
 
 ## Potential fallbacks
@@ -46,12 +46,12 @@ A triggered fallback must be recorded with evidence. It does not authorize weake
 
 Scheduling approved 2026-09-14 in [the validation policy](../../decisions/local-validation-policy.md#physical-acceptance-scheduling--approved-2026-09-14). Physical OEM acceptance transfers to MC-025; native build checks and bounded-state regression tests remain implementation gates.
 
-Implementation and validation are in progress on the dedicated branch. No physical test or completed review is claimed. The current evidence below supersedes this ticket's original backlog state.
+Implementation and applicable local/native validation are complete on the dedicated branch. Separate Terra production review passed; final metadata review/merge remains pending. No physical test is claimed. The current evidence below supersedes this ticket's original backlog state.
 
 ## Review and merge
 
 - Branch: `ticket/MC-024-android-connection-and-power-integration`.
-- Review/PR: pending.
+- Review/PR: [PR #28](https://github.com/wickesjon/meshChat/pull/28).
 - Squash commit title: `MC-024: Android connection and power integration`.
 - Completion becomes effective only when the reviewed squash commit lands on main.
 
@@ -93,6 +93,16 @@ The Android driver uses a bounded 64-record connection policy, unseen/novelty/RS
 
 Implementation choices, application-entry obligations, activity qualification, bounds, source references and remaining physical ownership are recorded in [the connection-policy guide](../../testing/MC-024-android-connection-policy.md).
 
-Current local evidence: Rust/cargo 1.85.1, Python 3.14.4, JDK 17.0.15+6, Gradle 8.13 and Kotlin 2.2.0. All 160 core tests pass in debug and release; formatting and all-target/all-feature clippy with warnings denied pass. Dependency advisory/bans/licenses/sources checks pass with only existing unmatched allowance warnings. Host binding generation and Android arm64-v8a/x86_64 release builds pass with NDK 27.3.13750724. The first Android debug/release/lint candidate and its JVM suite passed; final policy/FFI regressions and Mac execution are still pending. An initial nullable battery-read compiler error and a Windows DLL-in-use rebuild were corrected/sequenced; neither failed invocation is counted as passed. Logs are in `.work/mc024/`.
+Local evidence on implementation revision `417e5d0245494ba6f1fc98bb58e5356180f16b55`: Rust/cargo 1.85.1, Python 3.14.4, JDK 17.0.15+6, Gradle 8.13 and Kotlin 2.2.0. All 160 core tests pass in debug and release; formatting and all-target/all-feature clippy with warnings denied pass. Dependency advisory/bans/licenses/sources checks pass with only existing unmatched allowance warnings. Host binding generation and Android arm64-v8a/x86_64 release builds pass with NDK 27.3.13750724. Final BLE `assembleDebug assembleRelease lintDebug` passes, including 24 JVM tests (eight connection-policy, nine driver, three native transport, two notification queue, one foundation and one wire-vector test). Debug/release APK ABI and ELF checks pass, and both APKs pass `zipalign -c -P 16 4`. An initial nullable battery-read compiler error and a Windows DLL-in-use rebuild were corrected/sequenced; neither failed invocation is counted as passed. Logs are in `.work/mc024/`.
 
-Review and applicable native completion remain mandatory before merge. No physical radio, OEM, battery or protected-key certification is claimed.
+Separate `gpt-5.6-terra` medium review passed exact revision `417e5d0245494ba6f1fc98bb58e5356180f16b55` against main `c3462db52d143a97e36a27524ccabd92b1610b46`, with no actionable findings. The reviewer checked scope, caps/budget continuity, proved duplicate arbitration, activity qualification, bounded selection/backoff and lifecycle cleanup, and independently ran the board validator and diff check. Hosted run [35176509195](https://github.com/wickesjon/meshChat/actions/runs/35176509195) passed Rust/security and ticketboard checks but caught a Swift test compilation typo (`isEmpty()` instead of the Boolean property `isEmpty`). Correction `b7ef9d6428d5893abf7a9e0ab8c79459df8da794` changes only that assertion. Terra follow-up passed that exact revision with no findings; the original failed invocation is not passing evidence. Native rerun [35176934340](https://github.com/wickesjon/meshChat/actions/runs/35176934340) remains pending.
+
+### Native rerun and evidence applicability
+
+The full Mac job in run [35176934340](https://github.com/wickesjon/meshChat/actions/runs/35176934340) passes on corrected source `b7ef9d6428d5893abf7a9e0ab8c79459df8da794`, using pinned Xcode 16.4, Swift 6.1.2 and Rust 1.85.1. This includes the corrected Swift transport trace (signed activity, invalid-signature rejection, power policy, Auto hysteresis and observations), shared device/simulator libraries, unsigned app/BLE/security builds, CryptoKit interoperability, SQLCipher lifecycle/public replay/DM direction separation and native crypto-vector error parity. Rust debug/release/build/storage/dependency gates and ticketboard also pass on this source. Hosted Android app packaging and BLE build/lint pass; its security job is still running.
+
+Only the Swift assertion syntax changed after local Android/Rust validation; production code, Kotlin tests, native libraries and dependency inputs are identical. The final ticket/evidence/board changes do not alter those runtime inputs. Applicable completed checks remain valid under the local-validation policy; a pending or cancelled run is never counted as passing. Final metadata review and merge remain pending. No physical radio, OEM, battery or protected-key certification is claimed.
+
+The local Android build/lint, real binding/driver/policy tests and both ABI/alignment checks cover every changed Android consumer. MC-024 does not modify the Android security probe, protected provider, storage implementation, security test fixtures, dependency versions or CI; their completed synthetic emulator evidence from MC-023 run 35171360291 remains applicable. The new transport operations are exercised by the real Kotlin/Swift/Rust transport tests. The current full hosted Android job is supplemental to that combination; any observed relevant failure must still be resolved before merge. Final review must confirm this applicability rationale.
+
+The ticket is staged in `complete/` only for the reviewed squash commit. Board regeneration/default validation, the 12 validator unit tests and diff check are required on that metadata revision. Completion becomes effective on main; the final merge checkbox is deliberately not asserted before the merge. Final exact-head review and any later hosted results are recorded in PR #28.

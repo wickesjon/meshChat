@@ -40,7 +40,7 @@ After edits run `python tests/ticketboard/validate.py --write`; then run `python
 | [MC-021](complete/MC-021-organizer-trust-credentials-and-signed-updates.md) | Organizer trust, credentials and signed updates | complete | MC-019, MC-006, MC-016 |
 | [MC-022](complete/MC-022-full-wire-crypto-review-and-freeze.md) | Full-wire crypto review and freeze | complete | MC-020, MC-021 |
 | [MC-023](complete/MC-023-android-gatt-transport.md) | Android GATT transport | complete | MC-004, MC-016, MC-019 |
-| [MC-024](inreview/MC-024-android-connection-and-power-integration.md) | Android connection and power integration | inreview | MC-023, MC-014 |
+| [MC-024](complete/MC-024-android-connection-and-power-integration.md) | Android connection and power integration | complete | MC-023, MC-014 |
 | [MC-025](backlog/MC-025-android-bench-mesh-and-early-field-gate.md) | Android integrated bench mesh and field gate | backlog | MC-024, MC-015, MC-029, MC-030, MC-031, MC-032, MC-033, MC-042, MC-022 |
 | [MC-026](backlog/MC-026-ios-corebluetooth-driver.md) | iOS CoreBluetooth driver | backlog | MC-004, MC-016 |
 | [MC-027](backlog/MC-027-cross-platform-radio-interoperability.md) | Cross-platform radio interoperability | backlog | MC-026, MC-023, MC-022, MC-035 |

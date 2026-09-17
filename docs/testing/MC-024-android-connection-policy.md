@@ -34,4 +34,22 @@ The service accepts a status callback and updates its notification for limited d
 
 Run the core formatting/clippy/debug/release/security gates, `build_bindings.py android`, and BLE `assembleDebug assembleRelease lintDebug` (which includes production-policy/driver JVM tests, real FFI tests and APK alignment checks). The shared API also requires the Mac Swift regression and applicable iOS builds. Exact revisions, tool versions and outcomes belong in the ticket/PR. No pending run is recorded as passed.
 
+Reproduction commands, using the repository-local toolchain/cache environment from the Windows build guide or CI:
+
+```text
+cargo fmt --all -- --check
+cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+cargo test --workspace --all-features --locked
+cargo test --workspace --all-features --locked --release
+cargo build --workspace --all-features --locked --release
+cargo-deny --all-features --locked --config src/core/deny.toml check
+python -B src/core/build_bindings.py android
+src/android/gradlew.bat -p src/android/ble --no-daemon --max-workers=2 assembleDebug assembleRelease lintDebug
+python -B tests/ticketboard/validate.py
+python -B -m unittest discover -s tests/ticketboard -v
+git diff --check
+```
+
+Use pinned cargo-deny 0.20.2 and run the SDK's `zipalign -c -P 16 4` separately on each debug/release APK. On the Mac, the existing `.github/workflows/ci.yml` iOS job generates the device/simulator libraries, compiles/runs `tests/integration/ffi/main.swift` with Swift 6 warnings as errors, builds the native projects and runs the security/storage regressions. Binding generation alone does not establish Swift execution.
+
 Platform references checked 2026-09-16: Android's [scanner contract](https://developer.android.com/reference/android/bluetooth/le/BluetoothLeScanner), [battery monitoring](https://developer.android.com/training/monitoring-device-state/battery-monitoring), and [process importance definitions](https://developer.android.com/reference/android/app/ActivityManager.RunningAppProcessInfo). These document API behavior; they are not meshChat device measurements.

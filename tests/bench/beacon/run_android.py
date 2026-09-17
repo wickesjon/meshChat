@@ -39,7 +39,9 @@ for phase in phases:
         # target's actual screen bounds rather than assuming a device layout.
         run('shell', 'am', 'start', '-n', 'org.meshchat.app/.MainActivity')
         bounds = None
-        for _ in range(10):
+        # Protected cold-start work is asynchronous, just like the save below.
+        deadline = time.monotonic() + 120
+        while time.monotonic() < deadline:
             nodes = window().iter('node')
             target = next((n for n in nodes if n.get('text') == 'Hold 2 seconds to exit'), None)
             if target is not None:

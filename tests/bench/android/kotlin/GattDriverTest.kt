@@ -181,4 +181,24 @@ class GattDriverTest {
         assertTrue(n.radio.calls.contains("close:$pending"))
         assertNull(n.driver.connect("00:00:00:00:00:10"))
     }
+    @Test fun saverClosesExcessSetupAndServiceStopInvalidatesEveryCallback() = node(77) { n ->
+        val ids = (1..6).map { requireNotNull(n.driver.connect("00:00:00:00:01:%02X".format(it))) }
+        assertEquals(6, n.driver.connections().size)
+        val power = requireNotNull(n.driver.power(TransportPowerSetting.SAVER, 30, false, 6))
+        assertTrue(power.saver)
+        assertEquals(3, n.driver.connections().size)
+        assertEquals(3, n.radio.calls.count { it.startsWith("close:") })
+        n.driver.stop()
+        assertEquals(6, n.radio.calls.count { it.startsWith("close:") })
+        for (id in ids) {
+            n.driver.connected(id, true); n.driver.mtu(id, 517, true)
+            n.driver.subscribed(id, true); n.driver.completed(id, true)
+            n.driver.value(id, byteArrayOf(1, 2, 3))
+        }
+        n.driver.tick()
+        assertTrue(n.driver.connections().isEmpty())
+        assertTrue(n.radio.sends.isEmpty())
+        assertNull(n.driver.connect("00:00:00:00:01:07"))
+    }
+
 }

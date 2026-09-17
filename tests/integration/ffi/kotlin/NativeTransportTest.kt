@@ -85,6 +85,15 @@ class NativeTransportTest {
             assertTrue(a.receive(al, 71uL, bf.bytes, 1000uL).events.isEmpty())
             a.complete(al, af.token, true, 1000uL)
             b.complete(bl, bf.token, true, 1000uL)
+            val hex = File(root(), "tests/vectors/crypto/friend-v1.tsv").readLines()
+                .single { it.startsWith("peer_chat\t") }.substringAfter('\t')
+            val signed = hex.chunked(2).map { it.toInt(16).toByte() }.toByteArray()
+            val frame = byteArrayOf(0, 0, (signed.size shr 8).toByte(), signed.size.toByte()) + signed
+            val corrupted = frame.copyOf().apply { this[lastIndex] = (this[lastIndex].toInt() xor 1).toByte() }
+            b.receive(bl, corrupted.size.toULong(), corrupted, 1000uL)
+            assertNull(b.observations(1000uL).single().firstValidMs)
+            b.receive(bl, frame.size.toULong(), frame, 1000uL)
+            assertEquals(1000uL, b.observations(1000uL).single().firstValidMs)
             a.disconnect(al, 1001uL)
             assertThrows(TransportException.Stale::class.java) { a.complete(al, af.token, true, 1001uL) }
         } }
@@ -100,4 +109,21 @@ class NativeTransportTest {
             assertThrows(TransportException.Stale::class.java) { core.complete(link, send.token, true, 5000uL) }
         }
     }
+    @Test fun powerBindingRetainsAutoHysteresisAndReturnsCancelledSetupPermits() = owner(76) { core, _ ->
+        val permits = (1..6).map { core.admitConnection(ByteArray(16) { _ -> it.toByte() }, 0uL) }
+        val saver = core.updatePower(TransportPowerSetting.SAVER, 40u, false, 4u, 0uL)
+        assertTrue(saver.saver)
+        assertEquals(3, saver.cancelledAdmissions.size)
+        assertEquals(60_000uL, saver.announceMs)
+        assertEquals(50_000uL, saver.scanOffMs)
+        assertTrue(saver.cancelledAdmissions.all { it in permits })
+        assertThrows(TransportException.Stale::class.java) {
+            core.nativeReady(saver.cancelledAdmissions.first(), TransportRole.CENTRAL, 146u, 146u, 0uL)
+        }
+        core.updatePower(TransportPowerSetting.AUTO, 41u, false, 4u, 0uL)
+        assertTrue(core.updatePower(null, 41u, false, 4u, 59_999uL).saver)
+        assertFalse(core.updatePower(null, 41u, false, 4u, 60_000uL).saver)
+        assertTrue(core.observations(60_000uL).isEmpty())
+    }
+
 }

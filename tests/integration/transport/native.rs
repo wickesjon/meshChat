@@ -283,3 +283,209 @@ fn connection_admission_and_pending_links_are_bounded_and_expire() {
     );
     assert!(owner.admit_connection(vec![7; 16], 30_000).is_ok());
 }
+
+#[test]
+fn power_hysteresis_shrinks_setup_and_ready_links_without_refunding_admission() {
+    let (a, _) = owner(70);
+    let mut links = Vec::new();
+    for address in 0..4 {
+        let token = a.admit_connection(vec![address; 16], 0).unwrap();
+        links.push(
+            a.native_ready(token, TransportRole::Central, 146, 146, 0)
+                .unwrap()
+                .link,
+        );
+    }
+    let p1 = a.admit_connection(vec![10; 16], 0).unwrap();
+    let p2 = a.admit_connection(vec![11; 16], 0).unwrap();
+    let saver = a
+        .update_power(Some(TransportPowerSetting::Saver), 50, false, 6, 0)
+        .unwrap();
+    assert!(saver.saver);
+    assert_eq!(saver.link_limit, 3);
+    assert_eq!(saver.cancelled_admissions, vec![p2, p1]);
+    assert!(saver.effects.events.contains(&TransportEvent::Closed {
+        link: links[3].clone()
+    }));
+    assert_eq!(
+        a.native_ready(p1, TransportRole::Central, 146, 146, 0)
+            .unwrap_err(),
+        TransportError::Stale
+    );
+    for _ in 0..10 {
+        a.update_power(Some(TransportPowerSetting::Normal), 50, false, 6, 0)
+            .unwrap();
+        assert_eq!(
+            a.admit_connection(vec![99; 16], 0).unwrap_err(),
+            TransportError::Busy
+        );
+        a.update_power(Some(TransportPowerSetting::Saver), 50, false, 6, 0)
+            .unwrap();
+    }
+    let (b, _) = owner(71);
+    assert!(!b.update_power(None, 19, false, 0, 0).unwrap().saver);
+    assert!(!b.update_power(None, 19, false, 0, 59_999).unwrap().saver);
+    assert!(b.update_power(None, 19, false, 0, 60_000).unwrap().saver);
+    assert!(b.update_power(None, 19, true, 0, 60_001).unwrap().saver);
+    assert!(b.update_power(None, 19, true, 0, 120_000).unwrap().saver);
+    let normal = b.update_power(None, 19, true, 0, 120_001).unwrap();
+    assert!(!normal.saver);
+    assert_eq!(normal.battery_tier, 3);
+    assert_eq!(
+        b.update_power(None, 101, false, 0, 120_001).unwrap_err(),
+        TransportError::Invalid
+    );
+}
+
+#[test]
+fn native_duplicate_resolution_waits_for_both_proofs_and_keeps_common_winner() {
+    let (a, ap) = owner(72);
+    let (b, bp) = owner(73);
+    let mut pairs = Vec::new();
+    for (ar, br) in [
+        (TransportRole::Central, TransportRole::Peripheral),
+        (TransportRole::Peripheral, TransportRole::Central),
+    ] {
+        let al = ready(&a, ar, 146, 146, 0);
+        let bl = ready(&b, br, 146, 146, 0);
+        let ah = a.tick(0).unwrap().sends.remove(0);
+        let bh = b.tick(0).unwrap().sends.remove(0);
+        a.receive(al.clone(), bh.bytes.len() as u64, bh.bytes, 0)
+            .unwrap();
+        b.receive(bl.clone(), ah.bytes.len() as u64, ah.bytes, 0)
+            .unwrap();
+        a.complete(al.clone(), ah.token, true, 0).unwrap();
+        b.complete(bl.clone(), bh.token, true, 0).unwrap();
+        pairs.push((al, bl));
+    }
+    assert_eq!(a.observations(0).unwrap().len(), 2); // HELLO claims cannot consolidate.
+    for (al, bl) in &pairs {
+        a.prepare_proof(al.clone(), ap.clone(), 0).unwrap();
+        b.prepare_proof(bl.clone(), bp.clone(), 0).unwrap();
+    }
+    let af = a.tick(1000).unwrap().sends;
+    let bf = b.tick(1000).unwrap().sends;
+    for f in &af {
+        let remote = &pairs.iter().find(|(al, _)| *al == f.link).unwrap().1;
+        b.receive(remote.clone(), f.bytes.len() as u64, f.bytes.clone(), 1000)
+            .unwrap();
+    }
+    for f in &bf {
+        let remote = &pairs.iter().find(|(_, bl)| *bl == f.link).unwrap().0;
+        a.receive(remote.clone(), f.bytes.len() as u64, f.bytes.clone(), 1000)
+            .unwrap();
+    }
+    assert_eq!(a.observations(1000).unwrap().len(), 2); // Local proof completion is required too.
+    for f in af {
+        a.complete(f.link, f.token, true, 1000).unwrap();
+    }
+    for f in bf {
+        b.complete(f.link, f.token, true, 1000).unwrap();
+    }
+    let live_a = a.observations(1000).unwrap();
+    let live_b = b.observations(1000).unwrap();
+    assert_eq!((live_a.len(), live_b.len()), (1, 1));
+    assert!(
+        pairs
+            .iter()
+            .any(|(al, bl)| *al == live_a[0].link && *bl == live_b[0].link)
+    );
+    assert!(a.observations(1001).unwrap()[0].last_valid_ms.is_none()); // Proof is not CHAT/ANNOUNCE.
+}
+
+fn whole(raw: &[u8]) -> Vec<u8> {
+    let mut frame = vec![0, 0];
+    frame.extend_from_slice(&(raw.len() as u16).to_be_bytes());
+    frame.extend_from_slice(raw);
+    frame
+}
+#[test]
+fn connection_hints_require_admitted_clear_content_and_digest_expires() {
+    let (a, _) = owner(74);
+    let (b, _) = owner(75);
+    let al = ready(&a, TransportRole::Central, 512, 512, 0);
+    let bl = ready(&b, TransportRole::Peripheral, 512, 512, 0);
+    handshake(&a, &b, &al, &bl);
+    a.receive(al.clone(), 5000, vec![], 1).unwrap();
+    assert_eq!(a.observations(1).unwrap()[0].last_valid_ms, None);
+    let raw = chat(1, 4);
+    let frame = whole(&raw);
+    a.receive(al.clone(), frame.len() as u64, frame, 1000)
+        .unwrap();
+    assert_eq!(a.observations(1000).unwrap()[0].last_valid_ms, Some(1000));
+    let mut payload = 200_000_u32.to_be_bytes().to_vec();
+    payload.extend_from_slice(&[0, 0, 0, 1, b'A', 0, 0, 0, 0, 1, 0]);
+    payload.extend_from_slice(&[0; 256]);
+    let mut raw = [0; 1024];
+    let len = codec::serialize(
+        codec::Header {
+            kind: 2,
+            flags: 0,
+            ttl: 1,
+            message_id: [2; 8],
+            sender_id: [2; 8],
+            channel_id: [0; 4],
+        },
+        &payload,
+        codec::Context::Live,
+        &mut raw,
+    )
+    .unwrap();
+    let frame = whole(&raw[..len]);
+    a.receive(al.clone(), frame.len() as u64, frame, 2000)
+        .unwrap();
+    let observed = a.observations(2000).unwrap();
+    assert_eq!(observed[0].novelty, Some(1000));
+    assert_eq!(observed[0].last_valid_ms, Some(2000));
+    assert_eq!(a.observations(62_000).unwrap()[0].novelty, None);
+    a.disconnect(al, 62_000).unwrap();
+    assert!(a.observations(62_000).unwrap().is_empty());
+}
+
+#[test]
+fn public_friend_vector_requires_real_signature_before_connection_activity() {
+    let (a, _) = owner(78);
+    let (b, _) = owner(79);
+    let al = ready(&a, TransportRole::Central, 512, 512, 0);
+    let bl = ready(&b, TransportRole::Peripheral, 512, 512, 0);
+    handshake(&a, &b, &al, &bl);
+    // Node/OpenSSL-produced committed vector, not a transcript made by this test.
+    let hex = include_str!("../../vectors/crypto/friend-v1.tsv")
+        .lines()
+        .find_map(|line| line.strip_prefix("peer_chat\t"))
+        .unwrap();
+    let raw: Vec<u8> = (0..hex.len())
+        .step_by(2)
+        .map(|i| u8::from_str_radix(&hex[i..i + 2], 16).unwrap())
+        .collect();
+    let mut corrupted = raw.clone();
+    *corrupted.last_mut().unwrap() ^= 1;
+    let frame = whole(&corrupted);
+    let rejected = a.receive(al.clone(), frame.len() as u64, frame, 0).unwrap();
+    assert!(matches!(
+        rejected.events[0],
+        TransportEvent::Received {
+            intake: TransportIntake::Pending,
+            ..
+        }
+    ));
+    assert_eq!(a.observations(0).unwrap()[0].first_valid_ms, None);
+    let frame = whole(&raw);
+    let valid = a
+        .receive(al.clone(), frame.len() as u64, frame, 1000)
+        .unwrap();
+    // Activity eligibility is separate from the content owner's acceptance.
+    assert!(matches!(
+        valid.events[0],
+        TransportEvent::Received {
+            intake: TransportIntake::Pending,
+            ..
+        }
+    ));
+    assert_eq!(a.observations(1000).unwrap()[0].first_valid_ms, Some(1000));
+    let frame = whole(&raw);
+    a.receive(al, frame.len() as u64, frame, 2000).unwrap();
+    let observed = a.observations(2000).unwrap();
+    assert_eq!(observed[0].first_valid_ms, Some(1000));
+    assert_eq!(observed[0].last_valid_ms, Some(2000));
+}

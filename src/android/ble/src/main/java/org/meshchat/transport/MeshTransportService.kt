@@ -19,13 +19,13 @@ import uniffi.meshchat_core.TransportEvent
  * The application starts it from a visible user action after permission grants.
  */
 class MeshTransportService : Service() {
-    private class Session(val core: NativeTransport, val event: (Long, TransportEvent) -> Unit, val ready: (AndroidGattRadio) -> Unit)
+    private class Session(val core: NativeTransport, val event: (Long, TransportEvent) -> Unit, val ready: (AndroidGattRadio) -> Unit, val state: (RadioState) -> Unit)
     companion object {
         private var session: Session? = null
         /** Transfers ownership of core only on success; no automatic restart. */
-        @Synchronized fun start(context: Context, core: NativeTransport, event: (Long, TransportEvent) -> Unit, ready: (AndroidGattRadio) -> Unit): Boolean {
+        @Synchronized fun start(context: Context, core: NativeTransport, event: (Long, TransportEvent) -> Unit, ready: (AndroidGattRadio) -> Unit, state: (RadioState) -> Unit = {}): Boolean {
             if (session != null || !MeshGatt.allowed(context)) return false
-            session = Session(core, event, ready)
+            session = Session(core, event, ready, state)
             return try { context.startForegroundService(Intent(context, MeshTransportService::class.java)); true }
             catch (_: RuntimeException) { session = null; false }
         }
@@ -44,7 +44,7 @@ class MeshTransportService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (active != null) return START_NOT_STICKY
         val supplied = take()
-        if (supplied == null || !MeshGatt.allowed(this)) { active = supplied; stopSelf(); return START_NOT_STICKY }
+        if (supplied == null || !MeshGatt.allowed(this)) { active = supplied; supplied?.state?.invoke(RadioState.PERMISSION_REQUIRED); stopSelf(); return START_NOT_STICKY }
         active = supplied
         val notifications = getSystemService(NotificationManager::class.java)
         notifications.createNotificationChannel(NotificationChannel("mesh-transport", "Nearby mesh connection", NotificationManager.IMPORTANCE_LOW))
@@ -53,13 +53,24 @@ class MeshTransportService : Service() {
             .setContentTitle("MeshChat nearby connection")
             .setContentText("Nearby connections are active.")
             .setOngoing(true).build())
-        val filter = IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED).apply { addAction(Intent.ACTION_SCREEN_OFF) }
+        val filter = IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED).apply {
+            addAction(Intent.ACTION_SCREEN_OFF); addAction(Intent.ACTION_USER_PRESENT); addAction(Intent.ACTION_BATTERY_CHANGED)
+        }
         // Bluetooth broadcasts may originate from the privileged Bluetooth UID.
         // The receiver checks actual adapter state; extras never grant authority.
         if (Build.VERSION.SDK_INT >= 33) registerReceiver(lifecycle, filter, Context.RECEIVER_EXPORTED)
         else { @Suppress("UnspecifiedRegisterReceiverFlag") registerReceiver(lifecycle, filter) }
         registered = true
-        val driver = AndroidGattRadio(applicationContext, supplied.core, supplied.event) { stopSelf() }
+        val driver = AndroidGattRadio(applicationContext, supplied.core, supplied.event, { state ->
+            supplied.state(state)
+            if (state == RadioState.ACTIVE || state == RadioState.DISCOVERY_PAUSED || state == RadioState.BACKGROUND_LOCATION_REQUIRED || state == RadioState.LOCATION_REQUIRED) {
+                notifications.notify(23, Notification.Builder(this, "mesh-transport")
+                    .setSmallIcon(android.R.drawable.stat_sys_data_bluetooth)
+                    .setContentTitle("MeshChat nearby connection")
+                    .setContentText(if (state == RadioState.ACTIVE) "Nearby connections are active." else "Discovery is limited. Open MeshChat to check permissions and connection status.")
+                    .setOngoing(true).build())
+            }
+        }) { stopSelf() }
         radio = driver
         driver.start()
         supplied.ready(driver)

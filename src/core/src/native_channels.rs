@@ -53,6 +53,9 @@ pub struct ChannelMessage {
     pub verified_petname: Option<String>,
     pub signed: bool,
     pub claim_warning: Option<String>,
+    /// Self-asserted decoration, never payment or identity evidence.
+    pub supporter_hint: bool,
+    pub nickname_rgb: Option<u32>,
 }
 #[derive(Clone, Debug, uniffi::Record)]
 pub struct ChannelWords {
@@ -166,6 +169,7 @@ pub struct NativeChannels {
     generation: Vec<u8>,
     sender: [u8; 8],
     state: Mutex<State>,
+    cosmetics: Mutex<[u8; 4]>,
 }
 impl NativeChannels {
     fn store(&self, store: &EncryptedStore) -> Result<(), ChannelError> {
@@ -234,6 +238,7 @@ impl NativeChannels {
         Ok(Self {
             generation: identity.generation,
             sender,
+            cosmetics: Mutex::new([0; 4]),
             state: Mutex::new(State {
                 now,
                 orphans: vec![],
@@ -246,6 +251,23 @@ impl NativeChannels {
                 ],
             }),
         })
+    }
+    /// Device-local preferences only. Entitlement does not grant any core authority.
+    pub fn set_cosmetics(&self, supporter: bool, rgb: Option<u32>) -> Result<(), ChannelError> {
+        if rgb.is_some_and(|value| value > 0xffffff) {
+            return Err(ChannelError::Invalid);
+        }
+        let value = rgb.unwrap_or(0).to_be_bytes();
+        *self
+            .cosmetics
+            .lock()
+            .map_err(|_| ChannelError::Unavailable)? = [
+            u8::from(rgb.is_some()) | (u8::from(supporter) << 1),
+            value[1],
+            value[2],
+            value[3],
+        ];
+        Ok(())
     }
     pub fn wait_ms(&self, name: String, reaction: bool, now: u64) -> Result<u64, ChannelError> {
         let c = parse(&name)?;
@@ -283,7 +305,14 @@ impl NativeChannels {
         let mut payload = wall.to_be_bytes().to_vec();
         payload.extend([if anonymous { 0 } else { avatar }, nick.len() as u8]);
         payload.extend(nick.as_bytes());
-        payload.extend([0; 4]);
+        payload.extend(if anonymous {
+            [0; 4]
+        } else {
+            *self
+                .cosmetics
+                .lock()
+                .map_err(|_| ChannelError::Unavailable)?
+        });
         payload.extend((value.len() as u16).to_be_bytes());
         payload.extend(value.as_bytes());
         let bytes = packet(1, sender, c.id(), &payload)?;
@@ -329,7 +358,13 @@ impl NativeChannels {
         let mut payload = wall.to_be_bytes().to_vec();
         payload.extend([avatar, peers, 0, nick.len() as u8]);
         payload.extend(nick.as_bytes());
-        payload.extend([0; 6]);
+        payload.extend(
+            *self
+                .cosmetics
+                .lock()
+                .map_err(|_| ChannelError::Unavailable)?,
+        );
+        payload.extend([0; 2]);
         packet(2, self.sender, [0; 4], &payload)
     }
     /// Only budget-admitted, non-duplicate events from the current transport owner.
@@ -489,6 +524,7 @@ impl NativeChannels {
                 avatar,
                 nickname,
                 text: value,
+                cosmetics,
                 ..
             } = p.payload()
             {
@@ -531,6 +567,17 @@ impl NativeChannels {
                     arrival: row.timestamp,
                     reactions: vec![0; 9],
                     own_reaction: None,
+                    supporter_hint: !anonymous && cosmetics[0] & 2 != 0,
+                    nickname_rgb: if !anonymous && cosmetics[0] & 1 != 0 {
+                        Some(u32::from_be_bytes([
+                            0,
+                            cosmetics[1],
+                            cosmetics[2],
+                            cosmetics[3],
+                        ]))
+                    } else {
+                        None
+                    },
                 });
             }
         }

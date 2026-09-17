@@ -11,9 +11,11 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import org.meshchat.ui.MeshApplication
 import org.meshchat.ui.MeshApp
+import org.meshchat.billing.PlayEntitlements
 
 class MainActivity : ComponentActivity() {
     private val model get() = (application as MeshApplication).model
+    private val billing by lazy { PlayEntitlements(this,report=model::storeResult,priceChanged=model::storePrice) }
     private val permissions = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { model.load() }
     private val scanner = registerForActivityResult(ScanContract()) { result ->
         val value=result.contents
@@ -40,7 +42,9 @@ class MainActivity : ComponentActivity() {
             if (Build.VERSION.SDK_INT >= 31) requested.addAll(listOf(Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT, Manifest.permission.BLUETOOTH_ADVERTISE))
             if (Build.VERSION.SDK_INT >= 33) requested.add(Manifest.permission.POST_NOTIFICATIONS)
             permissions.launch(requested.toTypedArray())
-        }, scan = { camera.launch(Manifest.permission.CAMERA) }) }
+        }, scan = { camera.launch(Manifest.permission.CAMERA) },
+            buySupporter = { billing.purchase(this) }, restoreSupporter = { billing.refresh() }) }
     }
-    override fun onResume() { super.onResume(); model.load() }
+    override fun onResume() { super.onResume(); model.load();billing.refresh() }
+    override fun onDestroy() { billing.close();super.onDestroy() }
 }

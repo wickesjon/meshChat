@@ -165,6 +165,7 @@ func channelTrace() throws {
     let publicId = try identity.publicIdentity()
     let store = try EncryptedStore.open(db: db, generation: publicId.generation, create: true, now: 200000)
     let channels = try NativeChannels(identity: publicId, now: 0)
+    try channels.setCosmetics(supporter: true, rgb: 0x12abef)
     let first = try channels.compose(name: "#confessions", nickname: "Alice", avatar: 0x23, message: String(repeating: "🎉", count: 70), wall: 200000, now: 0)
     let second = try channels.compose(name: "#confessions", nickname: "Alice", avatar: 0x23, message: "Another", wall: 200000, now: 0)
     precondition(first.subdata(in: 12..<20) != second.subdata(in: 12..<20))
@@ -172,6 +173,11 @@ func channelTrace() throws {
     precondition(accepted)
     let message = try channels.history(store: store, name: "#confessions", ownNickname: "Alice")[0]
     precondition(message.nickname == "Anonymous" && message.avatar == 0)
+    precondition(!message.supporterHint && message.nicknameRgb == nil)
+    let decorated = try channels.compose(name: "#general", nickname: "Alice", avatar: 1, message: "Cosmetic", wall: 200000, now: 0)
+    _ = try channels.accept(store: store, receipt: ChannelReceipt(link: nil, bytes: decorated, intake: .unverified, own: false, wall: 200000, now: 0))
+    let hint = try channels.history(store: store, name: "#general", ownNickname: "Bob")[0]
+    precondition(hint.supporterHint && hint.nicknameRgb == 0x12abef && !hint.signed && hint.verifiedPetname == nil)
     let reaction = try channels.reaction(name: "#confessions", target: message.id, code: 3, remove: false, now: 0)
     precondition(reaction.subdata(in: 12..<20) == publicId.senderId)
     _ = try channels.accept(store: store, receipt: ChannelReceipt(link: nil, bytes: reaction, intake: .unverified, own: true, wall: 200000, now: 0))

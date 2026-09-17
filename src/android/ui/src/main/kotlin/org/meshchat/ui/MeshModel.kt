@@ -12,6 +12,7 @@ import androidx.compose.runtime.setValue
 import org.meshchat.identity.*
 import org.meshchat.storage.*
 import org.meshchat.transport.*
+import org.meshchat.billing.*
 import uniffi.meshchat_core.*
 import java.security.SecureRandom
 import java.util.concurrent.ArrayBlockingQueue
@@ -29,6 +30,8 @@ data class MeshScreenState(
     val direct: DirectThread? = null, val directRows: List<DirectRow> = emptyList(), val archives: List<FriendProposal> = emptyList(),
     val loading: Boolean = true, val onboarded: Boolean = false, val locked: Boolean = false,
     val nickname: String = "", val avatar: UByte = 1u, val light: Boolean = false,
+    val supporter: Boolean = false, val theme: String = "afterhours", val nicknameRgb: UInt? = null,
+    val billingStatus: String = "Purchases are not configured in this build.", val supporterPrice: String? = null,
     val channels: List<ChannelInfo> = emptyList(), val selected: ChannelInfo? = null,
     val channelProposal: ChannelInfo? = null,
     val rows: List<ChatRow> = emptyList(), val peers: Int = 0,
@@ -65,6 +68,11 @@ class MeshModel(private val context: Context) {
     private var profile = ""
     private var avatar: UByte = 1u
     private var light = false
+    private var supporter = false
+    private var theme = "afterhours"
+    private var nicknameRgb: UInt? = null
+    private var billingStatus = "Purchases are not configured in this build."
+    private var supporterPrice: String? = null
     private var power = TransportPowerSetting.AUTO
     private var joined = mutableListOf("#general", "#event updates", "#confessions")
     private val muted = mutableSetOf<String>()
@@ -111,6 +119,7 @@ class MeshModel(private val context: Context) {
         put("ui-channels-v1", joined.joinToString("\n"))
         put("ui-muted-v1", muted.joinToString("\n"))
         put("ui-power-v1", power.name)
+        put("ui-cosmetics-v1", "$theme|${nicknameRgb?.toString() ?: ""}")
     }
     fun load() = work {
         if (loaded) { refresh(); return@work }
@@ -121,8 +130,13 @@ class MeshModel(private val context: Context) {
         val saved = setting("ui-profile-v1")?.split('|', limit = 3)
         if (saved == null || saved.size != 3) { unavailable(); return@work }
         avatar = saved[0].toUByte(); light = saved[1] == "1"; profile = channelNickname(saved[2])
+        supporter = setting("supporter-v1") == "1"
+        val cosmetics = setting("ui-cosmetics-v1")?.split('|', limit=2)
+        theme = cosmetics?.firstOrNull() ?: if(light)"daylight" else "afterhours"
+        nicknameRgb = cosmetics?.getOrNull(1)?.toUIntOrNull()?.takeIf { it<=0xffffffu }
+        light = Themes.selected(theme,supporter).light
         power = setting("ui-power-v1")?.let { TransportPowerSetting.valueOf(it) } ?: TransportPowerSetting.AUTO
-        joined = (setting("ui-channels-v1")?.split('\n') ?: joined).take(32).map { channelInfo(it).name }.distinct().toMutableList()
+        joined = (setting("ui-channels-v1")?.split('\n') ?: joined).take(33).map { channelInfo(it).name }.distinct().toMutableList()
         muted.clear(); muted.addAll(setting("ui-muted-v1")?.split('\n')?.filter { it in joined } ?: emptyList())
         owner = NativeChannels(info.identity, now()); initializeMessaging(); loaded = true
         previews.clear(); unread.clear()
@@ -138,15 +152,36 @@ class MeshModel(private val context: Context) {
         owner = NativeChannels(info.identity, now()); initializeMessaging(); loaded = true; persist(); refresh()
         replacement = false
     }
-    fun updateProfile(nickname: String, chosenAvatar: UByte, useLight: Boolean) = work {
-        profile = channelNickname(nickname); avatar = chosenAvatar; light = useLight; persist(); myCode = storage.friendCode(profile); refresh()
+    fun updateProfile(nickname: String, chosenAvatar: UByte, useLight: Boolean, chosenTheme: String? = null, color: UInt? = null) = work {
+        profile = channelNickname(nickname); avatar = chosenAvatar
+        theme = Themes.selected(chosenTheme ?: if(useLight)"daylight" else "afterhours",supporter).id
+        light = Themes.selected(theme,supporter).light
+        nicknameRgb = color?.takeIf { supporter && it<=0xffffffu }
+        persist(); myCode = storage.friendCode(profile); refresh()
     }
+    /** Native store callback; acknowledgement is allowed only after protected save.
+     * Store failure changes no transport or authentication decision. */
+    fun storeResult(result: StoreResult, message: String, saved: (Boolean)->Unit) = work {
+        if(!loaded) { main.post { saved(false) };return@work }
+        val next = EntitlementPolicy.active(supporter,result)
+        try { put("supporter-v1",if(next)"1" else "0") }
+        catch (_: Exception) {
+            billingStatus="Unable to save Supporter access. Try Restore when storage reopens."
+            main.post { screen=screen.copy(billingStatus=billingStatus);saved(false) };return@work
+        }
+        supporter=next;light=Themes.selected(theme,supporter).light;billingStatus=message
+        refresh();main.post { saved(true) }
+    }
+    fun storePrice(price: String?) = work { supporterPrice=price;refresh() }
+    private fun canJoin(channel: ChannelInfo): Boolean = !channel.private ||
+        EntitlementPolicy.canAddPrivate(supporter,joined.count { channelInfo(it).private })
+    private fun slotNotice() = "Private channel slots are full. Leave one to add another. Existing channels stay available."
     fun power(value: TransportPowerSetting) = work { power = value; persist(); radio?.powerSetting(value); refresh() }
     fun select(name: String?) = work { notice = null; direct = null; selected = name?.let { channelInfo(it).name }; selected?.let { unread[it] = 0 }; refresh() }
     fun join(name: String) = work {
         val channel = channelInfo(name)
         if (channel.name !in joined) {
-            if (joined.size >= 32) { refresh("You can join up to 32 channels."); return@work }
+            if (!canJoin(channel)) { refresh(slotNotice()); return@work }
             joined.add(channel.name); persist()
         }
         selected = channel.name; unread[channel.name] = 0; refresh()
@@ -166,6 +201,7 @@ class MeshModel(private val context: Context) {
         stopRadio(); clearMessaging(); owner?.close(); owner = null; identity.reset(); storage.create()
         profile = ""; selected = null; receipts.clear(); loaded = false
         joined = mutableListOf("#general", "#event updates", "#confessions"); muted.clear(); avatar = 1u; light = false
+        supporter=false;theme="afterhours";nicknameRgb=null
         previews.clear(); unread.clear()
         replacement = true
         power = TransportPowerSetting.AUTO
@@ -181,6 +217,7 @@ class MeshModel(private val context: Context) {
         if (!loaded) return
         notice = error
         val n = checkNotNull(owner)
+        n.setCosmetics(supporter,if(supporter)nicknameRgb else null)
         val rows = selected?.let { name -> coreWork { storage.messagingHistory(it, n, name, profile) } } ?: emptyList()
         cards = coreWork { storage.friendCards(it, now()) }
         val dmRows = direct?.let { thread -> coreWork { storage.directHistory(it, thread.keys, now()) } } ?: emptyList()
@@ -190,6 +227,7 @@ class MeshModel(private val context: Context) {
             replacingFriend = replacingFriend, direct = direct, archives = archives.filter { old -> cards.none { it.keys.contentEquals(old.keys) } },
             directRows = dmRows.map { DirectRow(it, receipts[key(it.id)] ?: if(it.own) "Stored locally - delivery unknown" else "Encrypted") },
             loading = false, onboarded = true, nickname = profile, avatar = avatar, light = light,
+            supporter = supporter, theme = theme, nicknameRgb = nicknameRgb, billingStatus = billingStatus, supporterPrice = supporterPrice,
             channels = joined.map(::channelInfo), selected = selected?.let(::channelInfo), channelProposal = channelProposal,
             rows = rows.map { ChatRow(it, receipts[key(it.id)] ?: if(it.own) "Stored locally · delivery unknown" else "Unverified") },
             peers = links.size, status = status, error = error, waitSeconds = ((wait + 999uL) / 1000uL).toInt(), muted = selected in muted,
@@ -360,7 +398,7 @@ class MeshModel(private val context: Context) {
     fun confirmChannel(name: String) = work {
         if(!loaded || channelProposal?.name!=name)return@work
         if(name !in joined) {
-            if(joined.size>=32) {refresh("You can join up to 32 channels.");return@work}
+            if(!canJoin(channelInfo(name))) {refresh(slotNotice());return@work}
             joined.add(name);persist()
         }
         channelProposal=null;direct=null;selected=name;unread[name]=0;refresh()

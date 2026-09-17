@@ -30,6 +30,7 @@ android {
         getByName("main") {
             java.srcDir(rootProject.file("../../.work/ffi/kotlin"))
             java.srcDirs(rootProject.file("ui/src/main/kotlin"),
+                rootProject.file("billing"),
                 rootProject.file("ble/src/main/java/org/meshchat/transport"),
                 rootProject.file("security/src/main/java/org/meshchat/identity"),
                 rootProject.file("security/src/main/java/org/meshchat/storage"))
@@ -40,6 +41,8 @@ android {
         getByName("androidTest").java.srcDir(rootProject.file("../../tests/integration/android-ui/android"))
         getByName("test").java.srcDir(rootProject.file("../../tests/integration/sharing/kotlin"))
         getByName("androidTest").java.srcDir(rootProject.file("../../tests/integration/sharing/android"))
+        getByName("test").java.srcDir(rootProject.file("../../tests/integration/billing/kotlin"))
+        getByName("androidTest").java.srcDir(rootProject.file("../../tests/integration/billing/android"))
     }
 
     testOptions.unitTests.all {
@@ -62,6 +65,9 @@ android {
 }
 
 dependencies {
+    implementation("com.android.billingclient:billing:9.1.0")
+    // Billing brings Fragment 1.0.0; ActivityResult requires a compatible version.
+    implementation("androidx.fragment:fragment:1.8.9")
     // The upstream JNI has 4 KB RELRO; package the source-rebuilt pinned AAR.
     configurations.configureEach { exclude(group = "androidx.graphics", module = "graphics-path") }
     implementation(files(rootProject.file("../../.work/ui-graphics/graphics-path-1.0.1-aligned.aar")))

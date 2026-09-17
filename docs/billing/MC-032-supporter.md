@@ -1,0 +1,27 @@
+# MC-032 Supporter implementation and activation gate
+
+## Behavior
+
+Supporter is a device-local, one-time non-consumable unlock. Free users get Afterhours and Daylight; Supporter adds Ember, Lagoon and Violet, custom nickname text color, and thirty instead of five private subscription slots. The three public channels are additional. Existing subscriptions survive downgrade, including subscriptions saved by older builds. Payment does not select routes, change send budgets, authorize signatures, affect encryption, or grant friend/organizer trust.
+
+The Android feature owner keeps the validated entitlement in encrypted `supporter-v1` settings and appearance choices in encrypted `ui-cosmetics-v1`. Unknown, pending or unavailable store evidence cannot grant initial access and preserves the last validated cache. A successful reconciliation reporting no ownership removes paid access. One-time offline grace has no clock expiry; a refund is recognized when store state becomes available. Identity/data reset clears this local cache; a configured store can restore ownership afterward. Purchase acknowledgement/finish occurs only after saving local entitlement. A failed billing save reports an error without deliberately disconnecting the mesh.
+
+The Google adapter accepts PURCHASED state only for the configured product/package with a valid store-signed JSON receipt; it neither consumes purchases nor logs receipts/tokens. It queries fresh product details and supports one permanent purchase offer, with the actual store price. The StoreKit adapter uses verified, non-revoked non-consumable transactions, transaction updates and explicit `AppStore.sync()` for restore. MC-035 connects the compiled iOS adapter and settings component to its protected feature owner and complete UI. This ticket does not present the iOS skeleton as shipping feature parity.
+
+The implementation follows the [Google Billing integration API](https://developer.android.com/google/play/billing/integrate), [StoreKit transactions](https://developer.apple.com/documentation/storekit/transaction), and [explicit restore behavior](https://developer.apple.com/documentation/storekit/appstore/sync()). Android pins Billing 9.1.0. Its dependency graph introduces an old Fragment library; the app pins Fragment 1.8.9 to satisfy ActivityResult compatibility checks rather than disabling lint. On-device payment checks are the design's cosmetic-only policy, not a backend fraud-prevention guarantee.
+
+## Wire and presentation
+
+`NativeChannels.set_cosmetics` fills the existing four-byte CHAT/ANNOUNCE fields from MC-006: bit0 means RGB present, bit1 is a self-asserted Supporter hint, and reserved bits are sent zero. Clearing color sends zero RGB. There is no wire revision, new entitlement packet, receipt propagation or new trust meaning. Existing signature code authenticates the payload bytes, which establishes authorship of a hint, never payment. Receivers ignore RGB without bit0. Confessions always sends zero cosmetics and suppresses hostile incoming avatar/color/flair.
+
+Remote flair reads “Supporter flair · unverified”, using ordinary text separate from trust labels. Custom color changes nickname text only. Four-character sender suffixes and verified labels are unaffected. Native palette checks require 4.5:1 for message/secondary/accent/error text on both background and surface, and button labels on accent. Receivers fall back to the theme text color if a nickname color misses that floor. Python checks that both platforms use identical original tokens.
+
+## Configuration fallback and release prerequisites
+
+No store product IDs, Google licensing public key or App Store configuration have been supplied. The ticket's explicit unavailable-store fallback applies. Android's default `PlayConfiguration` is empty and the iOS product ID defaults to nil; both block store contact and purchase activation. There is no production test-grant button, intent or preference override. Test adapters exist only under `tests/integration/billing/`; they deliver synthetic store evidence to the same protected-cache callback used by the native adapter.
+
+Before activation, MC-039 must record actual store identifiers and signing/package/bundle matches, a reviewed permanent non-consumable product and localized price, licensing key/receipt verification, sandbox purchase/pending/cancel/acknowledgement/restore, refund/revocation, account changes, and offline restart behavior on each shipping platform. No sandbox purchase is claimed here. iOS protected-cache and full UI acceptance also remains part of MC-035/027; device certification remains with the existing physical gates. Store setup, submission, publication and actual payments require separate authorization.
+
+## Validation record
+
+Implementation validation is in progress. The ticket and final PR will record exact tested and reviewed revisions. Reproduction uses the normal Rust gates, `python -B src/core/build_bindings.py android`, app Debug/Release builds, lint and JVM tests, `tests/integration/android-ui/run_emulator.py` followed by sharing/friend and billing runners on an explicitly named emulator. `tests/integration/billing/run_android.py` is synthetic purchase/cache/restart/refund/slot/theme/flair evidence, not a store sandbox result. The iOS CI job compiles/runs the native cache/disabled-adapter/theme checks and Swift core consumer, and builds the app in Debug/Release on pinned Xcode 16.4.

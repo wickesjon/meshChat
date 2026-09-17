@@ -126,3 +126,7 @@ path = "../../tests/integration/transport/native.rs"
 [[test]]
 name = "native_messaging"
 path = "../../tests/integration/android-ui/messaging.rs"
+
+[[test]]
+name = "cosmetics"
+path = "../../tests/integration/billing/cosmetics.rs"

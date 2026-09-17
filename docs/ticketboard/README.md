@@ -48,7 +48,7 @@ After edits run `python tests/ticketboard/validate.py --write`; then run `python
 | [MC-029](complete/MC-029-android-friends-and-encrypted-messaging-ui.md) | Android friends and encrypted messaging UI | complete | MC-028, MC-020 |
 | [MC-030](backlog/MC-030-android-organizer-ui-and-staff-provisioning.md) | Android organizer UI and staff provisioning | backlog | MC-028, MC-021, MC-041 |
 | [MC-031](complete/MC-031-offline-sharing-and-installed-app-link-support.md) | Offline sharing and installed-app link support | complete | MC-011, MC-028 |
-| [MC-032](backlog/MC-032-supporter-entitlements-and-accessible-cosmetics.md) | Supporter entitlements and accessible cosmetics | backlog | MC-028, MC-006 |
+| [MC-032](inprogress/MC-032-supporter-entitlements-and-accessible-cosmetics.md) | Supporter entitlements and accessible cosmetics | inprogress | MC-028, MC-006 |
 | [MC-033](backlog/MC-033-android-phone-beacon-mode.md) | Android phone Beacon Mode | backlog | MC-024, MC-018, MC-028 |
 | [MC-034](backlog/MC-034-android-beta-integration-gate.md) | Android beta integration gate | backlog | MC-025, MC-029, MC-030, MC-031, MC-032, MC-033, MC-042, MC-022, MC-043 |
 | [MC-035](backlog/MC-035-ios-feature-parity-and-lifecycle-ui.md) | iOS feature parity and lifecycle UI | backlog | MC-026, MC-022, MC-029, MC-030, MC-031, MC-032, MC-042 |

@@ -172,6 +172,8 @@ jobs:
           python3 -B tests/integration/storage/run_android.py --serial emulator-5554
           python3 -B tests/integration/android-ui/run_emulator.py --serial emulator-5554
           python3 -B tests/integration/android-ui/run_friends_emulator.py --serial emulator-5554
+          python3 -B tests/integration/sharing/run_android.py --serial emulator-5554
+          python3 -B tests/integration/billing/run_android.py --serial emulator-5554
       - name: Retain synthetic UI evidence and rebuilt dependencies
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -182,6 +184,7 @@ jobs:
           path: |
             .work/mc028/screenshots
             .work/mc029/screenshots/*.png
+            .work/mc032/screenshots/*.png
             .work/security-sqlcipher/sqlcipher-4.17.0-aligned.aar
             .work/ui-graphics/graphics-path-1.0.1-aligned.aar
       - name: Stop isolated security emulator
@@ -221,6 +224,16 @@ jobs:
             -L target/debug -lmeshchat_core -Xlinker -rpath -Xlinker "$PWD/target/debug" \
             -o .work/ffi/swift-regression
           .work/ffi/swift-regression
+      - name: Supporter native policy and theme regression
+        run: |
+          python3 -B tests/integration/billing/test_themes.py
+          xcrun swiftc -swift-version 6 -warnings-as-errors \
+            -target "$(uname -m)-apple-macos15.0" \
+            -module-cache-path "$PWD/.work/clang-module-cache" \
+            src/ios/Billing/EntitlementPolicy.swift src/ios/Billing/StoreEntitlements.swift \
+            src/ios/UI/ThemeTokens.swift tests/integration/billing/main.swift \
+            -o .work/ffi/supporter-regression
+          .work/ffi/supporter-regression
       - name: Build unsigned iOS skeleton
         run: |
           mkdir -p .work/tmp .work/clang-module-cache

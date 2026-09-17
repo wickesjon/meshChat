@@ -17,7 +17,7 @@ import zipfile
 ROOT = Path(__file__).resolve().parents[3]
 WORK = ROOT / '.work/ui-graphics'
 REVISION = '8a05a22af450d589ef911d772a001a49dcb05b71'
-SOURCE_SHA = '7aeb7cfd1ba9a44390cca5a1eb7c414e3e16f1e916f53086ffcf6075161ed87d'
+SOURCE_SHA = '2cca0866850f2bf1ac4b42b63a1f719b1230d9985b913b977d7c4a2175cf2ec1'
 AAR_SHA = '8ca4032b6d79b351f0b59ad4b580eddbb9423e1652f7c958830687f1eee2ec03'
 
 
@@ -25,7 +25,7 @@ def download(name, url, digest):
     path = WORK / name
     if not path.exists():
         urllib.request.urlretrieve(url, path)
-    if hashlib.sha256(path.read_bytes()).hexdigest() != digest:
+    if digest is not None and hashlib.sha256(path.read_bytes()).hexdigest() != digest:
         raise ValueError(f'{name}: checksum mismatch')
     return path
 
@@ -37,12 +37,22 @@ def main():
     for variable in ['TMPDIR', 'TEMP', 'TMP']:
         os.environ[variable] = str(tmp)
     archive = download('source.tar.gz',
-        f'https://android.googlesource.com/platform/frameworks/support/+archive/{REVISION}/graphics/graphics-path/src/main/cpp.tar.gz', SOURCE_SHA)
+        f'https://android.googlesource.com/platform/frameworks/support/+archive/{REVISION}/graphics/graphics-path/src/main/cpp.tar.gz', None)
     aar = download('upstream.aar',
         'https://dl.google.com/dl/android/maven2/androidx/graphics/graphics-path/1.0.1/graphics-path-1.0.1.aar', AAR_SHA)
     source = WORK / 'source'
     source.mkdir(exist_ok=True)
     with tarfile.open(archive) as contents:
+        # Gitiles archive headers vary across downloads. Pin the complete named
+        # file contents, excluding only tar/gzip metadata, before extraction.
+        digest = hashlib.sha256()
+        for member in sorted(contents.getmembers(), key=lambda item: item.name):
+            if member.isfile():
+                digest.update(member.name.encode() + b'\0' + hashlib.sha256(contents.extractfile(member).read()).digest())
+            elif not member.isdir():
+                raise ValueError('Unexpected source archive entry')
+        if digest.hexdigest() != SOURCE_SHA:
+            raise ValueError('Graphics source content checksum mismatch')
         contents.extractall(source, filter='data')
     ndk = Path(os.environ['ANDROID_HOME']) / 'ndk/27.3.13750724'
     host = {'Windows': 'windows-x86_64', 'Linux': 'linux-x86_64'}[platform.system()]

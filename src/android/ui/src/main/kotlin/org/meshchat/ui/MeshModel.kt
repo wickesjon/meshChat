@@ -257,7 +257,7 @@ class MeshModel(private val context: Context) {
                         for (other in links.keys.filter { it != id }) radio?.send(other, bytes, TransportTraffic.FORWARDED, cookie++)
                     }
                     val channel = joined.firstOrNull { channelInfo(it).id.contentEquals(bytes.copyOfRange(20.coerceAtMost(bytes.size), 24.coerceAtMost(bytes.size))) }
-                    if (channel != null && storage.channelAccept(n, event.link, bytes, event.intake, false, now())) {
+                    if (event.intake == TransportIntake.UNVERIFIED && channel != null && storage.channelAccept(n, event.link, bytes, event.intake, false, now())) {
                         previews[channel] = storage.channelHistory(n, channel, profile).lastOrNull()?.text ?: "Quiet so far"
                         if (channel != selected && channel !in muted) unread[channel] = ((unread[channel] ?: 0) + 1).coerceAtMost(999)
                     }

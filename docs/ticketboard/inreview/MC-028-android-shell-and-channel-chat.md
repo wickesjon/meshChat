@@ -56,7 +56,7 @@ Implemented on the dedicated branch; final native/package/emulator checks and in
 ## Review and merge
 
 - Branch: `ticket/MC-028-android-shell-and-channel-chat`.
-- Review/PR: pending.
+- Review/PR: [#30](https://github.com/wickesjon/meshChat/pull/30).
 - Squash commit title: `MC-028: Android shell and channel chat`.
 - Completion becomes effective only when the reviewed squash commit lands on main.
 
@@ -84,4 +84,12 @@ Implement native onboarding/navigation and the specified themes, private word-tr
 Require real-core join/send/receive/react traces, encrypted history across process restart, disconnected/queue-full/rate-limited outcomes, duplicate and unsafe-text tests, UTF-8 byte boundaries and Confessions unlinkability/presentation tests. Run Android Debug/Release/lint/package alignment, Kotlin and applicable emulator/UI/security checks, Rust and both native FFI consumers, ticketboard validation and separate Terra review. Physical radio and hardware protection remain MC-025/043; no certification or release claim is added.
 
 
-Proposal prepared on dedicated branch ticket/MC-028-android-shell-and-channel-chat from main af7680a49dae969470cf8b1e70fda2d4aea59b7d, after MC-026 PR #29 merged. The user approved this extension; the Scope and depends_on above now include it. All hard dependencies are complete on main. The ticket is in progress on its dedicated branch.
+Proposal prepared on dedicated branch ticket/MC-028-android-shell-and-channel-chat from main af7680a49dae969470cf8b1e70fda2d4aea59b7d, after MC-026 PR #29 merged. The user approved this extension; the Scope and depends_on above now include it. All hard dependencies are complete on main. The ticket is in review on its dedicated branch.
+
+
+### Initial PR review and validation
+
+- Separate `gpt-5.6-terra`/medium worker reviewed `ea3d1329f6ab9d9040c4e8ae3627fdbc900fc940` against main `af7680a49dae969470cf8b1e70fda2d4aea59b7d`. Outcome: one P1, pending signed CHAT could enter ordinary unverified history/display. Fixed by refusing pending work in Kotlin and Rust, rejecting semantic signed/encrypted flags at the unsigned boundary, and filtering them from its history. A corrupted signed golden-vector regression asserts neither pending nor misclassified signed CHAT persists. Relay behavior stays unchanged. Follow-up review is required.
+- At the initial PR revision, local Rust debug/release: 174 tests each; formatting and all-target/all-feature Clippy pass. Both native Android ABIs and host bindings pass. 26 actual JVM tests pass. Dependency advisory/license/bans/source gates pass with cargo-deny 0.20.2. Ticketboard/default and 12 unit tests pass.
+- Measured nickname palette contrast is at least 7.70:1 on dark surfaces and 6.07:1 on light; primary message text is 14.25:1 dark and 15.65:1 light. Emulator large-text verification remains required.
+- Hosted run `35184834984` passed Rust and ticketboard. Android stopped at the source archive checksum before app packaging: the downloaded archive wrapper differed. The fix checksums the entire sorted set of file names and contents before extraction, retaining the pinned release and rejecting changed content. Rebuilt SQLCipher from that run is artifact `10481996081`; its downloaded ZIP SHA-256 is `2944089ee0aad571d5f36d3185a33a51b9248bf14e1a1f176695111047417ce8`. It is used only for local native validation; no failed job is claimed as a pass.

@@ -239,6 +239,7 @@ fn intake_classification_never_displays_ciphertext_or_sync() {
         TransportIntake::Opaque,
         TransportIntake::Duplicate,
         TransportIntake::DeferredSync,
+        TransportIntake::Pending,
     ] {
         assert!(
             !n.accept(
@@ -255,6 +256,52 @@ fn intake_classification_never_displays_ciphertext_or_sync() {
             .unwrap()
         );
     }
+    assert!(
+        n.history(store.clone(), "#general".into(), "Alice".into())
+            .unwrap()
+            .is_empty()
+    );
+    let signed_hex = include_str!("../../vectors/crypto/friend-v1.tsv")
+        .lines()
+        .find(|line| line.starts_with("peer_chat\t"))
+        .unwrap()
+        .split_once('\t')
+        .unwrap()
+        .1;
+    let mut signed: Vec<u8> = signed_hex
+        .as_bytes()
+        .chunks_exact(2)
+        .map(|pair| u8::from_str_radix(std::str::from_utf8(pair).unwrap(), 16).unwrap())
+        .collect();
+    *signed.last_mut().unwrap() ^= 1;
+    assert!(
+        !n.accept(
+            store.clone(),
+            ChannelReceipt {
+                link: None,
+                bytes: signed.clone(),
+                intake: TransportIntake::Pending,
+                own: false,
+                wall: 200000,
+                now: 0
+            }
+        )
+        .unwrap()
+    );
+    assert!(
+        !n.accept(
+            store.clone(),
+            ChannelReceipt {
+                link: None,
+                bytes: signed,
+                intake: TransportIntake::Unverified,
+                own: false,
+                wall: 200000,
+                now: 0
+            }
+        )
+        .unwrap()
+    );
     assert!(
         n.history(store, "#general".into(), "Alice".into())
             .unwrap()

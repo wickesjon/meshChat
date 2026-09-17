@@ -23,7 +23,7 @@ buckets cover General/Confessions together, Event Updates, private channels,
 aggregate CHAT and reactions. No wire format or existing security budget changes.
 
 Budget-admitted transport events drive application delivery and forwarding.
-Unsubscribed channels still relay; encrypted/control/SYNC data cannot become a
+Unsubscribed channels still relay; pending signed/encrypted/control/SYNC data cannot become a
 plaintext chat row. Existing transport dedup, TTL, copy suppression and egress
 limits remain authoritative. Origin queues report refusal and native completion
 separately; neither is a delivered receipt. A stopped send cannot remain queued.
@@ -90,7 +90,7 @@ The transitive graphics-path 1.0.1 AAR's native RELRO ends are not 16 KB aligned
 The 1.1.0 AAR was inspected and has the same issue, so no dependency upgrade or
 gate relaxation is used. `build_graphics.py` pins/checksums the 1.0.1 AAR and its
 matching [release source](https://android.googlesource.com/platform/frameworks/support/+/8a05a22af450d589ef911d772a001a49dcb05b71/graphics/graphics-path/src/main/cpp/).
-It keeps Java/resources/licenses unchanged and rebuilds only the two supported
+The source checksum covers every sorted file name and its contents, independent of archive wrapper metadata. It keeps Java/resources/licenses unchanged and rebuilds only the two supported
 JNI ABIs with static libc++, the upstream export map and both 16 KB linker flags.
 Every resulting ELF is checked before the aligned AAR is emitted. Production
 packaging refuses absent rebuilt dependencies. Hosted evidence retains only

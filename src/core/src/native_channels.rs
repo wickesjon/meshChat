@@ -322,7 +322,8 @@ impl NativeChannels {
         packet(2, self.sender, [0; 4], &payload)
     }
     /// Only budget-admitted, non-duplicate events from the current transport owner.
-    /// Signed CHAT may render as unverified; encrypted and control data never does.
+    /// Pending signed/encrypted work belongs to its authentication owner and may
+    /// not be persisted or displayed by this unsigned-channel boundary.
     pub fn accept(
         &self,
         store: Arc<EncryptedStore>,
@@ -338,13 +339,13 @@ impl NativeChannels {
         } = receipt;
         self.store(&store)?;
         let mut s = self.state(now)?;
-        if !matches!(
-            intake,
-            TransportIntake::Unverified | TransportIntake::Pending
-        ) {
+        if intake != TransportIntake::Unverified {
             return Ok(false);
         }
         let p = codec::parse(&bytes, Context::Live).map_err(|_| ChannelError::Invalid)?;
+        if p.header().flags & 7 != 0 {
+            return Ok(false);
+        }
         text::validate_payload(p.payload()).map_err(|_| ChannelError::Invalid)?;
         let h = p.header();
         if !matches!(p.payload(), Payload::Chat { .. } | Payload::Reaction { .. }) {
@@ -429,7 +430,7 @@ impl NativeChannels {
             let Ok(p) = codec::parse(&row.body, Context::Live) else {
                 continue;
             };
-            if p.header().channel_id != c.id() {
+            if p.header().channel_id != c.id() || p.header().flags & 7 != 0 {
                 continue;
             }
             if let Payload::Chat {

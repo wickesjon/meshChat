@@ -1,5 +1,7 @@
 # MC-025 paired app measurement
 
+The seven-pair smoke below remains the default. For 30 short/30 long acceptance pairs per initiator, partial-run accounting and idle/battery observations, use the [prepared device runs](MC-025-prepared-device-runs.md). Those new workloads are compiled/prepared, not physically tested.
+
 This explicitly opted-in physical test uses the normal installed synthetic profile, protected storage, model send path, production Bluetooth service and admission limits. It does not grant permissions, reset identity/history/counters, replace radio ports or modify device power/security settings. The user must unlock both devices normally. It is exploratory phone/tablet evidence, not the formal two-phone or MC-007 lossless gate.
 
 Build `:app:assembleDebugAndroidTest` using the repository Android environment. Install only the resulting test APK alongside the unchanged production candidate on each endpoint. Run `org.meshchat.ui.PhysicalRoundTripTest` through `org.meshchat.app.test/androidx.test.runner.AndroidJUnitRunner` on both endpoints concurrently, with arguments `physicalMeasure=true`, the same unique alphanumeric `runId` (1–16 characters), and `role=A` / `role=B`. Never reuse a run ID: retained history must not satisfy a fresh receipt assertion.

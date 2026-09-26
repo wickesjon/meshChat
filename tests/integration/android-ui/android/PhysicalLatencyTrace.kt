@@ -18,7 +18,7 @@ internal class PhysicalLatencyTrace(private val model: MeshModel, private val ru
     private val entries=ArrayList<Entry>()
     private var dropped=0
     private val frameSamples=linkedMapOf<String,Sample>()
-    private val pattern=Regex("MC25_${Regex.escape(run)}_([0-6])_([QE])")
+    private val pattern=Regex("MC25_${Regex.escape(run)}_([0-9]{1,2})_([QE])")
     private fun field(name: String)=MeshModel::class.java.getDeclaredField(name).apply {isAccessible=true}
     private val queue=field("queue").get(model) as ThreadPoolExecutor
     private val gate=checkNotNull(field("coreGate").get(model))

@@ -23,6 +23,7 @@ class PhysicalRoundTripTest {
     private lateinit var model: MeshModel
     private lateinit var run: String
     private lateinit var role: String
+    private lateinit var plan: MeasurementPlan
     private var trace: PhysicalLatencyTrace? = null
 
     private fun main(action: () -> Unit) = instrumentation.runOnMainSync(action)
@@ -51,7 +52,7 @@ class PhysicalRoundTripTest {
     }
     private fun message(index: Int, echo: Boolean): String {
         val prefix = "MC25_${run}_${index}_${if (echo) "E" else "Q"}"
-        return if (index in 3..5) prefix.padEnd(280, if (echo) 'e' else 'q') else prefix
+        return if (plan.long(index)) prefix.padEnd(280, if (echo) 'e' else 'q') else prefix
     }
     private fun received(state: MeshScreenState, text: String) =
         state.rows.any { !it.message.own && it.message.text == text }
@@ -74,6 +75,9 @@ class PhysicalRoundTripTest {
         run = args.getString("runId") ?: error("Missing unique runId")
         role = args.getString("role") ?: error("Missing A/B role")
         check(run.matches(Regex("[A-Za-z0-9]{1,16}")) && role in listOf("A", "B"))
+        plan=MeasurementPlan(args.getString("mode") ?: "smoke",args.getString("initiator") ?: "A")
+        log("plan","mode" to plan.mode,"initiator" to plan.initiator,"scheduled_pairs" to plan.pairs,
+            "poll_ms" to 100,"traced" to (args.getString("latencyTrace")=="true"))
         activity = ui.activity
         model = (activity.application as MeshApplication).model
         assertFalse(activity.getSystemService(KeyguardManager::class.java).isDeviceLocked)
@@ -93,11 +97,11 @@ class PhysicalRoundTripTest {
             }
             SystemClock.sleep(6000)
             counters("before")
-            val completed = if (role == "A") initiate() else respond()
+            val completed = if (role == plan.initiator) initiate() else respond()
             SystemClock.sleep(5000)
             counters("after")
-            log("summary", "completed_pairs" to completed, "scheduled_pairs" to 7)
-            assertEquals("All predeclared pairs must be accounted for", 7, completed)
+            log("summary", "completed_pairs" to completed, "scheduled_pairs" to plan.pairs)
+            assertEquals("All predeclared pairs must be accounted for", plan.pairs, completed)
             main {model.stop()}
             assertTrue(await(30000){it.status=="Nearby connection is off"})
             trace?.storageBaseline()
@@ -118,19 +122,20 @@ class PhysicalRoundTripTest {
 
     private fun initiate(): Int {
         var completed = 0
-        repeat(7) { index ->
+        repeat(plan.pairs) { index ->
             // The final request follows the responder's background transition.
-            if (index == 6) SystemClock.sleep(5000)
+            if (plan.background(index)) SystemClock.sleep(5000)
             val ready = await(30000) { it.peers == 1 && it.waitSeconds == 0 }
             val request = message(index, false)
             val start = SystemClock.elapsedRealtime()
             trace?.mark("request_start",index,false,start)
             log("request", "index" to index, "bytes" to request.length, "ready" to ready)
-            main { send(index,false,request) }
-            val ok = await(60000) { received(it, message(index, true)) }
+            if(ready)main { send(index,false,request) }
+            val ok = ready && await(60000) { received(it, message(index, true)) }
             val elapsed = SystemClock.elapsedRealtime() - start
             if(ok)trace?.mark("observed",index,true,start+elapsed)
             log("roundtrip", "index" to index, "received" to ok, "elapsed_ms" to elapsed,
+                "ready" to ready,"size" to (if(plan.long(index)) "long" else "short"),
                 "own_accepted" to screen().rows.any { it.message.own && it.message.text == request })
             if (ok) completed++
         }
@@ -139,30 +144,31 @@ class PhysicalRoundTripTest {
 
     private fun respond(): Int {
         val handled = mutableSetOf<Int>()
-        val deadline = SystemClock.elapsedRealtime() + 720000
-        while (handled.size < 7 && SystemClock.elapsedRealtime() < deadline) {
+        val deadline = SystemClock.elapsedRealtime() + plan.pairs*95000L+60000L
+        var completed=0
+        while (handled.size < plan.pairs && SystemClock.elapsedRealtime() < deadline) {
             assertTrue("Device or profile became unavailable", await(1000) { !it.locked })
             val state = screen()
-            for (index in 0..6) {
+            for (index in 0 until plan.pairs) {
                 if (index in handled || !received(state, message(index, false))) continue
                 log("request_received", "index" to index)
                 trace?.mark("observed",index,false)
-                if (index == 6) {
+                if (plan.background(index)) {
                     var background = false
                     main { background = !activity.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) }
                     log("background_receive", "background" to background)
                     assertTrue("Final request must arrive with responder activity stopped", background)
                 }
-                assertTrue("Responder send cooldown did not finish", await(30000) { it.waitSeconds == 0 })
-                main { send(index,true,message(index,true)) }
-                val sent = await(30000) { current -> current.rows.any {
+                val ready=await(30000) { it.waitSeconds == 0 && it.peers == 1 }
+                if(ready)main { send(index,true,message(index,true)) }
+                val sent = ready && await(30000) { current -> current.rows.any {
                     it.message.own && it.message.text == message(index, true) &&
                         it.sendState == "Handed to mesh · delivery unknown"
                 } }
-                log("echo", "index" to index, "native_complete" to sent)
-                assertTrue("Echo was refused or did not complete", sent)
+                log("echo", "index" to index, "native_complete" to sent,"ready" to ready)
+                if(sent)completed++
                 handled.add(index)
-                if (index == 5) {
+                if (plan.mode=="smoke" && index == 5) {
                     var moved = false
                     main { moved = activity.moveTaskToBack(true) }
                     log("background", "moved" to moved)
@@ -171,7 +177,7 @@ class PhysicalRoundTripTest {
             }
             SystemClock.sleep(100)
         }
-        return handled.size
+        return completed
     }
     private fun send(index: Int, echo: Boolean, text: String) {
         val capture=trace

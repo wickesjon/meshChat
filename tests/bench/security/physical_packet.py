@@ -16,12 +16,20 @@ STATES=("not_run","unavailable","fail","pass")
 
 
 def blank_packet():
-    return {"schema_version":1,"current_supported_api":None,"current_support_reference":None,
+    return {"schema_version":1,"current_supported_api":None,"current_support_reference":None,"current_support_date":None,
             "devices":{slot:{"model":None,"os_build":None,"api":None,"physical":None,
                               "source_revision":None,"app_apk_sha256":None,"test_apk_sha256":None,
                               "signing_kind":None,"secure_lock_configured":None} for slot in SLOTS},
             "scenarios":[{"device":slot,"scenario":name,"state":"not_run","date":None,
                           "duration_seconds":None,"observation":"","evidence":[]} for slot in SLOTS for name in SCENARIOS]}
+
+
+def evidence_path(name, root):
+    if not isinstance(name,str) or not 0<len(name)<=512 or Path(name).is_absolute():
+        raise ValueError("Evidence must be a bounded repository-relative path")
+    path=(root/name).resolve()
+    if not path.is_relative_to(root.resolve()) or not path.is_file():
+        raise ValueError("Missing or escaped evidence path")
 
 
 def validate(packet, root=ROOT):
@@ -51,8 +59,11 @@ def validate(packet, root=ROOT):
         if row["device"]=="current":
             if type(packet.get("current_supported_api")) is not int or packet["current_supported_api"]<=29:
                 raise ValueError("Declare current supported API for the test date")
-            if device["api"]!=packet["current_supported_api"] or not packet.get("current_support_reference"):
+            if device["api"]!=packet["current_supported_api"]:
                 raise ValueError("Current device must match the dated support decision")
+            evidence_path(packet.get("current_support_reference"),root)
+            try:date.fromisoformat(packet["current_support_date"])
+            except (ValueError,TypeError,KeyError):raise ValueError("Support decision needs an ISO date") from None
         for key,size in (("source_revision",40),("app_apk_sha256",64),("test_apk_sha256",64)):
             if not re.fullmatch(f"[0-9a-f]{{{size}}}",str(device.get(key,""))):raise ValueError("Missing exact source/APK identity")
         try:date.fromisoformat(row["date"])
@@ -62,9 +73,7 @@ def validate(packet, root=ROOT):
         evidence=row.get("evidence")
         if not isinstance(evidence,list) or not evidence:raise ValueError("Executed result needs evidence")
         for name in evidence:
-            if not isinstance(name,str) or Path(name).is_absolute():raise ValueError("Evidence must be repository-relative")
-            path=(root/name).resolve()
-            if not path.is_relative_to(root.resolve()) or not path.is_file():raise ValueError("Missing or escaped evidence path")
+            evidence_path(name,root)
     counts=dict(Counter(r["state"] for r in rows))
     return {"schema_valid":True,"states":counts,"ready_for_manual_evidence_review":counts.get("pass")==len(rows),
             "certified":False,"note":"Valid structure is not verified evidence. MC-043 review, support decisions and merge gates remain authoritative."}

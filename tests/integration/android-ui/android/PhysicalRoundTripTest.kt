@@ -23,6 +23,7 @@ class PhysicalRoundTripTest {
     private lateinit var model: MeshModel
     private lateinit var run: String
     private lateinit var role: String
+    private var trace: PhysicalLatencyTrace? = null
 
     private fun main(action: () -> Unit) = instrumentation.runOnMainSync(action)
     private fun screen(): MeshScreenState {
@@ -84,6 +85,12 @@ class PhysicalRoundTripTest {
                 it.selected?.name == "#general" && it.peers == 1 && it.contribution != null
             })
             log("connected")
+            assertTrue("Initial bounded catch-up did not settle",await(180000) {
+                it.catchup!=null && it.catchup!="Checking for recent messages…"
+            })
+            if(args.getString("latencyTrace")=="true") {
+                trace=PhysicalLatencyTrace(model,run).also {it.attach()}
+            }
             SystemClock.sleep(6000)
             counters("before")
             val completed = if (role == "A") initiate() else respond()
@@ -91,6 +98,9 @@ class PhysicalRoundTripTest {
             counters("after")
             log("summary", "completed_pairs" to completed, "scheduled_pairs" to 7)
             assertEquals("All predeclared pairs must be accounted for", 7, completed)
+            main {model.stop()}
+            assertTrue(await(30000){it.status=="Nearby connection is off"})
+            trace?.storageBaseline()
         } finally {
             main {
                 model.stop()
@@ -99,6 +109,10 @@ class PhysicalRoundTripTest {
             // Let ActivityScenario own teardown. Launching/reordering an
             // activity here races its transition to DESTROYED.
             ui.waitUntil(30000) { screen().status == "Nearby connection is off" }
+            trace?.flush { value ->
+                value.put("run",run).put("role",role)
+                instrumentation.sendStatus(0,Bundle().apply {putString("stream","MC025L $value\n")})
+            }
         }
     }
 
@@ -110,10 +124,12 @@ class PhysicalRoundTripTest {
             val ready = await(30000) { it.peers == 1 && it.waitSeconds == 0 }
             val request = message(index, false)
             val start = SystemClock.elapsedRealtime()
+            trace?.mark("request_start",index,false,start)
             log("request", "index" to index, "bytes" to request.length, "ready" to ready)
-            main { model.send(request) }
+            main { send(index,false,request) }
             val ok = await(60000) { received(it, message(index, true)) }
             val elapsed = SystemClock.elapsedRealtime() - start
+            if(ok)trace?.mark("observed",index,true,start+elapsed)
             log("roundtrip", "index" to index, "received" to ok, "elapsed_ms" to elapsed,
                 "own_accepted" to screen().rows.any { it.message.own && it.message.text == request })
             if (ok) completed++
@@ -130,6 +146,7 @@ class PhysicalRoundTripTest {
             for (index in 0..6) {
                 if (index in handled || !received(state, message(index, false))) continue
                 log("request_received", "index" to index)
+                trace?.mark("observed",index,false)
                 if (index == 6) {
                     var background = false
                     main { background = !activity.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) }
@@ -137,7 +154,7 @@ class PhysicalRoundTripTest {
                     assertTrue("Final request must arrive with responder activity stopped", background)
                 }
                 assertTrue("Responder send cooldown did not finish", await(30000) { it.waitSeconds == 0 })
-                main { model.send(message(index, true)) }
+                main { send(index,true,message(index,true)) }
                 val sent = await(30000) { current -> current.rows.any {
                     it.message.own && it.message.text == message(index, true) &&
                         it.sendState == "Handed to mesh · delivery unknown"
@@ -155,5 +172,9 @@ class PhysicalRoundTripTest {
             SystemClock.sleep(100)
         }
         return handled.size
+    }
+    private fun send(index: Int, echo: Boolean, text: String) {
+        val capture=trace
+        if(capture==null)model.send(text) else capture.send(index,echo) {model.send(text)}
     }
 }

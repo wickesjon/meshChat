@@ -2,7 +2,7 @@
 
 **Report date:** September 26, 2026. **Status:** exploratory phone/tablet testing; full Android acceptance remains open.
 
-The Galaxy S24 Ultra and Samsung tablet exchanged short and long messages, recovered from Bluetooth and lock transitions, and showed a connection in all 22 samples during a ten-minute observation. Measured run M02 delivered **14/14 directed messages**, including a background exchange. Median app-observed round-trip time was **16.006 seconds for short messages** and **21.955 seconds for 280-byte messages**. Subsequent work added bounded Android catch-up and corrected a startup ordering problem found during physical testing. These results do not establish battery efficiency, one-way latency or large-mesh reliability.
+The Galaxy S24 Ultra and Samsung tablet exchanged short and long messages, recovered from Bluetooth and lock transitions, and showed a connection in all 22 samples during a ten-minute observation. Bounded Android catch-up passed its limited item-cap scenario. On the current candidate, untraced L01 and traced L02 each delivered **14/14 directed messages**, including a background exchange. L01 median app-observed round trips were **14.933 seconds short / 19.501 seconds at 280 bytes**. L02 attributes most measured time to app preparation, queueing and post-receipt processing; repeated protected-storage work is the leading optimization target. These results do not establish battery efficiency, one-way latency or large-mesh reliability.
 
 ## Test setup
 
@@ -35,6 +35,7 @@ Both endpoints are Samsung devices on the same Android API level. A tablet is us
 | Measured request/echo run M02 | PASS, 14/14 directed deliveries | Seven requests and seven exact remote echoes; zero observed refusals/timeouts; both test runners passed |
 | Tablet activity in background, M02 | PASS, 2/2 directed deliveries | Activity verified below STARTED when the last request arrived; reply received on phone; not a screen-off/locked endurance test |
 | Bounded missed-message catch-up | PASS, C06/C07 limited scenario | Newest eight recovered; ninth/expired items excluded; protected history and no live replay verified |
+| Current-candidate latency baseline/trace | PASS, L01 and L02, 14/14 each | Same app/test packages; complete trace for every sample, no overflow, background exchange and runner cleanup passed |
 
 These are separate small scenarios on identified candidates, not one statistically representative delivery-rate study. Failed candidates remain recorded and are not removed from the evidence. No multi-hop, range, five-/ten-phone, flood or field-trial result is claimed.
 
@@ -74,9 +75,54 @@ Run **M02** completed on the unchanged production APK. Each request and echo had
 | Foreground, 280-byte text | 3/3 | 18.972; 21.955; 26.310 | 21.955 | 18.972–26.310 | 26.310 |
 | Background responder, 12-byte text | 1/1 | 16.556 | — | — | — |
 
-With only three foreground samples per size, nearest-rank p95 is just the largest sample, not a reliable tail estimate. Polling is nominally 100 ms plus variable main-thread dispatch, encrypted-store/model refresh and logging overhead. The test measures model-history observation, not final UI painting. These RTTs cannot certify the different MC-007 one-way/multi-hop workload or explain which layer contributes the delay; a separate timing trace would be needed for attribution.
+With only three foreground samples per size, nearest-rank p95 is just the largest sample, not a reliable tail estimate. Polling is nominally 100 ms plus variable main-thread dispatch, encrypted-store/model refresh and logging overhead. The test measures model-history observation, not final UI painting. These RTTs cannot certify the different MC-007 one-way/multi-hop workload. The later same-candidate baseline and trace below investigate delay attribution separately.
 
 Initial run **M01** also recorded all 14 directed messages, but both test runners subsequently failed activity cleanup. This is **not a passing instrumentation run**. The harness's conflicting foreground launch was removed, and M02 passed including cleanup. Preserve M01 separately rather than pooling its samples: short-message RTTs 19.844, 21.096 and 14.833 seconds; 280-byte RTTs 24.943, 19.501 and 23.838 seconds; background RTT 19.783 seconds. No production code changed for these measurements.
+
+## Round-trip tracing on the catch-up candidate
+
+The [trace procedure](MC-025-latency-tracing.md) repeats the seven-pair workload on production APK `d80af3a9c54e8df01d422bdbc35a5e870fab63c6053e0e3950a6c728913e4733`, with test APK `0bc9745607f389a4a2abbbda1a619b6b1e765147eda4f5b099a3919749ab3987`. Both traced and untraced runs first let the initial bounded catch-up settle. Only the test package changed; profiles/history and all storage, admission and lock policies remain intact. M02 used a different production candidate and is not an optimization comparison.
+
+Untraced **L01 passed on both devices**, including cleanup (A 188.989 s; B 194.379 s). All **14/14** directed messages arrived without an observed refusal/timeout; B was verified below STARTED for the last pair.
+
+| L01 workload | Pairs | Individual round trips, seconds | Median, seconds |
+|---|---:|---|---:|
+| Foreground, 12-byte text | 3/3 | 13.807; 20.042; 14.933 | 14.933 |
+| Foreground, 280-byte text | 3/3 | 19.501; 21.666; 18.145 | 19.501 |
+| Background responder, 12-byte text | 1/1 | 19.187 | — |
+
+Traced **L02 passed on both devices**, including protected-read probes and cleanup (A 199.159 s; B 203.357 s). Again **14/14** directed messages arrived, with no observed refusal/timeout. All 26 sample frame submissions were correlated and accepted: one frame per short direction and three per 280-byte direction. A/B buffered 91/84 trace entries with zero overflow. The analyzer accounted for all seven exact RTTs and rejected no timing gaps.
+
+| L02 workload | Pairs | Individual round trips, seconds | Median, seconds |
+|---|---:|---|---:|
+| Foreground, 12-byte text | 3/3 | 21.014; 12.184; 19.032 | 19.032 |
+| Foreground, 280-byte text | 3/3 | 16.956; 21.837; 19.715 | 19.715 |
+| Background responder, 12-byte text | 1/1 | 16.387 | — |
+
+The traced short median is 4.099 s above L01; the long median is 0.214 s above it. These three-sample groups overlap substantially. They neither establish negligible tracing overhead nor separate overhead from normal variability. No production optimization was made or speed improvement claimed.
+
+The following are **arithmetic means of the same L02 sample groups**, so the component means add to the mean full RTT (apart from rounding). Every component duration uses one device's clock; there is no subtraction of unsynchronized clocks.
+
+| Round-trip component, seconds | Short foreground, n=3 | 280-byte foreground, n=3 | Background, n=1 |
+|---|---:|---:|---:|
+| Request start → first submission, plus echo call → first submission | 5.350 | 4.760 | 2.995 |
+| First → last frame submission, both directions | 0.000 | 4.306 | 0.000 |
+| Complete receive callback → model observation, both devices | 11.354 | 9.478 | 11.889 |
+| Responder observation → echo send call | 0.002 | 0.001 | 0.005 |
+| Remaining delivery/callback time | 0.704 | 0.958 | 1.498 |
+| **Full round trip, mean** | **17.410** | **19.503** | **16.387** |
+
+For short foreground messages, roughly **96%** of traced elapsed time lies in preparation/queueing and post-receipt processing/observation. For long messages, those intervals account for roughly **73%**, while the two fragmentation spans account for about **22%**. The fragment spans include scheduling, completion callbacks and contention between submissions; they are not pure on-air time. The remaining delivery/callback component is a residual that includes platform and admission/lock waiting before the observed callback, not a one-way measurement.
+
+Queue diagnostics reinforce the application-side finding. Across the seven samples, send-queue wait was **0.808–2.165 s on A** and **1.099–3.369 s on B**; receive-queue wait reached **3.279 s / 3.373 s**. Send-work brackets were **2.943–3.419 s / 3.914–3.940 s**, and receive-work brackets **2.088–2.611 s / 2.785–3.326 s**. These brackets may contain interleaved work and overlap the partition above. Actual native submission calls took **0–4 ms** at millisecond resolution; protected-egress entry-to-submit waiting ranged **0–496 ms**. A fast submission call does not prove fast controller completion.
+
+After radio stop, five ordinary protected setting reads took **429, 425, 426, 442, 422 ms** on the phone (median **426 ms**) and **550, 555, 546, 552, 541 ms** on the tablet (median **550 ms**). The interleaved native status calls took **0–1 ms**. The protected-read measurement includes identity loading, Keystore/key access, encrypted database/native-store open, read and cleanup. It does not isolate SQLCipher derivation or any other subcomponent.
+
+Source inspection explains why this cost can accumulate: `MeshModel.refresh` separately loads events, history and friend cards; send/receive paths call refresh repeatedly; periodic work also performs protected retry/organizer operations. `EncryptedStorage.operation` opens and closes the protected store for each call, and some of that work shares serialization with radio callbacks. **Repeated protected operations and redundant refreshes are the leading cause hypothesis**, supported by the measured queue delays and read cost; exclusive per-method/storage-subcomponent profiling is still needed to assign causality precisely.
+
+The next optimization should reduce redundant refreshes and repeated protected opens within a bounded authorized operation, with unchanged lock/reset checks, key zeroing, resource cleanup and native limits. Measure protected-operation counts/durations and radio-monitor hold time before changing behavior, then repeat the same baseline and regression workload. This investigation does not justify weaker encryption settings or longer-lived unguarded keys/handles.
+
+Raw L01/L02 logs, installed-package hash manifest and derived per-pair JSON remain under ignored `.work/mc025/2026-09-26-latency/`. Test compilation/lint, five attribution tests, ticketboard validation and twelve board tests pass. The production APK hash remains unchanged. Both normal apps were reopened after runner exit; MC-025/full physical acceptance remains open.
 
 ## Measured Bluetooth traffic
 

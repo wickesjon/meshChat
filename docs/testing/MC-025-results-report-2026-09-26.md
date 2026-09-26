@@ -2,7 +2,7 @@
 
 **Report date:** September 26, 2026. **Status:** exploratory phone/tablet testing; full Android acceptance remains open.
 
-The Galaxy S24 Ultra and Samsung tablet exchanged short and long messages, recovered from Bluetooth and lock transitions, and showed a connection in all 22 samples during a ten-minute observation. The latest measured run delivered **14/14 directed messages**, including a background exchange. Median app-observed round-trip time was **16.006 seconds for short messages** and **21.955 seconds for 280-byte messages**. Testing found and fixed several connection/recovery faults and identified missing Android catch-up integration. These results do not establish battery efficiency, one-way latency or large-mesh reliability.
+The Galaxy S24 Ultra and Samsung tablet exchanged short and long messages, recovered from Bluetooth and lock transitions, and showed a connection in all 22 samples during a ten-minute observation. Measured run M02 delivered **14/14 directed messages**, including a background exchange. Median app-observed round-trip time was **16.006 seconds for short messages** and **21.955 seconds for 280-byte messages**. Subsequent work added bounded Android catch-up and corrected a startup ordering problem found during physical testing. These results do not establish battery efficiency, one-way latency or large-mesh reliability.
 
 ## Test setup
 
@@ -12,7 +12,9 @@ The Galaxy S24 Ultra and Samsung tablet exchanged short and long messages, recov
 | Tablet B | Samsung SM-X510; Android 16/API 36 |
 | Environment | Adjacent devices; uncontrolled radio environment; USB powered |
 | Application | Debug build, existing synthetic profiles, public test channel |
-| Final installed APK SHA-256 | `eeb6fe05aba5b6acc763ce578fc163e55717245f71578901c83da60a61b263ec` |
+| APK used for M02 and earlier final recovery observation | `eeb6fe05aba5b6acc763ce578fc163e55717245f71578901c83da60a61b263ec` |
+| Catch-up candidate used for C05/C06 | `ab6d7d1413917db3064e62e39ed42613f4fce4ec04660022f5cb164e90dc4360` |
+| Final catch-up candidate APK | `d80af3a9c54e8df01d422bdbc35a5e870fab63c6053e0e3950a6c728913e4733` |
 | Production source checkpoint | `c91894f`; later evidence checkpoint `cc053df` |
 | Preservation | No identity/history reset, permission blanket grant or security/power-setting change |
 
@@ -32,9 +34,25 @@ Both endpoints are Samsung devices on the same Android API level. A tablet is us
 | Unlock and explicit reconnect | PASS, 2/2 | Existing profiles available; two consecutive connected samples; fresh messages both ways |
 | Measured request/echo run M02 | PASS, 14/14 directed deliveries | Seven requests and seven exact remote echoes; zero observed refusals/timeouts; both test runners passed |
 | Tablet activity in background, M02 | PASS, 2/2 directed deliveries | Activity verified below STARTED when the last request arrived; reply received on phone; not a screen-off/locked endurance test |
-| Missed-message catch-up | NOT PASSED; integration gap | Core requester exists, but Android production code does not call `requestCatchup` or `processCatchup` |
+| Bounded missed-message catch-up | PASS, C06/C07 limited scenario | Newest eight recovered; ninth/expired items excluded; protected history and no live replay verified |
 
 These are separate small scenarios on identified candidates, not one statistically representative delivery-rate study. Failed candidates remain recorded and are not removed from the evidence. No multi-hop, range, five-/ten-phone, flood or field-trial result is claimed.
+
+## Bounded missed-message recovery
+
+The Android app now attempts one bounded history session after a newly admitted peer supplies valid live activity. Recovered rows are stored through the existing protected owners and labelled as recovered history without granting trust. Native limits, expiry and incomplete-history wording remain intact; it does not repeatedly walk the peer's full history. The [procedure](MC-025-bounded-catchup.md) separates controlled source-cache/age setup from actual Bluetooth transfer.
+
+Early runs exposed two distinct constraints. C01's same-time source fixture exceeded the sender burst allowance before transfer. C02–C04 then failed the eight-item receipt assertion: eager catch-up delayed initial presence traffic enough for the existing inactivity policy to close the link. C04's diagnostic trace showed SYNC preceding ANNOUNCE. The corrected candidate waits for valid live activity before requesting history; it does not extend the inactivity deadline.
+
+On that correction, single-author run C05 kept the connection and recovered **six** rows, with a limited-history notice. This is consistent with the public sender bucket applying to rapid historical replay: old original posting times do not grant extra receive credit. The eight-item ceiling is a maximum, not a promise to recover eight messages under every workload. C05's exact-eight expectation remains a failed test and is not relabelled as a pass. The subsequent item-cap fixture uses three stable synthetic claimed senders, three recent messages each, to test the cap without overloading one sender's allowance.
+
+**C06 passed on both devices**, including confirmation delivery and cleanup (phone 218.271 s; tablet 219.272 s). The receiver recovered exactly the newest **8/8 selected entries**, excluded the ninth and expired entry, retained the same native link for 30 checks separated by at least one second, and admitted no recovered item into its live forwarding cache. Relayed-chat count remained zero before confirmation; recovered rows remained unverified. Recovery was observed in **42.549 s** from the test's post-connection starting point, including application processing and polling. This is one functional sample, not a first-wire-frame latency measurement. Serialized checks took additional time beyond their nominal one-second sleeps, so the whole test duration is not catch-up latency.
+
+The eight-item result appropriately retains the limited-history notice because a ninth eligible entry exists. C06 test APK SHA-256: `4faf76ddc4a3892f11d7e9e353bc291a9d8151399559991ebb72678530bfbf3a`. Existing profiles and history were preserved throughout.
+
+**Final repeat C07 also passed on both devices** (phone 121.447 s; tablet 118.569 s) using the final app listed above and test APK `1e115f7d6853e758f67009badcdad3e9aa2997ab3fe966536d3890e2934e604e`. It repeated every selected-set, expiry, trust, no-live-replay and confirmation assertion. Recovery observation was **44.410 s**; the following same-link observation lasted **30.304 s across seven serialized checks**, with no ninth entry recovered. The shorter total runner duration reflects measuring a real 30-second observation window instead of thirty one-second sleeps plus dispatch overhead; it does not demonstrate faster Bluetooth recovery. Neither run is a battery or formal first-wire-frame latency measurement.
+
+Earlier latency, traffic, memory and battery figures apply to the earlier APK, not automatically to this changed catch-up candidate. Controlled expiry timestamps are not a real 17-minute disconnection, and these small public messages do not certify the 8192-byte ceiling or the full simultaneous/authenticated scenario-E matrix.
 
 ## Latency and recovery time
 
@@ -110,13 +128,17 @@ During the separate approximately three-minute M02 instrumentation run, A remain
 | Peer restart left stale Bluetooth characteristic handles | Invalidate established cached handles on service change | Functional restart recovery retest passed |
 | Bluetooth off incorrectly reported protected data locked | Treat temporary busy state separately from protected-storage failure | Original Bluetooth regression failed; corrected regression passed |
 | Permanent refusal retirement could strand isolated peers | Replace the server epoch after a bounded delay only when no setup/established link exists | Enhanced regression passed; final paired recovery and observation passed |
+| Android did not request/process missed history | Connect the native requester to protected history processing with one attempt per ready peer | C06 newest-eight physical test passed |
+| Eager catch-up delayed presence traffic and triggered inactivity closure | Wait for native-observed valid live activity before requesting history | C02–C04 failed; C06 passed with existing inactivity limits preserved |
 
-The final installed APK passed both targeted refusal/Bluetooth regressions (2/2, 26.999 seconds). Applicable Android app/BLE builds, lint, 22 app JVM tests, 26 BLE JVM tests and APK alignment checks passed. Storage-policy checks passed 14 tests. These automated checks complement device observations; they do not replace hardware or independent review gates.
+The earlier recovery candidate passed both targeted refusal/Bluetooth regressions (2/2, 26.999 seconds). Applicable Android app/BLE builds, lint, 22 app JVM tests, 26 BLE JVM tests and APK alignment checks passed. Storage-policy checks passed 14 tests. These automated checks complement device observations; they do not replace hardware or independent review gates.
+
+The final catch-up candidate also clears queued catch-up attempts when the radio stops, loses permission or is disabled. Its repeated-Connect/protected-read and Bluetooth shutdown/recovery regressions passed **2/2 in 114.704 s**. Fresh Debug/Release app builds, lint and 22 app JVM tests passed; both APKs passed native-library and 16 KiB alignment checks. The protected native catch-up suite passed 4/4 and storage-policy checks 14/14. The shared security adapter compiled and passed lint, but a fresh standalone Android security-probe native rebuild was unavailable because the recorded NDK installation was missing. This is not a security-probe runtime or independent-assessment pass.
 
 ## Next evidence to collect
 
 1. Attribute the observed 15–26-second app round trips with finer timing instrumentation, and repeat with a larger declared sample. Do not assume radio transmission alone accounts for that delay.
-2. Wire the Android app to the existing protected catch-up requester/processor, then run a reproducible selected-set test. Source inspection found no Android calls to `requestCatchup` or `processCatchup`; the core APIs and iOS caller exist. This is a product integration gap, not just missing physical evidence. The normal composer also refuses sends with no connected peer, so simply disconnecting the only receiver cannot create a valid missed-message workload. Do not relax that rule to manufacture a test pass.
+2. Extend bounded catch-up evidence to the full simultaneous-direction, authenticated, negotiated-capacity and long-disconnection matrix. Keep single-author burst behavior distinct from the non-overloaded item-cap fixture. The normal composer's offline-send refusal remains unchanged.
 3. Six-hour powered Beacon endurance and separately controlled battery/energy runs.
 4. Additional phones for mixed-manufacturer, multi-hop, five-/ten-device and field scenarios; separate physical key/storage verification.
 

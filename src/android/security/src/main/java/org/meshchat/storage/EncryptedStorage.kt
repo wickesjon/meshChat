@@ -163,6 +163,8 @@ class EncryptedStorage(private val identity:IdentityProvider,private val vault:S
         operation { core.directHistory(it, keys, now, System.currentTimeMillis()/1000) }
     fun messagingHistory(core: NativeTransport, owner: NativeChannels, name: String, nickname: String): List<ChannelMessage> =
         operation { core.messagingChannelHistory(it, owner, name, nickname) }
+    fun processCatchup(core: NativeTransport, owner: NativeChannels, now: ULong): CatchupProgress =
+        operation { store -> identity.messaging { core.processCatchup(store, it, owner, now, System.currentTimeMillis()/1000) } }
     fun proof(core: NativeTransport, link: LinkHandle, now: ULong): TransportEffects =
         IdentityProvider.withOperation { identity.messaging { core.prepareProof(link, it, now) } }
     /** Keep reset serialization through the actual native submission. The

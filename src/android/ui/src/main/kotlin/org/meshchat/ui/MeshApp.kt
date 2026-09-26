@@ -166,6 +166,7 @@ private fun ColumnScope.Chat(model: MeshModel,s: MeshScreenState) {
     var reaction by remember { mutableStateOf<ChannelMessage?>(null) }
     val channel=checkNotNull(s.selected)
     Text(if(channel.anonymous)"Posts use a fresh identity. Reactions do not." else "Open channel · readable on air",Modifier.padding(horizontal=20.dp,vertical=10.dp),fontSize=12.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)
+    s.catchup?.let { Text(it,Modifier.padding(horizontal=20.dp,vertical=4.dp),fontSize=12.sp,color=MaterialTheme.colorScheme.onSurfaceVariant) }
     LazyColumn(Modifier.weight(1f).fillMaxWidth(),contentPadding=PaddingValues(16.dp),verticalArrangement=Arrangement.spacedBy(16.dp)) {
         if(s.rows.isEmpty())item{Text("Quiet so far. Messages appear when people within mesh range post.",Modifier.padding(vertical=40.dp),color=MaterialTheme.colorScheme.onSurfaceVariant)}
         items(s.rows,key={it.message.id.joinToString()+it.message.sender.joinToString()}) { row -> val message=row.message
@@ -180,6 +181,7 @@ private fun ColumnScope.Chat(model: MeshModel,s: MeshScreenState) {
                     if(message.confusable)Text("Name resembles yours; identity is unverified",fontSize=11.sp,color=MaterialTheme.colorScheme.error)
                     if(!channel.anonymous)Text(message.sender.takeLast(2).joinToString(""){"%02x".format(it.toInt() and 255)},fontSize=10.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)
                     Text(message.text,Modifier.padding(vertical=6.dp),fontSize=16.sp,lineHeight=23.sp)
+                    if(row.recovered)Text("Recovered from nearby history",fontSize=11.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)
                     if(message.own)Text(row.sendState,fontSize=11.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)
                     FlowRow(maxItemsInEachRow=4,horizontalArrangement=Arrangement.spacedBy(5.dp)) { message.reactions.forEachIndexed { code,count -> if(count>0u)TextButton(onClick={if(code<8)model.react(message,code.toUByte())},contentPadding=PaddingValues(3.dp)) { if(code<8)MeshIcon(reactions[code],modifier=Modifier.size(18.dp)) else Text("+1");Text(if(count>=30u)"30+" else count.toString()) } } }
                 }

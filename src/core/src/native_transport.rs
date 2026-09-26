@@ -284,6 +284,9 @@ impl Runtime {
                 .friends
                 .effective_capacities(&link.handle)
                 .map_err(|_| TransportError::Stale)?;
+            self.relay
+                .admit_capacity(&link.handle, usize::from(tx))
+                .map_err(|_| TransportError::Unavailable)?;
             self.beacon
                 .sessions
                 .register(&link.handle, self.now)
@@ -384,6 +387,10 @@ impl Runtime {
         cookie: u64,
         out: &mut TransportEffects,
     ) -> Result<(), TransportError> {
+        let hello = matches!(traffic, relay::Traffic::Transport(2)) && cookie == 1;
+        if !(self.links[self.index(link)?].admitted || hello) {
+            return Err(TransportError::Busy);
+        }
         if matches!(traffic, relay::Traffic::Own) {
             self.beacon.cache_live(bytes, self.now);
         }
@@ -656,11 +663,9 @@ impl NativeTransport {
                 },
             )
             .map_err(|_| TransportError::Identity)?;
-        // The fixed floor is a conservative ENCODING ceiling, never a claimed
-        // native measurement. Every admitted direction can carry it. It keeps
-        // HELLO and subsequent objects on one scheduler with unchanged credits.
-        // Peers may still send up to their actual negotiated directional limit.
-        if s.relay.register(&link, framing::MIN_CAPACITY, now).is_err() {
+        // HELLO uses the floor. Admission activates the effective directional
+        // encoding ceiling on this same scheduler without resetting credits.
+        if s.relay.register_bootstrap(&link, now).is_err() {
             let Runtime {
                 friends, ingress, ..
             } = &mut *s;

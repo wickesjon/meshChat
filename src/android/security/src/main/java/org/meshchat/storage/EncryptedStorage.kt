@@ -72,6 +72,40 @@ class StorageVault internal constructor(
     private fun sync(directory:File) {val fd=Os.open(directory.path,OsConstants.O_RDONLY,0);try{Os.fsync(fd)}finally{Os.close(fd)}}
     private fun refuse(failure:IdentityFailure):Nothing = throw IdentityProviderException(failure)
     private val database get()=File(folder,"history.db")
+    private fun migrateLegacy(key:ByteArray,generation:ByteArray):ByteArray {
+        // Validate before deriving, including journal recovery with the old key.
+        CipherConnection.open(database,key,false).use { connection ->
+            val settings=mapOf("kdf_iter" to "256000", "cipher_kdf_algorithm" to "PBKDF2_HMAC_SHA512",
+                "cipher_use_hmac" to "1", "cipher_hmac_algorithm" to "HMAC_SHA512",
+                "cipher_page_size" to "4096", "cipher_plaintext_header_size" to "0")
+            for((name,expected) in settings) {
+                val cell=connection.query("PRAGMA $name",emptyList(),1u).singleOrNull()?.cells?.singleOrNull()
+                val actual=when(cell) {is SqlValue.Integer -> cell.value.toString(); is SqlValue.Text -> cell.value; else -> null}
+                if(actual!=expected) refuse(IdentityFailure.RECOVERY_REQUIRED)
+            }
+            EncryptedStore.open(connection,generation,false,null).close()
+        }
+        val salt=ByteArray(16)
+        val material=try {
+            java.io.DataInputStream(database.inputStream()).use {it.readFully(salt)}
+            StorageKeys.deriveLegacy(key,salt)
+        } finally {salt.fill(0)}
+        try {
+            val input=StorageKeys.rawInput(material)
+            try {
+                CipherConnection.open(database,input,false).use { connection ->
+                    EncryptedStore.open(connection,generation,false,null).close()
+                }
+            } finally {input.fill(0)}
+            protection.requireUnlocked()
+            val header=byteArrayOf(2)+generation
+            val sealed=protection.seal(material,header)
+            protection.requireUnlocked()
+            // AtomicFile leaves either envelope usable with the unchanged DB.
+            files.write(IdentityFile.ENVELOPE,header+sealed)
+            return material
+        } catch(e:Exception) {material.fill(0);throw e}
+    }
     internal fun <T> access(generation:ByteArray,create:Boolean,now:Long?,work:(EncryptedStore)->T):T = IdentityProvider.withOperation {
         protection.requireUnlocked()
         if(generation.size!=16) refuse(IdentityFailure.INVALID_INPUT)
@@ -79,8 +113,8 @@ class StorageVault internal constructor(
             if(files.hasArtifacts()||protection.exists()) refuse(IdentityFailure.RECOVERY_REQUIRED)
             files.write(IdentityFile.JOURNAL,byteArrayOf(1))
             protection.create()
-            val key=protection.random(64)
-            try {val header=byteArrayOf(1)+generation; files.write(IdentityFile.ENVELOPE,header+protection.seal(key,header))}
+            val key=protection.random(64).also {it.fill(0,48,64)}
+            try {val header=byteArrayOf(2)+generation; files.write(IdentityFile.ENVELOPE,header+protection.seal(key,header))}
             finally{key.fill(0)}
         } else {
             if(files.exists(IdentityFile.JOURNAL)) refuse(IdentityFailure.RECOVERY_REQUIRED)
@@ -88,14 +122,20 @@ class StorageVault internal constructor(
         }
         if(!protection.exists()) refuse(IdentityFailure.INVALIDATED)
         val encoded=files.read(IdentityFile.ENVELOPE)
-        if(encoded.size !in 18..1024||encoded[0]!=1.toByte()||!encoded.copyOfRange(1,17).contentEquals(generation)) refuse(IdentityFailure.INVALID_INPUT)
+        if(encoded.size !in 18..1024||encoded[0].toInt() !in 1..2||!encoded.copyOfRange(1,17).contentEquals(generation)) refuse(IdentityFailure.INVALID_INPUT)
         val key=protection.open(encoded.copyOfRange(17,encoded.size),encoded.copyOfRange(0,17))
         try {
             if(key.size!=64) refuse(IdentityFailure.INVALID_INPUT)
-            val result=CipherConnection.open(database,key,create).use { connection ->
-                val core=EncryptedStore.open(connection,generation,create,now)
-                try { work(core) } finally {core.close()}
-            }
+            val material=if(encoded[0]==1.toByte()) migrateLegacy(key,generation) else key
+            val result=try {
+                val input=StorageKeys.rawInput(material)
+                try {
+                    CipherConnection.open(database,input,create).use { connection ->
+                        val core=EncryptedStore.open(connection,generation,create,now)
+                        try { work(core) } finally {core.close()}
+                    }
+                } finally {input.fill(0)}
+            } finally {material.fill(0)}
             protection.requireUnlocked()
             if(create){sync(folder);files.delete(IdentityFile.JOURNAL)}
             result

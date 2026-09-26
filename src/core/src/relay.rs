@@ -174,6 +174,7 @@ fn charge(now: u64, costs: &mut [(&mut Bucket, u64)]) -> bool {
 struct Link {
     handle: LinkHandle,
     capacity: usize,
+    bootstrap: bool,
     frame: Bucket,
     bytes: Bucket,
     next_send: u64,
@@ -327,6 +328,7 @@ impl Relay {
         self.links[i] = Some(Link {
             handle: handle.clone(),
             capacity,
+            bootstrap: false,
             frame: Bucket::new(15, 3, now),
             bytes: Bucket::new(24576, 6144, now),
             next_send: now,
@@ -341,6 +343,29 @@ impl Relay {
             digest_until: 0,
         });
         self.generation = handle.generation;
+        Ok(())
+    }
+    /// HELLO uses the common floor until both directions are admitted.
+    pub fn register_bootstrap(&mut self, handle: &LinkHandle, now: u64) -> Result<(), Error> {
+        self.register(handle, crate::framing::MIN_CAPACITY, now)?;
+        let i = self.link(handle)?;
+        self.links[i].as_mut().unwrap().bootstrap = true;
+        Ok(())
+    }
+    /// One-time admission, never a live MTU update. No queued object's framing
+    /// may change, and no pacing, sequence, deficit or bucket state is reset.
+    pub fn admit_capacity(&mut self, handle: &LinkHandle, capacity: usize) -> Result<(), Error> {
+        let i = self.link(handle)?;
+        let link = self.links[i].as_mut().unwrap();
+        if !link.bootstrap
+            || !(crate::framing::MIN_CAPACITY..=512).contains(&capacity)
+            || link.active.is_some()
+            || self.objects.iter().flatten().any(|o| o.link == i)
+        {
+            return Err(Error::Invalid);
+        }
+        link.capacity = capacity;
+        link.bootstrap = false;
         Ok(())
     }
     pub fn set_power(&mut self, mode: Mode, tier: u8, now: u64) -> Result<(), Error> {

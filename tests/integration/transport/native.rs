@@ -122,7 +122,7 @@ fn real_handshake_and_bidirectional_whole_fragmented_exchange() {
         loop {
             let send = sender.tick(now).unwrap().sends.remove(0);
             frames += 1;
-            assert!(send.bytes.len() <= 146);
+            assert!(send.bytes.len() <= if id == 5 { 512 } else { 146 });
             let received = receiver
                 .receive(rl.clone(), send.bytes.len() as u64, send.bytes, now)
                 .unwrap();
@@ -142,7 +142,7 @@ fn real_handshake_and_bidirectional_whole_fragmented_exchange() {
                 break;
             }
         }
-        assert_eq!(frames, if length == 256 { 3 } else { 1 });
+        assert_eq!(frames, if length == 256 && id == 4 { 3 } else { 1 });
         assert_eq!(
             delivered,
             vec![TransportEvent::Received {
@@ -193,6 +193,53 @@ fn unknown_small_and_asymmetric_capacities_cannot_start_protocol() {
             .events
             .is_empty()
     );
+}
+
+#[test]
+fn local_hello_completion_before_peer_hello_preserves_admission_and_pacing() {
+    let (a, key) = owner(94);
+    let (b, _) = owner(95);
+    let al = ready(&a, TransportRole::Central, 512, 512, 0);
+    let bl = ready(&b, TransportRole::Peripheral, 512, 182, 0);
+    let af = a.tick(0).unwrap().sends.remove(0);
+    let bf = b.tick(0).unwrap().sends.remove(0);
+    assert!(
+        a.complete(al.clone(), af.token, true, 0)
+            .unwrap()
+            .events
+            .is_empty()
+    );
+    assert!(a.prepare_proof(al.clone(), key, 0).is_err());
+    assert!(
+        a.enqueue(al.clone(), chat(96, 256), TransportTraffic::Own, 3, 0)
+            .is_err()
+    );
+    let admitted = a.receive(al.clone(), 59, bf.bytes.clone(), 0).unwrap();
+    assert_eq!(
+        admitted.events,
+        vec![TransportEvent::Admitted {
+            link: al.clone(),
+            transmit_bytes: 182,
+            receive_bytes: 512,
+        }]
+    );
+    // Identical HELLO replay cannot re-admit or refill the link.
+    assert!(
+        a.receive(al.clone(), 59, bf.bytes, 0)
+            .unwrap()
+            .events
+            .is_empty()
+    );
+    b.receive(bl.clone(), 59, af.bytes, 0).unwrap();
+    b.complete(bl, bf.token, true, 0).unwrap();
+    a.enqueue(al.clone(), chat(96, 256), TransportTraffic::Own, 3, 0)
+        .unwrap();
+    assert!(a.tick(999).unwrap().sends.is_empty());
+    let first = a.tick(1000).unwrap().sends.remove(0);
+    assert_eq!(first.bytes.len(), 182);
+    a.complete(al, first.token, true, 1000).unwrap();
+    assert!(a.tick(1999).unwrap().sends.is_empty());
+    assert_eq!(a.tick(2000).unwrap().sends.len(), 1);
 }
 
 #[test]
@@ -624,7 +671,7 @@ fn native_sync_wrappers_remain_deferred_and_use_the_paced_bounded_scheduler() {
     body.extend(raw);
     a.enqueue_sync(al.clone(), body.clone(), 88, 1000).unwrap();
     let mut received = Vec::new();
-    for now in [1000, 2000, 3000] {
+    for now in [1000, 2000] {
         let frame = a.tick(now).unwrap().sends.remove(0);
         received.extend(
             b.receive(bl.clone(), frame.bytes.len() as u64, frame.bytes, now)
@@ -632,6 +679,7 @@ fn native_sync_wrappers_remain_deferred_and_use_the_paced_bounded_scheduler() {
                 .events,
         );
         a.complete(al.clone(), frame.token, true, now).unwrap();
+        assert!(a.tick(now + 500).unwrap().sends.is_empty());
     }
     assert_eq!(
         received,

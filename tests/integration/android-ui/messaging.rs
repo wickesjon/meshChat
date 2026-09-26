@@ -117,7 +117,7 @@ fn wire(a: &Device, al: &LinkHandle, now: u64) -> Vec<u8> {
         a.core
             .authorize_message_egress(a.store.clone(), al.clone(), frame.token)
             .unwrap();
-        match meshchat_core::framing::parse_frame(&frame.bytes, 146).unwrap() {
+        match meshchat_core::framing::parse_frame(&frame.bytes, 512).unwrap() {
             meshchat_core::framing::Frame::Logical(bytes) => raw.extend_from_slice(bytes),
             meshchat_core::framing::Frame::Fragment(f) => raw.extend_from_slice(f.slice),
             _ => panic!("logical expected"),

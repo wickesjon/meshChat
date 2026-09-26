@@ -6,6 +6,28 @@ The Galaxy S24 Ultra and Samsung tablet exchanged short and long messages, recov
 
 ## Test setup
 
+### Sub-second candidate: implementation, awaiting paired tests
+
+The next candidate implements [raw-key envelope migration and negotiated encoding](../decisions/MC-025-ready-link-latency.md). Debug APK SHA-256: `2bb9ab10c2fd9864e6c34ff622806fde38be10a39a249686a2578285e313953c`; Release unsigned APK: `1254f74fff7ef6ac0604e3479387772f5c9429f8491d7575060e89731b76df95`. These are locally built candidates, not the physically measured O01/O02 APK above. Neither phone nor tablet was installed or exercised during this implementation session.
+
+| Check | Result and limit |
+|---|---|
+| Core behavior | Full debug suite: 210 passed; final focused transport/relay suites: 31 passed; full release suite: 211 passed. The extra test covers local HELLO completion preceding peer HELLO. |
+| Framing | Asymmetric 512/146-byte directions deliver the long fixture in one/three frames respectively; 182-byte SYNC uses two. HELLO ordering/replay, queued/in-flight refusal, stale/repeated capacity activation and unchanged pacing pass. These are host tests, not Bluetooth timings. |
+| Storage policy | 14 host policy tests pass; binary derivation known answers and malformed key material pass through generated Kotlin/native bindings. |
+| Android | Fresh arm64/x86_64 native libraries; Debug/Release/test APK builds, lint and all 24 app JVM tests pass, including full-wire vectors. Both app APKs pass packaged native-library and 16-KiB alignment checks. |
+| Synthetic migration | Final isolated API-29 emulator run: **3 tests pass in 4.902 seconds**, covering legacy history, unchanged database bytes, pre/post envelope-commit failures, seal failure, lock-before-commit, wrong generation/key, key loss and fresh raw-key reopening. Actual Android wrapping-key deletion and guarded identity reset also pass; the fresh identity cannot access old history and stale identity handles are refused. This is emulator evidence. |
+| Dependency | Pinned RustCrypto PBKDF2 adds one package to each lockfile, reusing existing dependencies. Refreshed cargo-deny advisory/license/source/ban gates pass. |
+| Physical RTT | **Not measured for this candidate.** Earlier 7.496/11.432-second medians remain the latest untraced physical results. |
+| Power/battery | **Not measured.** Less repeated derivation is not proof of reduced battery drain. |
+| Remaining gates | Paired latency/recovery, real-device security and battery checks, Mac/Xcode native consumer validation and independent security assessment remain open. |
+
+Validation used Rust 1.85.1, cargo-deny 0.20.2, JDK 17.0.15+6, Gradle 8.13, AGP 8.11.1, Kotlin 2.2.0, pinned NDK 27.3.13750724 and the pinned aligned SQLCipher 4.17.0 Android AAR. Commands: workspace `cargo fmt`, strict all-target/all-feature `cargo clippy`, debug/release workspace tests and release build; `tests/integration/storage/run_policy.py`; app assemble Debug/Release/androidTest, lint and JVM tests; `check_apk.py` and `zipalign -c -P 16 4`. Logs remain in ignored `.work/mc025/subsecond-*.log`.
+
+During development, existing test parsers that assumed a 146-byte encoder were corrected to the actual negotiated capacity. One full-wire JVM invocation could not refresh the registry under restricted networking; after updating its separate lockfile and using the populated offline cache, all 24 tests passed. A concurrent host-DLL link attempt was retried after the JVM released the DLL. Neither attempt is counted as passing evidence.
+
+### Physical setup used for earlier results
+
 | Item | Configuration |
 |---|---|
 | Phone A | Samsung Galaxy S24 Ultra, SM-S928U1; Android 16/API 36 |

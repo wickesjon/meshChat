@@ -30,7 +30,9 @@ class StorageInstrumentation : Instrumentation() {
             val subject=byteArrayOf(2)+peer
             fun key():ByteArray {
                 val encoded=File(folder,"identity.enc").readBytes()
-                return AndroidIdentityProtection(context,"org.meshchat.storage.wrapping.v1").open(encoded.copyOfRange(17,encoded.size),encoded.copyOfRange(0,17))
+                val material=AndroidIdentityProtection(context,"org.meshchat.storage.wrapping.v1").open(encoded.copyOfRange(17,encoded.size),encoded.copyOfRange(0,17))
+                if(encoded[0]==1.toByte())return material
+                try {return StorageKeys.rawInput(material)} finally {material.fill(0)}
             }
             when(phase) {
                 "create" -> {
@@ -51,7 +53,7 @@ class StorageInstrumentation : Instrumentation() {
                     val passphrase=key()
                     try {
                         for(file in checkNotNull(folder.listFiles()).filter{it.isFile}) {val bytes=file.readBytes();check(!contains(bytes,marker));check(!contains(bytes,passphrase))}
-                        val wrong=passphrase.copyOf().also{it[0]=(it[0].toInt() xor 1).toByte()}
+                        val wrong=passphrase.copyOf().also{it[2]=if(it[2]==48.toByte())49 else 48}
                         try{refused{CipherConnection.open(File(folder,"history.db"),wrong,false).use{EncryptedStore.open(it,identity.load().identity.generation,false,now).close()}}}finally{wrong.fill(0)}
                     } finally{passphrase.fill(0)}
                     store.reopen();refused{store.create()}

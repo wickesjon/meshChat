@@ -87,6 +87,7 @@ class AndroidGattRadio(
     // Refused connections have no driver token, but Android can still deliver
     // their MTU callbacks. Never reuse such an address within this server epoch.
     private val refusedAddresses = mutableSetOf<String>()
+    private var refusedRetryAt = 0uL
     private val notifications = NotificationQueue(::submitNotification) { id, success -> driver.completed(id, success) }
     private val timer = object : Runnable {
         override fun run() {
@@ -132,8 +133,15 @@ class AndroidGattRadio(
             work()
         } catch (_: SecurityException) { stop(RadioState.PERMISSION_REQUIRED) } catch (_: IllegalStateException) { stop(RadioState.STOPPED) }
     }
+    private fun retryRefusedServer() {
+        // Retired addresses must not strand an isolated node indefinitely.
+        // Replace the epoch, never clear retirement in place or disturb a link.
+        if (refusedAddresses.isNotEmpty() && clock() >= refusedRetryAt && driver.connections().isEmpty()) resetServer()
+    }
     private fun policy() {
         nextPolicy = clock() + 1_000uL
+        retryRefusedServer()
+        if (!running) return
         val memory = ActivityManager.RunningAppProcessInfo()
         ActivityManager.getMyMemoryState(memory)
         foreground = memory.importance <= ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND
@@ -207,6 +215,11 @@ class AndroidGattRadio(
         override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) = current(gatt) {
             if (status != BluetoothGatt.GATT_SUCCESS || newState == BluetoothProfile.STATE_DISCONNECTED) driver.lost(id)
             else if (newState == BluetoothProfile.STATE_CONNECTED) driver.connected(id, true)
+        }
+        override fun onServiceChanged(gatt: BluetoothGatt) = current(gatt) { client ->
+            // A peer restart can replace its service while the ACL stays up.
+            // Cached handles and subscription readiness no longer identify it.
+            if (client.tx != null || client.rx != null) driver.lost(id)
         }
         override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) = current(gatt) { client ->
             val service = gatt.getService(MeshGatt.SERVICE)
@@ -291,8 +304,11 @@ class AndroidGattRadio(
                     selection.attempted(device.address); driver.incoming(device.address)
                 } else null
                 if (handle == null) {
-                    if (peripherals.isEmpty()) resetServer()
-                    else { refusedAddresses.add(device.address); server?.cancelConnection(device) }
+                    // No admitted token needs a new epoch. Replacing an empty
+                    // server can replay this connection and loop indefinitely.
+                    if (refusedAddresses.isEmpty()) refusedRetryAt = clock() + 60_000uL
+                    refusedAddresses.add(device.address)
+                    server?.cancelConnection(device)
                 }
                 else { peripherals[handle] = device; driver.connected(handle, true) }
             }

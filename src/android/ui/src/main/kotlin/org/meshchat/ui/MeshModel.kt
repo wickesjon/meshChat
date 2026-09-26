@@ -131,7 +131,12 @@ class MeshModel(private val context: Context) {
     }
     private fun report(error: String) {
         if (!loaded) { main.post { screen = screen.copy(error = error) }; return }
-        try { refresh(error) } catch (_: Exception) { unavailable() }
+        try { refresh(error) }
+        catch (_: MessagingException.Busy) {
+            // A stopped radio's queued state update may still be pending.
+            // Keep that temporary refusal distinct from protected-data loss.
+            main.post { screen = screen.copy(error = error) }
+        } catch (_: Exception) { unavailable() }
     }
     private fun setting(name: String) = storage.getRecord(RecordKind.SETTING, name.toByteArray())?.toString(Charsets.UTF_8)
     private fun put(name: String, value: String) = storage.putRecord(RecordKind.SETTING, name.toByteArray(), value.toByteArray())

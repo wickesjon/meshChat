@@ -1,6 +1,18 @@
 # MC-025 Android physical acceptance packet
 
-Status: procedure prepared; full matrix scenarios remain **NOT RUN**, apart from the limited startup preflight below. Initial candidate: `e20a05e4c55df857de2dc8168258138bf2092fbc`, the integrated main revision after MC-035. Record a new exact revision and APK hash if any candidate changes. This packet does not close MC-025.
+Status: procedure prepared; full matrix scenarios remain **NOT RUN**, apart from the limited startup preflight and two-device exchange smoke below. Initial candidate: `e20a05e4c55df857de2dc8168258138bf2092fbc`, the integrated main revision after MC-035. Record a new exact revision and APK hash if any candidate changes. This packet does not close MC-025.
+
+## Phone/tablet exchange smoke — 2026-09-26
+
+Candidate source: `0f5e0c4db9ff66380677e483bb240ed52d77b03e`. Both devices used Debug APK SHA-256 `61c4a84a7ec02490cb83c983422610edb07ab1e6631ccddadc0ecf5000bd0ce7`.
+
+Device B is a Samsung SM-X510 tablet, Android 16/API 36, build X510XXSEEZG3, security patch 2026-07-05, arm64/4096-byte pages, with declared BLE support. ADB authorization, app installation and user onboarding succeeded. Initial battery reading was 36%, USB charging, battery temperature 31.6°C; this is not an MC-007 energy run. Device A is the S24 Ultra described below. A tablet supplies an additional physical BLE endpoint for exploratory exchange; it does not satisfy the required mixed-OEM phone cohorts or phone-specific energy/endurance criteria.
+
+The operator used the existing synthetic profiles, foreground/unlocked apps and their visible Connect controls. Both screens reported one direct connection. The predeclared workload was one short synthetic public-channel message in each direction (two expected origin/recipient pairs). **Both unique messages were confirmed in the opposite device's rendered channel history**, rather than inferred from sender status or aggregate counters. Phone-to-tablet receipt was initially absent in an immediate UI sample and present in a later sample. Tablet-to-phone receipt was confirmed at host UTC 12:17:13. UI/keyboard transitions required repeating screen reads and tapping the still-unsent tablet draft after dismissing its keyboard; no extra unique message was introduced. No identity reset, history deletion, permission grant, lock-setting change or emulator runner was used.
+
+Result: **PASS for this limited two-way UI exchange smoke only; stability finding remains OPEN.** The phone's app-scoped logs show repeated GATT server close/register cycles and Android framework `onServiceAdded` null-callback warnings while one direct connection remains visible. A later bounded 100-line app-radio snapshot still contained 14 server registrations; that is a log-snapshot observation, not a measured restart rate. Root cause, remediation and controlled retest are pending. Do not infer stable duplicate-link convergence, acceptable battery/load or successful recovery from the two received messages. Retain server-epoch/stale-callback protections when diagnosing this finding.
+
+No per-egress attempts/completions/bytes, controlled topology, clock synchronization, radio latency, role reversal, fragmented-message or backpressure measurements were collected. MTU-request/callback logs are not proof of measured usable capacity. The full matrix and MC-007 denominators/thresholds remain required. Local inventory/install evidence is in `.work/mc025/2026-09-26-device-b-preflight/`; the declared plan, host send/receipt observations and bounded app-radio logs are in `.work/mc025/2026-09-26-two-device-smoke/`. Serials, raw logs and message content remain ignored rather than committed.
 
 ## Device A startup preflight — 2026-09-26
 

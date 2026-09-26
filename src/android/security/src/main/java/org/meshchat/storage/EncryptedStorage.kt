@@ -117,6 +117,9 @@ class StorageVault internal constructor(
     }
 }
 
+/** Bounded view records only; no database handle or key escapes a read. */
+data class ChannelScreenData(val events:List<EventCard>,val rows:List<ChannelMessage>,val friends:List<FriendCard>)
+
 class EncryptedStorage(private val identity:IdentityProvider,private val vault:StorageVault,private val staff:StaffKeyVault?=null) {
     private fun <T> operation(create:Boolean=false,now:Long?=System.currentTimeMillis()/1000,work:(EncryptedStore)->T):T = IdentityProvider.withOperation {
         val generation=identity.load().identity.generation
@@ -163,6 +166,14 @@ class EncryptedStorage(private val identity:IdentityProvider,private val vault:S
         operation { core.directHistory(it, keys, now, System.currentTimeMillis()/1000) }
     fun messagingHistory(core: NativeTransport, owner: NativeChannels, name: String, nickname: String): List<ChannelMessage> =
         operation { core.messagingChannelHistory(it, owner, name, nickname) }
+    /** One bounded screen read under the ordinary unlock/reset guard. The store
+     * closes and its key is cleared before any view records return. */
+    fun channelScreen(core:NativeTransport,owner:NativeChannels,name:String?,nickname:String,now:ULong):ChannelScreenData =
+        operation { store ->
+            ChannelScreenData(core.eventCards(store,System.currentTimeMillis()/1000),
+                name?.let {core.messagingChannelHistory(store,owner,it,nickname)} ?: emptyList(),
+                core.friendCards(store,now))
+        }
     fun processCatchup(core: NativeTransport, owner: NativeChannels, now: ULong): CatchupProgress =
         operation { store -> identity.messaging { core.processCatchup(store, it, owner, now, System.currentTimeMillis()/1000) } }
     fun proof(core: NativeTransport, link: LinkHandle, now: ULong): TransportEffects =

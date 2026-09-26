@@ -2,7 +2,7 @@
 
 **Report date:** September 26, 2026. **Status:** exploratory phone/tablet testing; full Android acceptance remains open.
 
-The Galaxy S24 Ultra and Samsung tablet exchanged short and long messages, recovered from Bluetooth and lock transitions, and showed a connection in all 22 samples during a ten-minute observation. Bounded Android catch-up passed its limited item-cap scenario. On the current candidate, untraced L01 and traced L02 each delivered **14/14 directed messages**, including a background exchange. L01 median app-observed round trips were **14.933 seconds short / 19.501 seconds at 280 bytes**. L02 attributes most measured time to app preparation, queueing and post-receipt processing; repeated protected-storage work is the leading optimization target. These results do not establish battery efficiency, one-way latency or large-mesh reliability.
+The Galaxy S24 Ultra and Samsung tablet exchanged short and long messages, recovered from Bluetooth and lock transitions, and passed a bounded catch-up scenario. A focused optimization reduced repeated protected-store opens and refreshes. Untraced O01 delivered **14/14 directed messages**, including a background exchange; median app-observed round trips fell from **14.933 to 7.496 seconds for short messages** and **19.501 to 11.432 seconds for 280-byte messages**, compared with L01. Those are observed reductions of **49.8% and 41.4%** in three-sample groups. These results do not establish battery efficiency, one-way latency or large-mesh reliability.
 
 ## Test setup
 
@@ -14,8 +14,9 @@ The Galaxy S24 Ultra and Samsung tablet exchanged short and long messages, recov
 | Application | Debug build, existing synthetic profiles, public test channel |
 | APK used for M02 and earlier final recovery observation | `eeb6fe05aba5b6acc763ce578fc163e55717245f71578901c83da60a61b263ec` |
 | Catch-up candidate used for C05/C06 | `ab6d7d1413917db3064e62e39ed42613f4fce4ec04660022f5cb164e90dc4360` |
-| Final catch-up candidate APK | `d80af3a9c54e8df01d422bdbc35a5e870fab63c6053e0e3950a6c728913e4733` |
-| Production source checkpoint | `c91894f`; later evidence checkpoint `cc053df` |
+| Pre-optimization catch-up/trace APK | `d80af3a9c54e8df01d422bdbc35a5e870fab63c6053e0e3950a6c728913e4733` |
+| Optimization APK | `a8951afe78cc0669bac9fde4ad9be251ed22ea6159c88f8622d8bcb78f90f7d2` |
+| Earlier recovery source checkpoint | `c91894f`; later evidence checkpoint `cc053df` |
 | Preservation | No identity/history reset, permission blanket grant or security/power-setting change |
 
 Both endpoints are Samsung devices on the same Android API level. A tablet is useful for development testing but does not satisfy the required second-phone or mixed-manufacturer coverage.
@@ -35,7 +36,8 @@ Both endpoints are Samsung devices on the same Android API level. A tablet is us
 | Measured request/echo run M02 | PASS, 14/14 directed deliveries | Seven requests and seven exact remote echoes; zero observed refusals/timeouts; both test runners passed |
 | Tablet activity in background, M02 | PASS, 2/2 directed deliveries | Activity verified below STARTED when the last request arrived; reply received on phone; not a screen-off/locked endurance test |
 | Bounded missed-message catch-up | PASS, C06/C07 limited scenario | Newest eight recovered; ninth/expired items excluded; protected history and no live replay verified |
-| Current-candidate latency baseline/trace | PASS, L01 and L02, 14/14 each | Same app/test packages; complete trace for every sample, no overflow, background exchange and runner cleanup passed |
+| Pre-optimization latency baseline/trace | PASS, L01 and L02, 14/14 each | Same app/test packages; complete trace for every sample, no overflow, background exchange and runner cleanup passed |
+| Optimized latency baseline/trace | PASS, O01 and O02, 14/14 each | Lower observed RTT; complete trace, background exchange, protected-read probes and cleanup passed |
 
 These are separate small scenarios on identified candidates, not one statistically representative delivery-rate study. Failed candidates remain recorded and are not removed from the evidence. No multi-hop, range, five-/ten-phone, flood or field-trial result is claimed.
 
@@ -120,9 +122,55 @@ After radio stop, five ordinary protected setting reads took **429, 425, 426, 44
 
 Source inspection explains why this cost can accumulate: `MeshModel.refresh` separately loads events, history and friend cards; send/receive paths call refresh repeatedly; periodic work also performs protected retry/organizer operations. `EncryptedStorage.operation` opens and closes the protected store for each call, and some of that work shares serialization with radio callbacks. **Repeated protected operations and redundant refreshes are the leading cause hypothesis**, supported by the measured queue delays and read cost; exclusive per-method/storage-subcomponent profiling is still needed to assign causality precisely.
 
-The next optimization should reduce redundant refreshes and repeated protected opens within a bounded authorized operation, with unchanged lock/reset checks, key zeroing, resource cleanup and native limits. Measure protected-operation counts/durations and radio-monitor hold time before changing behavior, then repeat the same baseline and regression workload. This investigation does not justify weaker encryption settings or longer-lived unguarded keys/handles.
+These findings motivated the bounded-read and redundant-refresh optimization below. Further attribution of storage subcomponents, protected-operation counts and exclusive radio-monitor hold time remains useful. This investigation does not justify weaker encryption settings or longer-lived unguarded keys/handles.
 
 Raw L01/L02 logs, installed-package hash manifest and derived per-pair JSON remain under ignored `.work/mc025/2026-09-26-latency/`. Test compilation/lint, five attribution tests, ticketboard validation and twelve board tests pass. The production APK hash remains unchanged. Both normal apps were reopened after runner exit; MC-025/full physical acceptance remains open.
+
+## Android latency optimization
+
+Following L01/L02, a focused production change combines event-card, selected-channel history and friend-card reads into one bounded `channelScreen` operation, instead of opening protected storage separately three times. It also removes the second refresh after a successful public send, keeps the reaction caller's refresh, and avoids rereading the selected channel's history solely for its preview. Other-channel previews/unread behavior and separate DM/event-message operations remain intact. The existing protected operation still performs its unlock/generation/reset checks and closes the store/connection and clears the key before returning. Encryption configuration, native limits and wire behavior are unchanged.
+
+Optimization app SHA-256: `a8951afe78cc0669bac9fde4ad9be251ed22ea6159c88f8622d8bcb78f90f7d2`. Test APK: `5e7e07c79e662c98fa4430a866ac83102e20e4a298c66698eb28ccdbd8c0edc8`. Existing profiles/history were retained during installation. Raw evidence is under ignored `.work/mc025/2026-09-26-optimization/`.
+
+The physical snapshot test compares serialized history/event fields and friend metadata between the individual reads and the batch, with fixed friend-observation time and radio stopped. All three repetitions match on each device, including the null-selected-channel empty-row case. It logs only counts and durations.
+
+| Snapshot measurement | Galaxy S24 Ultra | Samsung tablet |
+|---|---|---|
+| Existing history rows compared each repetition | 71 | 99 |
+| Three individual reads, ms | 1132; 1164; 1143 | 1679; 1676; 1678 |
+| Combined read, ms | 389; 389; 382 | 578; 586; 578 |
+| Median reduction | 66.0% | 65.6% |
+
+These installed profiles have zero event/friend cards, so their empty results are compared but populated event/friend equivalence is not established by this physical check. The existing native feature and protected-provider checks remain separate evidence. Phone snapshot + repeated Connect + Bluetooth recovery pass **3/3 in 58.118 s**; tablet snapshot passes **1/1 in 19.464 s**. This comparison isolates fewer protected opens; it does not measure one-way Bluetooth or battery savings.
+
+Bounded catch-up repeat **C08 passes** on both endpoints, including confirmation and cleanup (A 90.156 s; B 90.550 s). The receiver again gets exactly the newest eight, excludes the ninth/expired items, preserves recovered/unverified labels and zero recovered live-cache/relay entries. Recovery is observed in **30.994 s**, followed by **30.728 s across 13 same-link checks** with no ninth entry. C07's corresponding observation was 44.410 s; these are individual functional samples, not a controlled first-wire-frame latency estimate.
+
+Untraced **O01 passes**, A 117.124 s/B 117.799 s, with **14/14** directed deliveries, no observed refusal/timeout and verified background receipt. It uses the unchanged paired workload and catch-up settling guard.
+
+| Workload | O01 round trips, seconds | Previous L01 median | O01 median | Observed median reduction |
+|---|---|---:|---:|---:|
+| Short foreground, n=3 | 7.496; 10.344; 7.152 | 14.933 s | 7.496 s | 49.8% |
+| 280-byte foreground, n=3 | 8.936; 13.532; 11.432 | 19.501 s | 11.432 s | 41.4% |
+| Short background, n=1 | 7.169 | — | — | — |
+
+The same devices, USB power, Debug configuration and workload were used. History was retained and grew between runs, and radio/thermal conditions were uncontrolled. These are small exploratory comparisons rather than a randomized benchmark or a reliable tail estimate. The within-device snapshot-equivalence measurements independently show the expected benefit of reducing three store opens to one.
+
+Traced **O02 also passes**, A 120.745 s/B 124.279 s, **14/14** directed deliveries without observed refusals/timeouts. All 26 sample frames correlate and are accepted; 87/80 trace entries have zero overflow. Short RTTs are **6.171, 11.364, 6.346 s** (median **6.346 s**), long RTTs **11.745, 12.966, 11.645 s** (median **11.745 s**), and the background pair **5.042 s**. O02 versus O01 still does not isolate tracing overhead from variability.
+
+| Mean traced component, seconds | L02 short | O02 short | L02 long | O02 long |
+|---|---:|---:|---:|---:|
+| Preparation to first submissions, both endpoints | 5.350 | 2.486 | 4.760 | 2.715 |
+| Fragment submission spans, both directions | 0.000 | 0.000 | 4.306 | 4.593 |
+| Complete receipt → model observation, both endpoints | 11.354 | 4.829 | 9.478 | 4.004 |
+| Responder observation → echo send call | 0.002 | 0.002 | 0.001 | 0.002 |
+| Remaining delivery/callback time | 0.704 | 0.643 | 0.958 | 0.804 |
+| **Full RTT mean, n=3 per group** | **17.410** | **7.960** | **19.503** | **12.119** |
+
+The improvement is concentrated in the expected application processing intervals. Across all seven O02 samples, send-work brackets are **0.808–0.864 s on A** and **1.157–1.713 s on B**; receive-work brackets are **0.786–0.844 s / 1.138–1.162 s**. These diagnostic brackets can contain interleaved work and overlap the partition. Tablet send/receive queue waits still reach **2.866/3.376 s**, so periodic work/contention remains worth profiling. Long-message fragmentation spans did not improve in this small trace and now account for about **38%** of mean long RTT; their scheduling/callback/lock components are not isolated radio airtime.
+
+Ordinary protected reads after O02 still take **387, 396, 389, 403, 387 ms** on A and **541, 556, 540, 553, 543 ms** on B (medians **389/543 ms**). Native status calls remain **0–1 ms**. The optimization reduces how many protected opens the message path performs; it does not bypass or substantially change the cost of an individual protected open.
+
+Debug/Release/test builds, lint and **22 JVM tests** pass; the standalone shared-security adapter compiles and passes lint. Native history/catch-up tests pass **3+4**, storage policies **14**, attribution tests **5**, ticketboard tests **12**, and both app APKs pass native-set/ELF/ZIP alignment checks. No production wire/crypto/FFI change was made. The previously recorded standalone security-probe native rebuild limitation and full physical/independent review gates remain open. All requested device runs finished and both normal apps were reopened.
 
 ## Measured Bluetooth traffic
 
@@ -183,7 +231,7 @@ The final catch-up candidate also clears queued catch-up attempts when the radio
 
 ## Next evidence to collect
 
-1. Attribute the observed 15–26-second app round trips with finer timing instrumentation, and repeat with a larger declared sample. Do not assume radio transmission alone accounts for that delay.
+1. Profile remaining periodic protected work and radio-monitor contention, then repeat with a larger declared sample. Current tracing and the first optimization are recorded above; remaining RTT is still several seconds and is not pure radio time.
 2. Extend bounded catch-up evidence to the full simultaneous-direction, authenticated, negotiated-capacity and long-disconnection matrix. Keep single-author burst behavior distinct from the non-overloaded item-cap fixture. The normal composer's offline-send refusal remains unchanged.
 3. Six-hour powered Beacon endurance and separately controlled battery/energy runs.
 4. Additional phones for mixed-manufacturer, multi-hop, five-/ten-device and field scenarios; separate physical key/storage verification.

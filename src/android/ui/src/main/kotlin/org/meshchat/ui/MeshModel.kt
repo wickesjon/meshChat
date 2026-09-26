@@ -272,7 +272,11 @@ class MeshModel(private val context: Context) {
             persist(); radio?.configureBeacon(false,autoBeacon)
         }
         if(pendingStaff!=null && now()-staffCandidateAt>=60000uL)clearOrganizerCandidate()
-        val events=coreWork {storage.events(it)}
+        val n = checkNotNull(owner)
+        n.setCosmetics(supporter,if(supporter)nicknameRgb else null)
+        if (catchupPending) drainCatchup(n)
+        val data=coreWork {storage.channelScreen(it,n,selected,profile,now())}
+        val events=data.events
         var staffStatus:String?=null
         val staff=try {if(staffVault.signingAllowed())storage.staffCard() else null} catch (_:IdentityProviderException) {staffStatus="Staff key unavailable. Forget it and explicitly reprovision.";null}
         val wall=System.currentTimeMillis()/1000
@@ -281,11 +285,8 @@ class MeshModel(private val context: Context) {
         val eventRows=if(selected=="#event updates")coreWork {storage.eventMessages(it,now())} else emptyList()
         val discoveries=coreWork {it.eventDiscoveries(now())}
         val contribution=coreWork {it.contributionStats(now())}
-        val n = checkNotNull(owner)
-        n.setCosmetics(supporter,if(supporter)nicknameRgb else null)
-        if (catchupPending) drainCatchup(n)
-        val rows = selected?.let { name -> coreWork { storage.messagingHistory(it, n, name, profile) } } ?: emptyList()
-        cards = coreWork { storage.friendCards(it, now()) }
+        val rows = data.rows
+        cards = data.friends
         val dmRows = direct?.let { thread -> coreWork { storage.directHistory(it, thread.keys, now()) } } ?: emptyList()
         selected?.let { previews[it] = rows.lastOrNull()?.text ?: "Quiet so far" }
         val wait = selected?.let { n.waitMs(it, false, now()) } ?: 0uL
@@ -317,7 +318,7 @@ class MeshModel(private val context: Context) {
         val name = selected ?: return@work
         if (links.isEmpty() || radio == null || pending.size >= 32) { refresh("Reaction not sent. No connection or queue space."); return@work }
         val bytes = checkNotNull(owner).reaction(name, message.id, code, message.ownReaction == code, now())
-        submit(bytes)
+        if (submit(bytes)) refresh()
     }
     private fun submit(bytes: ByteArray): Boolean {
         val radio = radio ?: return false
@@ -328,7 +329,6 @@ class MeshModel(private val context: Context) {
         if (receipts.size == 100) receipts.remove(receipts.keys.first())
         receipts[id] = "Queued · delivery unknown"
         storage.channelAccept(checkNotNull(owner), null, bytes, TransportIntake.UNVERIFIED, true, now())
-        refresh()
         return true
     }
     fun startRadio() = work {
@@ -402,7 +402,9 @@ class MeshModel(private val context: Context) {
                     }
                     val channel = joined.firstOrNull { channelInfo(it).id.contentEquals(bytes.copyOfRange(20.coerceAtMost(bytes.size), 24.coerceAtMost(bytes.size))) }
                     if (event.intake == TransportIntake.UNVERIFIED && channel != null && storage.channelAccept(n, event.link, bytes, event.intake, false, now())) {
-                        previews[channel] = storage.channelHistory(n, channel, profile).lastOrNull()?.text ?: "Quiet so far"
+                        // The selected channel's preview is rebuilt by the
+                        // following screen refresh from that same history.
+                        if (channel != selected) previews[channel] = storage.channelHistory(n, channel, profile).lastOrNull()?.text ?: "Quiet so far"
                         if (channel != selected && channel !in muted) unread[channel] = ((unread[channel] ?: 0) + 1).coerceAtMost(999)
                     }
                 }

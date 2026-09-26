@@ -4,7 +4,7 @@ from resource_analysis import analyze
 
 
 def fixture():
-    rows=[dict(event="plan",duration_seconds=1800,sample_seconds=60,apk_sha256="synthetic")]
+    rows=[dict(event="plan",duration_seconds=1800,sample_seconds=60,apk_sha256="a"*64,test_apk_sha256="b"*64)]
     rows += [dict(event="sample",index=i,elapsed_ms=i*60000,cpu_ms=i*1200,completed_tasks=i*60,
                   queued_tasks=0,pss_kib=10000,workload_valid=True,screen_interactive=True,
                   plugged=0,charge_uah=4000000-i*1000,battery_percent=80-i//10,
@@ -23,6 +23,19 @@ class ResourceTests(unittest.TestCase):
         self.assertTrue(result["battery_drain_available"])
         self.assertEqual(result["whole_device_charge_loss_uah_per_hour"],60000)
         self.assertEqual(result["cpu_percent_one_core"],2)
+
+    def test_control_frames_do_not_prove_messaging_and_both_apks_required(self):
+        rows=fixture()
+        for row in rows:row["workload"]="messaging"
+        rows[0]["expected_test_messages"]=30
+        self.assertFalse(report(rows)["comparable"])
+        for row in rows:
+            if row["event"]=="sample":row["observed_test_messages"]=row["index"]
+        self.assertTrue(report(rows)["comparable"])
+        rows[-2]["observed_test_messages"]=29
+        self.assertFalse(report(rows)["comparable"])
+        rows=fixture();rows[0].pop("test_apk_sha256")
+        self.assertFalse(report(rows)["comparable"])
 
     def test_powered_unknown_gauge_and_rising_charge_never_claim_drain(self):
         for change in (lambda r:r.update(plugged=1),lambda r:r.update(charge_uah=None),lambda r:r.update(charge_uah=5000000)):

@@ -29,6 +29,10 @@ class PhysicalResourceTest {
         check(workload in listOf("disconnected","connected_idle","messaging","beacon"))
         val seconds=checkNotNull(args.getString("durationSeconds")).toLong()
         check(seconds in 60..21600)
+        val expected=if(workload=="messaging")checkNotNull(args.getString("expectedMessages")).toInt() else 0
+        check(if(workload=="messaging")expected in 1..1000 else expected==0)
+        val marker=Regex("^MC25R_${Regex.escape(run)}_([0-9]{1,3})$")
+        val observed=mutableSetOf<Int>()
         val context=instrumentation.targetContext
         val model=(context.applicationContext as MeshApplication).model
         val queue=MeshModel::class.java.getDeclaredField("queue").apply {isAccessible=true}.get(model) as ThreadPoolExecutor
@@ -42,20 +46,25 @@ class PhysicalResourceTest {
         fun valid(s:MeshScreenState):Boolean = s.onboarded && !s.locked && when(workload) {
             "disconnected" -> s.status=="Nearby connection is off" && !s.beaconRequested && !s.autoBeacon
             "beacon" -> s.beacon?.active==true
+            "messaging" -> s.peers==1 && s.beacon?.active!=true && s.selected?.name=="#general"
             else -> s.peers==1 && s.beacon?.active!=true
         }
         fun log(row:JSONObject) {
             row.put("run",run).put("workload",workload)
             instrumentation.sendStatus(0,android.os.Bundle().apply {putString("stream","MC025R $row\n")})
         }
-        val digest=MessageDigest.getInstance("SHA-256")
-        File(context.applicationInfo.sourceDir).inputStream().use {input ->
-            val buffer=ByteArray(8192)
-            while(true) {val n=input.read(buffer);if(n<0)break;digest.update(buffer,0,n)}
+        fun apkHash(app:Context):String {
+            val digest=MessageDigest.getInstance("SHA-256")
+            File(app.applicationInfo.sourceDir).inputStream().use {input ->
+                val buffer=ByteArray(8192)
+                while(true) {val n=input.read(buffer);if(n<0)break;digest.update(buffer,0,n)}
+            }
+            return digest.digest().joinToString("") {"%02x".format(it)}
         }
         log(JSONObject().put("event","plan").put("duration_seconds",seconds).put("sample_seconds",60)
             .put("model",android.os.Build.MODEL).put("sdk",android.os.Build.VERSION.SDK_INT)
-            .put("apk_sha256",digest.digest().joinToString("") {"%02x".format(it)}))
+            .put("apk_sha256",apkHash(context)).put("test_apk_sha256",apkHash(instrumentation.context))
+            .put("expected_test_messages",expected))
         val readyUntil=SystemClock.elapsedRealtime()+180000
         while(!valid(screen()) && SystemClock.elapsedRealtime()<readyUntil)SystemClock.sleep(1000)
         check(valid(screen())) {"Configure the declared workload in the normal app; observer never starts it"}
@@ -65,6 +74,12 @@ class PhysicalResourceTest {
         while(true) {
             val now=SystemClock.elapsedRealtime()
             val s=screen()
+            if(workload=="messaging")for(row in s.rows) {
+                if(row.message.own)continue
+                val matched=marker.matchEntire(row.message.text) ?: continue
+                val id=matched.groupValues[1].toInt()
+                if(id in 0 until expected)observed.add(id)
+            }
             val info=Debug.MemoryInfo().also {Debug.getMemoryInfo(it)}
             val intent=context.registerReceiver(null,IntentFilter(Intent.ACTION_BATTERY_CHANGED))
             val charge=battery.getIntProperty(BatteryManager.BATTERY_PROPERTY_CHARGE_COUNTER)
@@ -72,6 +87,7 @@ class PhysicalResourceTest {
             val stats=s.contribution
             log(JSONObject().put("event","sample").put("index",index++)
                 .put("elapsed_ms",now-start).put("cpu_ms",Process.getElapsedCpuTime())
+                .put("observed_test_messages",observed.size)
                 .put("completed_tasks",queue.completedTaskCount).put("queued_tasks",queue.queue.size)
                 .put("pss_kib",info.totalPss).put("battery_percent",if(percent in 0..100)percent else JSONObject.NULL)
                 .put("charge_uah",if(charge!=Int.MIN_VALUE && charge>0)charge else JSONObject.NULL)

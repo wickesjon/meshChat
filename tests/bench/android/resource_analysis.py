@@ -4,6 +4,7 @@ Usage: python resource_analysis.py run.log .work/<run>/resources.json
 """
 import json
 import math
+import re
 from pathlib import Path
 import sys
 
@@ -27,12 +28,14 @@ def analyze(text):
     if [r["index"] for r in samples]!=list(range(len(samples))):
         raise ValueError("Missing/repeated/out-of-order samples")
     issues=[]
+    if any(not re.fullmatch(r"[0-9a-f]{64}",str(plan.get(k,""))) for k in ("apk_sha256","test_apk_sha256")):
+        issues.append("missing/invalid app or instrumentation APK identity")
     if malformed:issues.append("truncated/malformed log record")
     if "OK (1 test)" not in text or "FAILURES!!!" in text or "INSTRUMENTATION_FAILED" in text:
         issues.append("runner did not pass")
     if len(samples)!=math.ceil(seconds/60)+1 or not summaries or summaries[0].get("samples")!=len(samples):
         issues.append("incomplete sample coverage")
-    result={"run":plan["run"],"workload":plan["workload"],"apk_sha256":plan.get("apk_sha256"),
+    result={"run":plan["run"],"workload":plan["workload"],"apk_sha256":plan.get("apk_sha256"),"test_apk_sha256":plan.get("test_apk_sha256"),
             "samples":len(samples),"issues":issues,"comparable":False,"battery_drain_available":False}
     if len(samples)<2:
         issues.append("fewer than two samples")
@@ -65,8 +68,15 @@ def analyze(text):
             issues.append(f"{key} counter reset")
             result["transport_deltas"][key]=None
         else:result["transport_deltas"][key]=values[-1]-values[0]
-    if plan["workload"]=="messaging" and not (result["transport_deltas"]["scheduled_frames"] or result["transport_deltas"]["received_frames"]):
-        issues.append("messaging traffic not observed")
+    if plan["workload"]=="messaging":
+        expected=plan.get("expected_test_messages")
+        counts=[r.get("observed_test_messages") for r in samples]
+        result["expected_test_messages"]=expected
+        result["observed_test_messages"]=counts[-1]
+        if (type(expected) is not int or not 1<=expected<=1000 or
+            any(type(n) is not int or not 0<=n<=expected for n in counts) or
+            counts[0]!=0 or counts[-1]!=expected or any(b<a for a,b in zip(counts,counts[1:]))):
+            issues.append("declared synthetic messaging workload incomplete or stale")
     result["comparable"]=not issues
     charge=[r.get("charge_uah") for r in samples]
     percent=[r.get("battery_percent") for r in samples]

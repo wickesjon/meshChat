@@ -45,13 +45,13 @@ class AndroidGattRadio(
     core: NativeTransport,
     event: (Long, TransportEvent) -> Unit,
     private val status: (RadioState) -> Unit = {},
+    private val gate: Any = Any(),
     private val stopped: () -> Unit = {},
 ) : GattRadio {
     private class Client(val gatt: BluetoothGatt) {
         var tx: BluetoothGattCharacteristic? = null
         var rx: BluetoothGattCharacteristic? = null
     }
-    private val gate = Any()
     private val handler = Handler(Looper.getMainLooper())
     private val manager = context.getSystemService(BluetoothManager::class.java)
     private val adapter = manager.adapter

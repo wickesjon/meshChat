@@ -54,6 +54,9 @@ class MeshModel(private val context: Context) {
     var screen by mutableStateOf(MeshScreenState()); private set
     private val main = Handler(Looper.getMainLooper())
     private val queue = ThreadPoolExecutor(1, 1, 0, TimeUnit.MILLISECONDS, ArrayBlockingQueue(64))
+    // The service may start ticking before its queued ready callback runs.
+    // Share this monitor from construction, including the startup refresh.
+    private val coreGate = Any()
     private val vault = StorageVault.android(context)
     private val staffVault = StaffKeyVault.android(context)
     private val identity = IdentityProvider.android(context, IdentityResetStore {staffVault.clearIdentityState();vault.clearIdentityState()})
@@ -323,7 +326,7 @@ class MeshModel(private val context: Context) {
         val started = MeshTransportService.start(context, transport, { id, event -> work { if (generation == epoch) this.event(id, event) } },
             { engine -> work { if (generation == epoch) { starting = false; radio = engine; engine.powerSetting(power); if(beaconRequested || autoBeacon)engine.configureBeacon(beaconRequested,autoBeacon); announceAt = 0uL; refresh() } else engine.stop() } },
             { state -> work { if (generation == epoch) radioState(state) } },
-            { send, submit -> storage.messageEgress(transport, send, submit) })
+            { send, submit -> storage.messageEgress(transport, send, submit) }, coreGate)
         if (!started) { starting = false; status = "Allow Bluetooth access, then try connecting again." }
         else status = "Starting nearby connections…"
         refresh()
@@ -412,11 +415,11 @@ class MeshModel(private val context: Context) {
     }
     /** Read/auth work shares the radio monitor with ticks, native callbacks and
      * protected sends; timestamp collection occurs inside that serialization. */
-    private fun <T> coreWork(action: (NativeTransport)->T): T {
-        val active=radio ?: return action(checkNotNull(transport))
+    private fun <T> coreWork(action: (NativeTransport)->T): T = synchronized(coreGate) {
+        val active=radio ?: return@synchronized action(checkNotNull(transport))
         var result: Result<T>?=null
         active.operation { core -> result=runCatching { action(core) }; TransportEffects(emptyList(),emptyList()) }
-        return (result ?: throw MessagingException.Busy()).getOrThrow()
+        (result ?: throw MessagingException.Busy()).getOrThrow()
     }
     private fun submitProtected(action: (NativeTransport, ULong)->MessageSubmission): Boolean {
         val active=radio ?: return false

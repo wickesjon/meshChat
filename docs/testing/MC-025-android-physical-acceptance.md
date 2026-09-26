@@ -1,6 +1,16 @@
 # MC-025 Android physical acceptance packet
 
-Status: procedure prepared; **all physical scenarios NOT RUN**. Candidate: `e20a05e4c55df857de2dc8168258138bf2092fbc`, the integrated main revision after MC-035. Record a new exact revision and APK hash if any candidate changes. No phones were attached in the 2026-09-17 `adb devices -l` inventory. This packet does not close MC-025.
+Status: procedure prepared; full matrix scenarios remain **NOT RUN**, apart from the limited startup preflight below. Initial candidate: `e20a05e4c55df857de2dc8168258138bf2092fbc`, the integrated main revision after MC-035. Record a new exact revision and APK hash if any candidate changes. This packet does not close MC-025.
+
+## Device A startup preflight — 2026-09-26
+
+One physical Samsung Galaxy S24 Ultra (SM-S928U1), Android 16/API 36, build S928U1UES6DZH3, patch 2026-08-05, arm64/4096-byte pages is available. Installation and onboarding passed with the original MC-035 Debug APK `2f167a92e6aec3081182028f57a8df373715d1828fa340d6f2001579654294b0`. Connect then failed: the startup data read raced the newly started radio's clock and entered the protected-unavailable screen. This is an application failure, not passed OEM acceptance or evidence of invalidated keys.
+
+The [active ticket](../ticketboard/inprogress/MC-025-android-bench-mesh-and-early-field-gate.md) records the scoped startup-monitor fix. The original APK fails the focused physical regression (9.874 seconds); updated Debug APK `61c4a84a7ec02490cb83c983422610edb07ab1e6631ccddadc0ecf5000bd0ce7` passes three Connect/protected-read/stop cycles (76.843 seconds total), preserving the existing nickname, avatar and channel names/IDs. Test APK: `705bca39aaff601ae15b5c4bec5ba5889745cbccc0a94e34e70fef2e5ae088be`. Source is the MC-025 branch's startup-fix checkpoint; validation/review status is recorded in the ticket. Local logs: `.work/mc025/2026-09-26-device-a-preflight/connect-before.log` and `connect-after.log`.
+
+Invoke only the explicit test class with instrumentation arguments `physicalConnect=true` and `class=org.meshchat.ui.ConnectStartupTest` on an already onboarded synthetic profile. It uses real protected storage and Bluetooth, keeps the screen awake only during its run, restores the selected channel, and stops the radio on exit. It does not reset identity, clear history, grant permissions or change lock settings. An authorized device serial is required when invoking ADB; do not alter emulator runners to accept it.
+
+This covers startup with one unlocked, USB-powered phone only. There were no peer delivery, capacity, backpressure, lock-transition, background/OEM, battery or endurance measurements. All remaining scenario requirements below are still mandatory.
 
 The [ticket](../ticketboard/inprogress/MC-025-android-bench-mesh-and-early-field-gate.md) owns the Android radio/OEM/Beacon bench gate before beta. [MC-007](../decisions/MC-007-budgets-and-acceptance.md) defines workloads, accounting and thresholds; the [physical scheduling policy](../decisions/local-validation-policy.md#physical-acceptance-scheduling--approved-2026-09-14) preserves them. Use synthetic identities, credentials and messages until MC-043 permits sensitive-data use. No physical key/storage result is inferred from these radio trials.
 

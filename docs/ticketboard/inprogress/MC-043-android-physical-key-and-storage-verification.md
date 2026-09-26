@@ -24,6 +24,10 @@ Also permitted: this ticket and generated ticketboard index/diagram changes requ
 
 ## Implementation details
 
+### Preparation authorized — 2026-09-26
+
+User approved a separate physical security acceptance preparation PR while devices are unavailable. This branch starts from current main `e20a05e4c55df857de2dc8168258138bf2092fbc`; every hard dependency is complete there. Prepare `docs/security/MC-043-device-packet.md` and `tests/bench/security/physical_packet.py` with host tests in the same permitted directory. The packet generator only creates empty evidence records in ignored repository-local `.work`; it cannot execute ADB, install, reset, delete keys, change credentials or modify device/host settings. Validate complete minimum/current scenario coverage, explicit not-run/unavailable/fail/pass states, and metadata/evidence requirements for reported physical results. This does not implement production remediation or satisfy a physical gate.
+
 - Run the [MC-005 procedure](../../../tests/bench/security/README.md) and equivalent production-adapter checks on named Android API 29 and current supported OS devices. Record model, OS, exact source/build, date, secure-lock setup and actual protection metadata.
 - Verify curve operations, protected wrapping, encrypted fixture restart/wrong-key/correct-key reopening, ciphertext-preserving key-loss refusal and explicit reset. Distinguish manual key deletion from OS-triggered invalidation.
 - Verify closed and held-database behavior across lock, reboot and before first unlock; record delayed/suspended execution honestly. Exercise backup, supported device transfer, uninstall/reinstall and same/other-device restore, inspecting database, sidecars and wrapped secrets without retaining private content.
@@ -47,6 +51,10 @@ Also permitted: this ticket and generated ticketboard index/diagram changes requ
 Scheduling approved 2026-09-14 in [the validation policy](../../decisions/local-validation-policy.md#physical-acceptance-scheduling--approved-2026-09-14). Execute on the integrated Android feature candidate before MC-034. All original production-provider, minimum/current OS, wrapping, lock, reboot, backup, transfer, restore and invalidation criteria remain unchanged; missing devices blocks this gate when reached.
 
 Deferred, not tested. This ticket is a mandatory later gate created under the user's 2026-09-11 scheduling decision. Device/signing inventory is unknown; no physical result is claimed. The early MC-005 emulator/source evidence is recorded in [the probe plan](../../decisions/MC-005-probe-plan.md).
+
+Preparation implemented 2026-09-26: [device packet](../../security/MC-043-device-packet.md), generator/checker and five host regression tests. The matrix contains 17 scenarios for each minimum/current physical device slot. It distinguishes structural validity from certification, requires exact source/app/test build identities and existing repository-contained evidence for executed outcomes, and records unavailable cases without waiving them. No production code or device executor was changed.
+
+Local validation under the approved policy: Python 3.14.4; `python -B -m unittest discover -s tests/bench/security -p test_physical_packet.py` (5 pass), `python -B -m unittest discover -s tests/ticketboard` (12 pass), ticketboard `--write` and default validation (46 tickets, 131 edges), and `git diff --check` pass. Packet CLI init/check produced 34 not-run records, no manual-review readiness and `certified: false`. These checks apply to host-only preparation; they provide no Android native, physical or security certification. Required independent preparation review is pending; all exit criteria remain open.
 
 ## Review and merge
 

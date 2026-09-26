@@ -24,8 +24,8 @@ Each run schedules 60 request/reply pairs: 30 short and 30 280-byte messages, al
 For example, execute each endpoint's invocation in its own terminal, capturing output into the fresh run directory:
 
 ```text
-adb -s <device-A> shell am instrument -w -e physicalMeasure true -e mode acceptance -e initiator A -e runId <unique> -e role A org.meshchat.app.test/androidx.test.runner.AndroidJUnitRunner
-adb -s <device-B> shell am instrument -w -e physicalMeasure true -e mode acceptance -e initiator A -e runId <same-unique> -e role B org.meshchat.app.test/androidx.test.runner.AndroidJUnitRunner
+adb -s <device-A> shell am instrument -w -e class org.meshchat.ui.PhysicalRoundTripTest -e physicalMeasure true -e mode acceptance -e initiator A -e runId <unique> -e role A org.meshchat.app.test/androidx.test.runner.AndroidJUnitRunner
+adb -s <device-B> shell am instrument -w -e class org.meshchat.ui.PhysicalRoundTripTest -e physicalMeasure true -e mode acceptance -e initiator A -e runId <same-unique> -e role B org.meshchat.app.test/androidx.test.runner.AndroidJUnitRunner
 ```
 
 Under repeated failures, the responder can wait up to about 96 minutes after setup. A cancelled run is incomplete evidence, retained by the analyzer; do not relabel it passed.
@@ -47,7 +47,7 @@ The historical seven-pair workload remains the default `mode=smoke, initiator=A`
 Run `org.meshchat.ui.PhysicalResourceTest` through the same app test runner with:
 
 ```text
-physicalResources=true runId=<unique> workload=<name> durationSeconds=<60..21600>
+class=org.meshchat.ui.PhysicalResourceTest physicalResources=true runId=<unique> workload=<name> durationSeconds=<60..21600>
 ```
 
 This observer deliberately does not start/stop radio, send messages, change Beacon settings, wake the display or keep it on. Instrumentation may restart the app process: launch/reopen the normal app and establish the declared workload during its three-minute readiness wait. Start measurements only after normal stabilization/catch-up. Prepare each workload in the app:

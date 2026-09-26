@@ -2,6 +2,14 @@
 
 Status: procedure prepared; full matrix scenarios remain **NOT RUN**, apart from the limited startup preflight and two-device exchange smoke below. Initial candidate: `e20a05e4c55df857de2dc8168258138bf2092fbc`, the integrated main revision after MC-035. Record a new exact revision and APK hash if any candidate changes. This packet does not close MC-025.
 
+## Measured phone/tablet follow-up — 2026-09-26
+
+The [results report](MC-025-results-report-2026-09-26.md) consolidates connectivity, latency, native traffic, memory and USB-powered battery evidence. The [paired procedure](MC-025-paired-measurement.md) predeclares six foreground request/echo pairs (three short, three 280-byte), then one short pair with the tablet activity stopped/backgrounded, using existing synthetic profiles and the unchanged final production APK below. M01 observed 14/14 deliveries but failed both runner cleanups; it remains a failed instrumentation run. Removing the harness's conflicting foreground launch and awaiting radio stop allowed **M02 to pass on both endpoints**, including cleanup (180.559 s and 180.004 s).
+
+M02 confirms **14/14 directed deliveries** with zero observed send refusals/echo timeouts. App-observed short-message round-trip median is **16.006 s** (n=3, range 14.650–18.120); 280-byte median **21.955 s** (n=3, range 18.972–26.310); background pair **16.556 s** (n=1). A single monotonic clock measures each complete round trip; nominal 100 ms polling plus variable dispatch, refresh and logging overhead remain included. This is not a one-way/PHY latency or formal MC-007 pass. Counter snapshots show 21 newly received and 21 completed native frames per endpoint, including control traffic; the report records byte totals and unequal observation windows. USB-powered integer battery changes do not establish incremental energy/drain. Test APK hash: `36961bab4794c82cdac08367a63689ee9dd74d4de9df9d71c956fefcf7be1984`; raw evidence is ignored under `.work/mc025/2026-09-26-measurement/`.
+
+Source inspection also identified a scenario-E blocker: Android production code does not call the existing native `requestCatchup`/`processCatchup` APIs. Reconnection and retained local history are not proof of missed-message recovery. The active ticket records this unresolved integration gap; no scenario-E pass or acceptance relaxation is claimed.
+
 ## Radio restart and recovery follow-up — 2026-09-26
 
 The same USB-powered Samsung phone/tablet endpoints, existing synthetic profiles and public channel were used. Placement was adjacent with uncontrolled RF; this is an exploratory direct-link test, not the required phone cohorts or controlled topology. The ignored plan in `.work/mc025/2026-09-26-radio-restart/physical-plan.txt` declared long bidirectional messages, app/Bluetooth/lock recovery and a ten-minute foreground connection/resource observation before traffic. No keys/history/permissions were reset and no lock/power settings were changed.

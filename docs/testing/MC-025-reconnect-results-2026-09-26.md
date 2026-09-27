@@ -38,4 +38,36 @@ The same-server baseline fails on the old production adapter and passes on the r
 
 App Debug/Release/test builds, lint, 26 app JVM tests and APK native/16-KiB checks pass for the retirement-only change. The standalone BLE check initially catches an old 146-byte frame assertion from before negotiated-capacity activation; correcting that fixture to the actual 182-byte negotiation, while asserting exactly two fragments and exact reassembly in both directions, yields 28/28 host tests, lint and both probe APK checks. Notification queue tests cover active-retirement refusal, unsent removal, no stale-callback advancement, preserved other-peer work and reentrant completion. The initial mistaken use of the transport-only APK checker on the full app rejects its additional expected SQLCipher/Compose libraries; the correct app-specific checker passes. Final backoff candidate validation is pending below.
 
-Fix validation and repeated real reconnect trials are in progress. MC-025 remains in progress and PR #39 remains unmerged; no release or independent security gate is closed by this investigation.
+### Combined candidate
+
+Source checkpoint `1872d57ea281d9e03fac8e6868a2e5642a439322`:
+
+- Debug APK `d32ccafe916f8efe9ba6456c4206569277bb3956cbeed5aee46c252df8c5c8e3`.
+- Release APK `2c89d6c6e11d6cfe3b5f73f47984533e9311f2cf576c972d08723b42d0770e03`.
+- Test APK `8bb8a614aae1a8d4ea33908ae75eef2f64a85c137b08b41974dbc884739aa7b7`.
+
+Local checks use JDK 17.0.15+6, Gradle 8.13, AGP 8.11.1, Kotlin 2.2.0, API 36/build tools 35.0.0, existing native libraries and repository-local caches/temp directories. App `assembleDebug assembleRelease assembleDebugAndroidTest lintDebug testDebugUnitTest` passes in 2m10s (26 JVM tests); standalone BLE `lintDebug` passes in 1m17s (29 JVM tests, Debug/Release builds and native APK checks). App-specific `tests/integration/android-ui/check_apk.py` and `zipalign -c -P 16 4` pass for both app variants. Ticketboard/default and whitespace checks pass. Logs: `.work/mc025/reconnect-jitter-app.log`, `reconnect-jitter-ble.log`. No Rust, FFI, storage, crypto, dependency or iOS implementation changed in this delta; rerunning those unrelated suites would not resolve the measured Android radio failure. Their broader outstanding gates remain open.
+
+| Combined-candidate trial | Actual result |
+|---|---|
+| J01 | Initial peer appears, then both links disappear. A fails the pre-interruption delivery guard in 106.668 s: first three requests were not ready and never sent. No intentional stop/start occurred; B was explicitly interrupted |
+| J02 | Harness invocation error: existing smoke fixture rejects `initiator=B`. Both fail before starting the radio; not a connectivity result |
+| J03 | Both pass 7/7, A 149.711 s/B 149.467 s. Physical roles exchanged: A tablet, B phone. Tablet recovers in 104.764 s after starting the radio again; all four subsequent pairs deliver, including background reception |
+| J04 | Repeats J01's pre-interruption startup failure in 106.480 s; three requests not ready, none sent. No intentional stop/start occurred; B explicitly interrupted |
+| J05 | Both pass 7/7, A 102.266 s/B 102.095 s. Phone initiator, tablet responder launched first. Phone recovers in 59.006 s after starting its radio again; all four subsequent pairs deliver, including background reception |
+
+J01's sanitized callback history and snapshots show an additional unresolved setup issue. The tablet's central reports measured MTU 517 while its admitted peripheral remains at capacity zero. The phone's opposite central times out approximately ten seconds after setup; its local disconnect is followed by both roles dropping. Server epoch stays unchanged during this loss, so preserving the server does not fix this case. Android documents that [only the first MTU request on an ACL connection triggers negotiation on Android 14+](https://developer.android.com/reference/android/bluetooth/BluetoothGatt#requestMtu(int)); that is relevant platform context, not proof that it explains the missing server callback. We do not invent a peripheral MTU, reuse a measurement across an unproven generation, or waive the capacity floor.
+
+The four valid combined-candidate paired attempts schedule 28 pairs: J03/J05 deliver 14 pairs (28 directed messages), while J01/J04 never transmit their 14 scheduled requests before aborting. J02 is an invocation error, not an executed measurement plan. Thus two controlled stop/start recoveries pass, but cold-start reliability is not accepted. Different launch order, retained history, random timing and the tiny uncontrolled sample prevent attribution of a population-level reliability gain solely to backoff. The measured recovery times are observations, not a promised bound.
+
+Terra/medium independently reviewed `1872d57` against `7d12daf` and found no actionable implementation/security/test issues. It explicitly did not certify pending hardware recovery. The evidence update receives a separate follow-up review. MC-025 and PR #39 remain unmerged; no release or independent security gate is closed by this investigation.
+
+Final isolated regressions on the exact combined candidate pass **14/14**: three retirement scenarios, one existing refusal test and three Bluetooth off/on cycles per device. Phone retirement/refusal durations are 3.668/1.237 s; tablet 5.115/2.382 s. All six toggle runs record `STATE_OFF=10` before enabling and preserve the protected profile. Both adapters are restored enabled. These are isolated callback/lifecycle checks, not six paired Bluetooth-outage recoveries. The installed candidate remains on both devices; normal app screens are reopened after tests.
+
+## Reproduction and interpretation
+
+Use the existing synthetic profiles, both unlocked. Upgrade app and test APKs in place. For paired trials, invoke `org.meshchat.ui.PhysicalRoundTripTest` on each device with `physicalMeasure=true`, `connectionTrace=true`, `mode=smoke`, `initiator=A`, one shared unique `runId`, and distinct `role=A` / `role=B`. Add `restartAfterPair=true` for the deliberate five-second stop/start after pair index 2. The fixture accepts only A as smoke initiator; reverse the physical A/B assignment to interrupt the tablet. Keep the mapping and launch order in the run plan. Normal mapping is A phone/B tablet; J03 reverses it, while J05 retains the normal mapping and launches B first.
+
+The initiator records the reconnected peer on its own monotonic clock from the new start request, excludes the intentional five-second offline interval, then requires catch-up status to settle and four further request/echo deliveries. A peer-count observation alone is not the delivery result. Warm-up round trips after reconnect are not the previously established ready-link latency benchmark: J03's first two post-reconnect round trips take 5.203 s and 3.494 s, then 1.009 s and 0.717 s. Cold-start peer observation is also not proof that setup remains stable; J01/J04 show why.
+
+Run `GattPeripheralRetirementTest`, `GattServerRejectionTest`, and `BluetoothShutdownTest` as separate instrumentation invocations with `physicalConnect=true`; the Bluetooth case also requires `physicalBluetooth=true`. Stop the other app and temporarily disable its Bluetooth for the isolated callback fixtures, then restore both adapters. Separate invocations preserve the tests' defined fresh-process admission precondition; do not erase profiles or refund native counters inside a running test. Retain precondition failures and interrupted responders explicitly.

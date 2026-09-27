@@ -1,5 +1,7 @@
 # MC-025 Android physical acceptance packet
 
+Latest reconnect work and retained failures: [September 26 reconnect results](MC-025-reconnect-results-2026-09-26.md). Earlier candidate evidence below remains historical; MC-025 is still open.
+
 Status: procedure prepared; full matrix scenarios remain **NOT RUN**, apart from the limited startup preflight and two-device exchange smoke below. Initial candidate: `e20a05e4c55df857de2dc8168258138bf2092fbc`, the integrated main revision after MC-035. Record a new exact revision and APK hash if any candidate changes. This packet does not close MC-025.
 
 ## Bounded catch-up follow-up — 2026-09-26

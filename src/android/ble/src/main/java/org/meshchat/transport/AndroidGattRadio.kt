@@ -91,6 +91,7 @@ class AndroidGattRadio(
     // their MTU callbacks. Never reuse such an address within this server epoch.
     private val refusedAddresses = mutableSetOf<String>()
     private var refusedRetryAt = 0uL
+    private var releasedClientAddress: String? = null
     private val notifications = NotificationQueue(::submitNotification) { id, success -> driver.completed(id, success) }
     private val timer = object : Runnable {
         override fun run() {
@@ -206,6 +207,7 @@ class AndroidGattRadio(
             ScanSettings.Builder().setScanMode(if (mode == ScanMode.BURST) ScanSettings.SCAN_MODE_LOW_LATENCY else ScanSettings.SCAN_MODE_BALANCED).build(), listener)
     }
     override fun connect(id: Long, address: String): Boolean {
+        releasedClientAddress = null
         val device = adapter?.getRemoteDevice(address) ?: return false
         val gatt = device.connectGatt(context, false, clientCallbacks(id), BluetoothDevice.TRANSPORT_LE) ?: return false
         clients[id] = Client(gatt)
@@ -312,14 +314,21 @@ class AndroidGattRadio(
                 AdvertiseData.Builder().addServiceUuid(ParcelUuid(MeshGatt.SERVICE)).setIncludeDeviceName(false).setIncludeTxPowerLevel(false).build(), listener)
         }
         override fun onConnectionStateChange(device: BluetoothDevice, status: Int, newState: Int) = current {
+            // Any fresh platform activity invalidates the one-use teardown
+            // correlation, including a reconnect we must refuse.
+            if (newState == BluetoothProfile.STATE_CONNECTED) releasedClientAddress = null
             val existing = id(device)
             if (status != BluetoothGatt.GATT_SUCCESS || newState == BluetoothProfile.STATE_DISCONNECTED) {
-                if (existing != null) {
-                    driver.lost(existing)
+                val released = device.address == releasedClientAddress
+                if (released) releasedClientAddress = null
+                if (existing != null) driver.lost(existing)
+                if (existing != null || released) {
                     // A confirmed last-peer disconnect leaves no shared ACL or
                     // surviving setup to preserve. Refresh now so retirement
                     // cannot cancel the next legitimate outgoing connection.
-                    // Refused/unmatched/error callbacks keep the delayed path.
+                    // A retired role can instead confirm the final client's
+                    // requested cancellation, if no fresh activity intervened.
+                    // Other unmatched/refused/error callbacks stay delayed.
                     if (running && status == BluetoothGatt.GATT_SUCCESS && newState == BluetoothProfile.STATE_DISCONNECTED &&
                         epoch == serverEpoch && driver.connections().isEmpty()) resetServer()
                 }
@@ -417,7 +426,13 @@ class AndroidGattRadio(
         clients.remove(id)?.gatt?.let { gatt ->
             val device = gatt.device
             cleanup { gatt.disconnect() }; cleanup { gatt.close() }
-            if (device.address in refusedAddresses) cleanup { cancelRetiredConnection(device) }
+            if (device.address in refusedAddresses) cleanup {
+                cancelRetiredConnection(device)
+                // Only a successfully issued final-client cancellation can
+                // authorize its later disconnect to refresh an empty epoch.
+                if (running && server != null && clients.isEmpty() && driver.connections().isEmpty())
+                    releasedClientAddress = device.address
+            }
         }
         val device = peripherals[id] ?: return
         // Android callbacks identify only the address. Retire it for this
@@ -455,6 +470,7 @@ class AndroidGattRadio(
         peripherals.clear()
         subscriptions.clear()
         refusedAddresses.clear()
+        releasedClientAddress = null
         notifications.clear()
         cleanup { previous?.close() }
         ids.forEach { driver.lost(it) }

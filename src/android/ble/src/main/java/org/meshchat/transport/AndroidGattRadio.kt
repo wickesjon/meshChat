@@ -314,7 +314,15 @@ class AndroidGattRadio(
         override fun onConnectionStateChange(device: BluetoothDevice, status: Int, newState: Int) = current {
             val existing = id(device)
             if (status != BluetoothGatt.GATT_SUCCESS || newState == BluetoothProfile.STATE_DISCONNECTED) {
-                if (existing != null) driver.lost(existing)
+                if (existing != null) {
+                    driver.lost(existing)
+                    // A confirmed last-peer disconnect leaves no shared ACL or
+                    // surviving setup to preserve. Refresh now so retirement
+                    // cannot cancel the next legitimate outgoing connection.
+                    // Refused/unmatched/error callbacks keep the delayed path.
+                    if (running && status == BluetoothGatt.GATT_SUCCESS && newState == BluetoothProfile.STATE_DISCONNECTED &&
+                        epoch == serverEpoch && driver.connections().isEmpty()) resetServer()
+                }
             } else if (newState == BluetoothProfile.STATE_CONNECTED) {
                 if (existing != null) { resetServer(); return@current }
                 if (device.address in refusedAddresses || refusedAddresses.size >= 6) {

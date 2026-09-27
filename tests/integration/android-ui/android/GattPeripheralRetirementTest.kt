@@ -22,6 +22,9 @@ class GattPeripheralRetirementTest {
     @Test fun idlePeripheralCloseKeepsServerAndRetiresOldCallbacks() = exercise(null)
     @Test fun activeNotificationRequiresFreshServerEpoch() = exercise("notification")
     @Test fun fullRetirementSetRequiresFreshServerEpoch() = exercise("capacity")
+    @Test fun lastPeripheralDisconnectRefreshesEmptyServer() = exercise("disconnected")
+    @Test fun errorDisconnectKeepsRetirementDeadline() = exercise("error")
+    @Test fun peripheralDisconnectPreservesCentralSetup() = exercise("central")
 
     @Suppress("UNCHECKED_CAST")
     private fun exercise(fallback: String?) {
@@ -60,8 +63,10 @@ class GattPeripheralRetirementTest {
                     val retired=field(radio,"refusedAddresses").get(radio) as MutableSet<String>
                     for (index in 1..6) retired.add("02:00:00:00:27:%02X".format(index))
                 }
-                driver.lost(closed)
-                if (fallback!=null) {
+                if (fallback=="disconnected" || fallback=="error" || fallback=="central") {
+                    callback.onConnectionStateChange(first,BluetoothGatt.GATT_SUCCESS,BluetoothProfile.STATE_DISCONNECTED)
+                } else driver.lost(closed)
+                if (fallback=="notification" || fallback=="capacity") {
                     assertNotSame(server,field(radio,"server").get(radio))
                     assertTrue(field(radio,"serverEpoch").getLong(radio)>epoch)
                     assertTrue(driver.connections().isEmpty())
@@ -80,7 +85,31 @@ class GattPeripheralRetirementTest {
                 callback.onNotificationSent(first,BluetoothGatt.GATT_SUCCESS)
                 callback.onConnectionStateChange(first,BluetoothGatt.GATT_SUCCESS,BluetoothProfile.STATE_CONNECTED)
                 assertEquals("Retired address cannot receive a new token in this epoch",listOf(retained),driver.connections().map {it.id})
-                driver.lost(retained)
+                if (fallback=="disconnected" || fallback=="error" || fallback=="central") {
+                    val central=if (fallback=="central") checkNotNull(driver.connect("02:00:00:00:25:33")) else null
+                    callback.onConnectionStateChange(second,if (fallback=="error") BluetoothGatt.GATT_FAILURE else BluetoothGatt.GATT_SUCCESS,BluetoothProfile.STATE_DISCONNECTED)
+                    if (fallback!="disconnected") {
+                        assertSame("Error or surviving central setup must preserve epoch",server,field(radio,"server").get(radio))
+                        assertEquals(epoch,field(radio,"serverEpoch").getLong(radio))
+                        if (central!=null) {
+                            assertEquals(listOf(central),driver.connections().map {it.id})
+                            driver.lost(central)
+                        }
+                        callback.onConnectionStateChange(second,BluetoothGatt.GATT_SUCCESS,BluetoothProfile.STATE_DISCONNECTED)
+                        assertEquals("Unmatched later disconnect cannot refresh retirement",epoch,field(radio,"serverEpoch").getLong(radio))
+                        assertTrue(driver.connections().isEmpty())
+                        return
+                    }
+                    assertTrue("Confirmed last-peer disconnect must refresh the empty server",field(radio,"serverEpoch").getLong(radio)>epoch)
+                    assertNotSame(server,field(radio,"server").get(radio))
+                    assertTrue(driver.connections().isEmpty())
+                    val freshEpoch=field(radio,"serverEpoch").getLong(radio)
+                    callback.onConnectionStateChange(second,BluetoothGatt.GATT_SUCCESS,BluetoothProfile.STATE_CONNECTED)
+                    callback.onMtuChanged(second,517)
+                    callback.onConnectionStateChange(second,BluetoothGatt.GATT_SUCCESS,BluetoothProfile.STATE_DISCONNECTED)
+                    assertTrue("Old callbacks cannot create connections or refresh the new epoch",driver.connections().isEmpty())
+                    assertEquals(freshEpoch,field(radio,"serverEpoch").getLong(radio))
+                } else driver.lost(retained)
             }
         } finally {
             ui.runOnUiThread {model.stop();ui.activity.window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)}

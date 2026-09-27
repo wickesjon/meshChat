@@ -325,7 +325,10 @@ class AndroidGattRadio(
                 }
             } else if (newState == BluetoothProfile.STATE_CONNECTED) {
                 if (existing != null) { resetServer(); return@current }
-                if (device.address in refusedAddresses || refusedAddresses.size >= 6) {
+                if (device.address in refusedAddresses) {
+                    cancelRetiredConnection(device); return@current
+                }
+                if (refusedAddresses.size >= 6) {
                     server?.cancelConnection(device); return@current
                 }
                 val handle = if (selection.allowed(device.address, driver.connections(), linkLimit, inbound = true)) {
@@ -336,7 +339,7 @@ class AndroidGattRadio(
                     // server can replay this connection and loop indefinitely.
                     if (refusedAddresses.isEmpty()) refusedRetryAt = clock() + 60_000uL
                     refusedAddresses.add(device.address)
-                    server?.cancelConnection(device)
+                    cancelRetiredConnection(device)
                 }
                 else { peripherals[handle] = device; driver.connected(handle, true) }
             }
@@ -411,7 +414,11 @@ class AndroidGattRadio(
     override fun close(id: Long) {
         val address = clients[id]?.gatt?.device?.address ?: peripherals[id]?.address
         address?.let { selection.disconnected(it) }
-        clients.remove(id)?.gatt?.let { gatt -> cleanup { gatt.disconnect() }; cleanup { gatt.close() } }
+        clients.remove(id)?.gatt?.let { gatt ->
+            val device = gatt.device
+            cleanup { gatt.disconnect() }; cleanup { gatt.close() }
+            if (device.address in refusedAddresses) cleanup { cancelRetiredConnection(device) }
+        }
         val device = peripherals[id] ?: return
         // Android callbacks identify only the address. Retire it for this
         // epoch so late callbacks cannot attach to a replacement token, while
@@ -425,7 +432,15 @@ class AndroidGattRadio(
         subscriptions.remove(id)
         if (refusedAddresses.isEmpty()) refusedRetryAt = clock() + 60_000uL
         refusedAddresses.add(device.address)
-        cleanup { server?.cancelConnection(device) }
+        cleanup { cancelRetiredConnection(device) }
+    }
+    private fun cancelRetiredConnection(device: BluetoothDevice) {
+        // Both GATT roles can share the platform connection. Retirement has
+        // already removed payload/callback ownership; defer device-scoped
+        // cancellation until the last same-address client releases its hold.
+        // Reuse the bounded retired set, never an untracked deferred address.
+        if (clients.values.none { it.gatt.device.address == device.address })
+            server?.cancelConnection(device)
     }
     private fun resetServer() {
         // Android server completions contain an address, no connection token.

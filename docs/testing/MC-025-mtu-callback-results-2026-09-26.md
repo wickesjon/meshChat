@@ -65,10 +65,53 @@ Raw logs are `callback-B-<method>.log` under the current evidence directory. The
 
 Existing tablet retirement (3 cases), refusal (1) and Bluetooth off/on recovery (1) regressions also pass **5/5**; logs are `existing-B-{retirement,refusal,bluetooth}.log`. Installed app and final test APK hashes were read back and matched to the candidate (`installed-tablet.json`).
 
-The same app and final test package were subsequently installed on the phone without resetting its profile. All four installed package hashes match (`final-installed.json`). Both Bluetooth adapters were restored enabled and normal app activities reopened. This is installation verification only; the locked phone has not run this candidate's callback or paired tests.
+The same app and final test package were subsequently installed on the phone without resetting its profile. All four installed package hashes match (`final-installed.json`). Both Bluetooth adapters were restored enabled and normal app activities reopened. At this first checkpoint the phone was locked; the following validation resumed after the user unlocked it.
+
+## Phone callback regressions
+
+With both devices verified unlocked, the tablet radio was temporarily disabled and the same ten callback cases passed **10/10** on the phone, each in a separate instrumentation invocation. Runner durations in table order above: 2.003, 1.806, 1.780, 2.248, 1.736, 1.727, 1.749, 1.801, 1.767 and 2.285 seconds. Existing retirement (3), refusal (1) and Bluetooth off/on recovery (1) cases also passed **5/5**, in 3.047, 1.703 and 2.519 seconds respectively. Logs are `callback-A-<method>.log` and `existing-A-{retirement,refusal,bluetooth}.log`. Both adapters were then enabled for paired trials. Total isolated results across both devices: **30/30**; these preserve the injected-callback limitations above.
+
+## Paired physical validation
+
+Before paired execution, `.work/mc025/2026-09-26-mtu/paired-plan.json` declared four diagnostic smoke runs, seven request/reply pairs each, with three short, three 280-byte and one background-responder pair. Each initiator deliberately stops its meshChat radio after pair index 2, remains stopped for five seconds, then restarts it. Recovery time starts immediately before `model.startRadio()` and ends when one peer is reported; it excludes the deliberate five-second outage and subsequent bounded catch-up settling. Startup time below runs from the test plan event to first reported peer and includes test/activity setup. All timing uses each device's own monotonic clock.
+
+M01/M02 launch the phone/tablet initiator first respectively. M03/M04 launch the tablet/phone responder first respectively. The two instrumentation commands are dispatched consecutively without an artificial inter-device delay; command launch order is not a guarantee of OS callback order. Connection snapshots are enabled; detailed per-frame latency tracing is disabled. These are reconnect diagnostics, not repetitions of the earlier 60-pair-per-direction latency acceptance experiment.
+
+| Run | Initiator / launched first | First peer, A / B (s) | Restart recovery (s) | Delivered pairs | Result / runner seconds A / B |
+|---|---|---|---:|---:|---|
+| M01 | Phone / phone | 6.903 / 6.204 | 61.087 phone | 7/7 | PASS, 109.054 / 108.171 |
+| M02 | Tablet / tablet | Not observed / 23.631 transient | Not reached | 0/7 | Phone catch-up FAIL in 204.572; tablet explicitly interrupted |
+| M03 | Phone / tablet | 2.894 / 2.872 | 63.276 phone | 7/7 | PASS, 106.631 / 106.624 |
+| M04 | Tablet / phone | 3.567 / 3.677 | 99.629 tablet | 7/7 | PASS, 145.178 / 144.042 |
+
+A always initiates; B responds. The physical devices swap roles in M02/M04. Total across the four declared plans: **28 scheduled pairs, 21 observed request/reply pairs (42 directed deliveries), seven unattempted pairs, three passing paired runs and one failed paired run**. No attempted pair timed out in these four runs. The failed setup is not excluded from the denominator. Each passing run includes actual background reception and radio-stop cleanup assertions on both endpoints. Existing profiles/history and native limits were preserved.
+
+Full RTT samples in pair-index order (milliseconds; indices 0–2 short, 3–5 280-byte, 6 background):
+
+| Run | RTTs |
+|---|---|
+| M01 | 510, 1195, 1180, 5442, 3422, 1008, 615 |
+| M03 | 838, 981, 948, 5219, 3521, 962, 721 |
+| M04 | 547, 1349, 1109, 5392, 3093, 976, 786 |
+
+The first post-restart pairs remain slower; these small, sequential diagnostics do not demonstrate a new typical sub-second result or a statistically reliable success rate. Recovery includes the existing admission/retry/retired-address behavior and remains roughly one to two minutes in the passing samples, not a sub-second promise.
+
+### Actual asymmetric callback path
+
+M01's retained tablet Bluetooth log records a successful client `onConfigureMTU(..., 517, 0)` during initial setup and **no server MTU callback before the first connection teardown**. Its connection snapshots nevertheless show both roles at measured capacity 512, followed by successful messages. Thus the real-device trial exercises the missing-server-callback case, consistent with the one-shot forwarding repair; this is stronger than the injected fixture alone. Raw evidence: `M01/B-gatt-bounded.log`, `M01/B.log`, and the independently timed initiator messages in `M01/A.log`. This establishes that case on this device pair, not every Android/vendor callback ordering.
+
+### Remaining startup failure
+
+M02 is a different observed failure sequence. Both devices' retained native logs contain successful client MTU 517 and server MTU 517 callbacks. The tablet calls `cancelOpen`/`close` around 20:16:27.339–.345 local time, shortly after subscribing at 20:16:27.071, then cancels the peripheral. The phone initially reports two capacity-512 native-ready roles, later tears them down, and records its existing idle-peer block. The exact cause of the tablet's early close is **not yet established** by these snapshots; neither missing MTU nor a particular native close reason should be asserted from this evidence.
+
+The phone's runner fails `Initial bounded catch-up did not settle` after 204.572 seconds and stops its radio in cleanup. With no requests sent and no remaining responder, the waiting tablet runner is explicitly force-stopped. Its `Process crashed` instrumentation message is the recorded operator interruption, not an independently observed spontaneous crash or an exhausted six-minute timeout. `M02/interruption.txt` records the reason. This run never reached the deliberate restart. Capture attempts using a UTC `-T` value initially returned empty files; `*-gatt-startup-localtime.log` contains the corrected, address-sanitized native callback evidence.
+
+Next investigation should capture the close cause at the tablet's driver/native boundary during initial setup, including descriptor completion and first protocol-frame handling. Preserve MTU, CCCD, authentication, admission and idle-block requirements; the available evidence does not justify weakening any of them.
+
+Raw per-run plans/logs, bounded native callback captures and `paired-summary.json` remain under `.work/mc025/2026-09-26-mtu/`. The aggregator confirms both endpoints' successful runner summaries and peer echo evidence for every claimed delivered pair. After the trials, all installed app/test hashes were reverified, both adapters were enabled, both normal app activities reopened, and no debugger forwards remained. No production/test source changed during these runs.
 
 ## Outstanding validation
 
 Terra/medium independently reviewed published revision `d1814ea5e477522372db9e7a7bfaace912aca935` against `aba6a2e` with **no actionable correctness, security or test findings**. The reviewer checked one-shot target capture/consumption, exact live client identity, token/address/epoch guards, capacity and readiness invariants, and the raw tablet/build evidence. This review does not certify physical reliability or fulfill independent security assessments.
 
-Phone callbacks and repeated paired startup/message/reconnect trials are pending the phone being unlocked. The paired candidate has not yet been measured; previous startup failures remain unresolved physical observations until retested. Do not transfer the earlier ready-link latency or recovery results to this APK. USB-powered tests provide no battery-drain result. MC-025 stays in progress and PR #39 remains unmerged pending its broader physical/platform/security gates. Subsequent documentation records command details, installed package readback and the completed review; production and test sources are unchanged from the reviewed revision.
+Phone callback and the four paired diagnostic trials are now complete as recorded above. The narrow MTU path works in M01; general startup reliability remains open because M02 fails, and successful recovery is still slow. Do not transfer the earlier ready-link latency acceptance result to this APK. USB-powered tests provide no battery-drain result. MC-025 stays in progress and PR #39 remains unmerged pending its broader physical/platform/security gates. The new physical evidence update requires its own independent review; production and test sources remain unchanged from reviewed revision `d1814ea`.

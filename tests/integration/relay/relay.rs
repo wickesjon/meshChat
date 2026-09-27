@@ -10,6 +10,82 @@ fn link(generation: u64) -> LinkHandle {
         generation,
     }
 }
+
+#[test]
+fn negotiated_capacity_is_once_empty_only_and_preserves_pacing_and_credit() {
+    let mut baseline = setup(1, 512, false);
+    let mut negotiated = setup(0, 146, false);
+    negotiated.register_bootstrap(&link(1), 0).unwrap();
+    let mut events = vec![];
+    let mut hello = vec![0; 54];
+    hello[0] = 1;
+    hello[2..4].copy_from_slice(&512u16.to_be_bytes());
+    hello[4..6].copy_from_slice(&512u16.to_be_bytes());
+    hello[6] = 1;
+    for r in [&mut baseline, &mut negotiated] {
+        enqueue(r, 1, &hello, Traffic::Transport(2), 1, 0, &mut events).unwrap();
+    }
+    assert_eq!(
+        negotiated.admit_capacity(&link(1), 512),
+        Err(Error::Invalid)
+    );
+    let (a, _) = send(&mut baseline, 0, &mut events).unwrap();
+    let (b, _) = send(&mut negotiated, 0, &mut events).unwrap();
+    assert_eq!(
+        negotiated.admit_capacity(&link(1), 512),
+        Err(Error::Invalid)
+    );
+    done(&mut baseline, &a, true, 0, &mut events).unwrap();
+    done(&mut negotiated, &b, true, 0, &mut events).unwrap();
+    for bad in [145, 513] {
+        assert_eq!(
+            negotiated.admit_capacity(&link(1), bad),
+            Err(Error::Invalid)
+        );
+    }
+    assert_eq!(negotiated.admit_capacity(&link(2), 512), Err(Error::Stale));
+    negotiated.admit_capacity(&link(1), 512).unwrap();
+    assert_eq!(
+        negotiated.admit_capacity(&link(1), 146),
+        Err(Error::Invalid)
+    );
+    assert_eq!(baseline.admit_capacity(&link(1), 512), Err(Error::Invalid));
+    // Identical attempt times and bytes versus an unchanged 512-byte scheduler,
+    // including the outstanding HELLO pacing deadline and ordinary refill.
+    let mut attempts = 0;
+    for n in 0..70 {
+        let now = n * 1000;
+        for r in [&mut baseline, &mut negotiated] {
+            let _ = enqueue(
+                r,
+                1,
+                &body("max-chat", n + 2),
+                Traffic::Own,
+                n + 2,
+                now,
+                &mut events,
+            );
+        }
+        for at in [now, now + 999] {
+            let a = send(&mut baseline, at, &mut events);
+            let b = send(&mut negotiated, at, &mut events);
+            assert_eq!(a.is_some(), b.is_some());
+            if let (Some((a, ab)), Some((b, bb))) = (a, b) {
+                assert_eq!(ab, bb);
+                assert_eq!(a.frames, 1);
+                assert!(at >= 1000);
+                attempts += 1;
+                done(&mut baseline, &a, true, at, &mut events).unwrap();
+                done(&mut negotiated, &b, true, at, &mut events).unwrap();
+            }
+        }
+    }
+    assert_eq!(attempts, 69);
+    negotiated
+        .disconnect(&link(1), 70_000, &mut |_| {})
+        .unwrap();
+    assert_eq!(negotiated.admit_capacity(&link(1), 512), Err(Error::Stale));
+}
 fn fixture(name: &str) -> Vec<u8> {
     let l = include_str!("../../vectors/base/logical.txt")
         .lines()

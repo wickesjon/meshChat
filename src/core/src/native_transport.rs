@@ -284,9 +284,8 @@ impl Runtime {
                 .friends
                 .effective_capacities(&link.handle)
                 .map_err(|_| TransportError::Stale)?;
-            self.beacon
-                .sessions
-                .register(&link.handle, self.now)
+            self.relay
+                .admit_capacity(&link.handle, usize::from(tx))
                 .map_err(|_| TransportError::Unavailable)?;
             link.admitted = true;
             out.events.push(TransportEvent::Admitted {
@@ -384,6 +383,10 @@ impl Runtime {
         cookie: u64,
         out: &mut TransportEffects,
     ) -> Result<(), TransportError> {
+        let hello = matches!(traffic, relay::Traffic::Transport(2)) && cookie == 1;
+        if !(self.links[self.index(link)?].admitted || hello) {
+            return Err(TransportError::Busy);
+        }
         if matches!(traffic, relay::Traffic::Own) {
             self.beacon.cache_live(bytes, self.now);
         }
@@ -656,11 +659,9 @@ impl NativeTransport {
                 },
             )
             .map_err(|_| TransportError::Identity)?;
-        // The fixed floor is a conservative ENCODING ceiling, never a claimed
-        // native measurement. Every admitted direction can carry it. It keeps
-        // HELLO and subsequent objects on one scheduler with unchanged credits.
-        // Peers may still send up to their actual negotiated directional limit.
-        if s.relay.register(&link, framing::MIN_CAPACITY, now).is_err() {
+        // HELLO uses the floor. Admission activates the effective directional
+        // encoding ceiling on this same scheduler without resetting credits.
+        if s.relay.register_bootstrap(&link, now).is_err() {
             let Runtime {
                 friends, ingress, ..
             } = &mut *s;
@@ -682,6 +683,13 @@ impl NativeTransport {
             peer_count: None,
         });
         let mut out = TransportEffects::default();
+        // Reserve SYNC state in generation creation order. HELLO completion
+        // may arrive out of order; registration there rejects an older live
+        // link after a newer one completes. Admission still gates all use.
+        if s.beacon.sessions.register(&link, now).is_err() {
+            s.close(&link, &mut out)?;
+            return Err(TransportError::Unavailable);
+        }
         if let Err(error) = s.enqueue(&link, &hello, relay::Traffic::Transport(2), 1, &mut out) {
             s.close(&link, &mut out)?;
             return Err(match error {

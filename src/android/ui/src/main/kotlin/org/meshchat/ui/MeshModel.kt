@@ -23,7 +23,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 data class DirectThread(val keys: ByteArray, val petname: String, val archived: Boolean = false)
 data class DirectRow(val message: DirectMessage, val sendState: String)
-data class ChatRow(val message: ChannelMessage, val sendState: String)
+data class ChatRow(val message: ChannelMessage, val sendState: String, val recovered: Boolean = false)
 data class MeshScreenState(
     val contribution: TransportStats? = null,
     val events: List<EventCard> = emptyList(), val eventProposal: EventProposal? = null,
@@ -40,6 +40,7 @@ data class MeshScreenState(
     val channels: List<ChannelInfo> = emptyList(), val selected: ChannelInfo? = null,
     val channelProposal: ChannelInfo? = null,
     val rows: List<ChatRow> = emptyList(), val peers: Int = 0,
+    val catchup: String? = null,
     val status: String = "Nearby connection is off", val error: String? = null,
     val waitSeconds: Int = 0, val muted: Boolean = false,
     val previews: Map<String, String> = emptyMap(), val unread: Map<String, Int> = emptyMap(),
@@ -54,6 +55,9 @@ class MeshModel(private val context: Context) {
     var screen by mutableStateOf(MeshScreenState()); private set
     private val main = Handler(Looper.getMainLooper())
     private val queue = ThreadPoolExecutor(1, 1, 0, TimeUnit.MILLISECONDS, ArrayBlockingQueue(64))
+    // The service may start ticking before its queued ready callback runs.
+    // Share this monitor from construction, including the startup refresh.
+    private val coreGate = Any()
     private val vault = StorageVault.android(context)
     private val staffVault = StaffKeyVault.android(context)
     private val identity = IdentityProvider.android(context, IdentityResetStore {staffVault.clearIdentityState();vault.clearIdentityState()})
@@ -102,6 +106,10 @@ class MeshModel(private val context: Context) {
     private val previews = mutableMapOf<String, String>()
     private val unread = mutableMapOf<String, Int>()
     private var contributionOpen = false
+    private var catchupPending = false
+    private val catchupWaiting = linkedSetOf<LinkHandle>()
+    private var catchupStatus: String? = null
+    private val recovered = linkedSetOf<String>()
     private var posted = 0L
     private val random = SecureRandom()
     private val overflow = AtomicBoolean(false)
@@ -128,7 +136,12 @@ class MeshModel(private val context: Context) {
     }
     private fun report(error: String) {
         if (!loaded) { main.post { screen = screen.copy(error = error) }; return }
-        try { refresh(error) } catch (_: Exception) { unavailable() }
+        try { refresh(error) }
+        catch (_: MessagingException.Busy) {
+            // A stopped radio's queued state update may still be pending.
+            // Keep that temporary refusal distinct from protected-data loss.
+            main.post { screen = screen.copy(error = error) }
+        } catch (_: Exception) { unavailable() }
     }
     private fun setting(name: String) = storage.getRecord(RecordKind.SETTING, name.toByteArray())?.toString(Charsets.UTF_8)
     private fun put(name: String, value: String) = storage.putRecord(RecordKind.SETTING, name.toByteArray(), value.toByteArray())
@@ -259,7 +272,11 @@ class MeshModel(private val context: Context) {
             persist(); radio?.configureBeacon(false,autoBeacon)
         }
         if(pendingStaff!=null && now()-staffCandidateAt>=60000uL)clearOrganizerCandidate()
-        val events=coreWork {storage.events(it)}
+        val n = checkNotNull(owner)
+        n.setCosmetics(supporter,if(supporter)nicknameRgb else null)
+        if (catchupPending) drainCatchup(n)
+        val data=coreWork {storage.channelScreen(it,n,selected,profile,now())}
+        val events=data.events
         var staffStatus:String?=null
         val staff=try {if(staffVault.signingAllowed())storage.staffCard() else null} catch (_:IdentityProviderException) {staffStatus="Staff key unavailable. Forget it and explicitly reprovision.";null}
         val wall=System.currentTimeMillis()/1000
@@ -268,10 +285,8 @@ class MeshModel(private val context: Context) {
         val eventRows=if(selected=="#event updates")coreWork {storage.eventMessages(it,now())} else emptyList()
         val discoveries=coreWork {it.eventDiscoveries(now())}
         val contribution=coreWork {it.contributionStats(now())}
-        val n = checkNotNull(owner)
-        n.setCosmetics(supporter,if(supporter)nicknameRgb else null)
-        val rows = selected?.let { name -> coreWork { storage.messagingHistory(it, n, name, profile) } } ?: emptyList()
-        cards = coreWork { storage.friendCards(it, now()) }
+        val rows = data.rows
+        cards = data.friends
         val dmRows = direct?.let { thread -> coreWork { storage.directHistory(it, thread.keys, now()) } } ?: emptyList()
         selected?.let { previews[it] = rows.lastOrNull()?.text ?: "Quiet so far" }
         val wait = selected?.let { n.waitMs(it, false, now()) } ?: 0uL
@@ -282,7 +297,8 @@ class MeshModel(private val context: Context) {
             loading = false, onboarded = true, nickname = profile, avatar = avatar, light = light,
             supporter = supporter, theme = theme, nicknameRgb = nicknameRgb, billingStatus = billingStatus, supporterPrice = supporterPrice,
             channels = joined.map(::channelInfo), selected = selected?.let(::channelInfo), channelProposal = channelProposal,
-            rows = rows.map { ChatRow(it, receipts[key(it.id)] ?: if(it.own) "Stored locally · delivery unknown" else "Unverified") },
+            rows = rows.map { ChatRow(it, receipts[key(it.id)] ?: if(it.own) "Stored locally · delivery unknown" else "Unverified", key(it.sender + it.id) in recovered) },
+            catchup = catchupStatus,
             peers = links.size, status = status, error = notice, waitSeconds = ((wait + 999uL) / 1000uL).toInt(), muted = selected in muted,
             previews = previews.toMap(), unread = unread.toMap(), posted = posted, power = power, beaconRequested=beaconRequested, autoBeacon=autoBeacon, beacon=beaconStatus))
     }
@@ -302,7 +318,7 @@ class MeshModel(private val context: Context) {
         val name = selected ?: return@work
         if (links.isEmpty() || radio == null || pending.size >= 32) { refresh("Reaction not sent. No connection or queue space."); return@work }
         val bytes = checkNotNull(owner).reaction(name, message.id, code, message.ownReaction == code, now())
-        submit(bytes)
+        if (submit(bytes)) refresh()
     }
     private fun submit(bytes: ByteArray): Boolean {
         val radio = radio ?: return false
@@ -313,7 +329,6 @@ class MeshModel(private val context: Context) {
         if (receipts.size == 100) receipts.remove(receipts.keys.first())
         receipts[id] = "Queued · delivery unknown"
         storage.channelAccept(checkNotNull(owner), null, bytes, TransportIntake.UNVERIFIED, true, now())
-        refresh()
         return true
     }
     fun startRadio() = work {
@@ -323,7 +338,7 @@ class MeshModel(private val context: Context) {
         val started = MeshTransportService.start(context, transport, { id, event -> work { if (generation == epoch) this.event(id, event) } },
             { engine -> work { if (generation == epoch) { starting = false; radio = engine; engine.powerSetting(power); if(beaconRequested || autoBeacon)engine.configureBeacon(beaconRequested,autoBeacon); announceAt = 0uL; refresh() } else engine.stop() } },
             { state -> work { if (generation == epoch) radioState(state) } },
-            { send, submit -> storage.messageEgress(transport, send, submit) })
+            { send, submit -> storage.messageEgress(transport, send, submit) }, coreGate)
         if (!started) { starting = false; status = "Allow Bluetooth access, then try connecting again." }
         else status = "Starting nearby connections…"
         refresh()
@@ -338,6 +353,7 @@ class MeshModel(private val context: Context) {
         pending.clear()
     }
     private fun stopRadio() {
+        catchupWaiting.clear()
         epoch++; starting = false; radio?.stop(); radio = null; links.clear(); stopPending()
         context.stopService(Intent(context, MeshTransportService::class.java)); status = "Nearby connection is off"
     }
@@ -353,7 +369,7 @@ class MeshModel(private val context: Context) {
             else -> "Nearby connection is off"
         }
         if (state == RadioState.STOPPED || state == RadioState.PERMISSION_REQUIRED || state == RadioState.RADIO_DISABLED) {
-            starting = false; radio = null; links.clear(); stopPending()
+            starting = false; radio = null; links.clear(); catchupWaiting.clear(); stopPending()
         }
         refresh()
     }
@@ -363,8 +379,10 @@ class MeshModel(private val context: Context) {
             is TransportEvent.Admitted -> {
                 links[id] = event.link; announceAt = 0uL
                 radio?.operation { core -> storage.proof(core, event.link, now()) }
+                catchupWaiting.add(event.link)
             }
             is TransportEvent.Closed -> {
+                catchupWaiting.remove(event.link)
                 links.remove(id); n.disconnected(event.link, now())
                 val complete = pending.filterValues { (_, waiting) -> waiting.remove(id); waiting.isEmpty() }.keys.toList()
                 for (token in complete) pending.remove(token)?.let { (message, _) ->
@@ -384,7 +402,9 @@ class MeshModel(private val context: Context) {
                     }
                     val channel = joined.firstOrNull { channelInfo(it).id.contentEquals(bytes.copyOfRange(20.coerceAtMost(bytes.size), 24.coerceAtMost(bytes.size))) }
                     if (event.intake == TransportIntake.UNVERIFIED && channel != null && storage.channelAccept(n, event.link, bytes, event.intake, false, now())) {
-                        previews[channel] = storage.channelHistory(n, channel, profile).lastOrNull()?.text ?: "Quiet so far"
+                        // The selected channel's preview is rebuilt by the
+                        // following screen refresh from that same history.
+                        if (channel != selected) previews[channel] = storage.channelHistory(n, channel, profile).lastOrNull()?.text ?: "Quiet so far"
                         if (channel != selected && channel !in muted) unread[channel] = ((unread[channel] ?: 0) + 1).coerceAtMost(999)
                     }
                 }
@@ -406,17 +426,53 @@ class MeshModel(private val context: Context) {
         transport=storage.transport(instance,now()); myCode=storage.friendCode(profile); archives=storage.archives()
     }
     private fun clearMessaging() {
+        catchupPending=false; catchupWaiting.clear(); catchupStatus=null; recovered.clear()
         channelProposal=null; clearOrganizerCandidate()
         transport?.close(); transport=null; cards=emptyList(); myCode=null; proposal=null
         proposalScanned=false; replacingFriend=null; direct=null; archives=emptyList()
     }
     /** Read/auth work shares the radio monitor with ticks, native callbacks and
      * protected sends; timestamp collection occurs inside that serialization. */
-    private fun <T> coreWork(action: (NativeTransport)->T): T {
-        val active=radio ?: return action(checkNotNull(transport))
+    private fun <T> coreWork(action: (NativeTransport)->T): T = synchronized(coreGate) {
+        val active=radio ?: return@synchronized action(checkNotNull(transport))
         var result: Result<T>?=null
         active.operation { core -> result=runCatching { action(core) }; TransportEffects(emptyList(),emptyList()) }
-        return (result ?: throw MessagingException.Busy()).getOrThrow()
+        (result ?: throw MessagingException.Busy()).getOrThrow()
+    }
+    private fun requestReadyCatchup() {
+        if (catchupWaiting.isEmpty()) return
+        // Presence traffic must establish activity before history competes for
+        // frames; retain the ordinary initial-activity deadline.
+        val ready=coreWork { it.observations(now()) }.filter { it.firstValidMs != null }.map { it.link }
+        for (link in ready) if (catchupWaiting.remove(link)) requestCatchup(link)
+    }
+    private fun requestCatchup(link: LinkHandle) {
+        // Exactly one attempt for a ready admitted link. Completion/budget exhaustion never
+        // starts another walk to drain the peer's remaining history.
+        radio?.operation { core ->
+            try {
+                core.requestCatchup(link, now()).also {
+                    catchupPending=true
+                    catchupStatus="Checking for recent messages…"
+                }
+            } catch (_: TransportException.Busy) {
+                if (!catchupPending) catchupStatus="Recent history is limited. Some messages may be missing."
+                TransportEffects(emptyList(),emptyList())
+            } catch (_: TransportException.Stale) {
+                TransportEffects(emptyList(),emptyList())
+            }
+        }
+    }
+    private fun drainCatchup(owner: NativeChannels) {
+        val progress = coreWork { storage.processCatchup(it, owner, now()) }
+        for (arrival in progress.arrivals) {
+            if (recovered.size >= 100) recovered.remove(recovered.first())
+            recovered.add(key(arrival))
+        }
+        catchupPending = progress.active > 0u
+        catchupStatus = if (catchupPending) "Checking for recent messages…"
+            else if (progress.incomplete > 0uL) "Recent history is limited. Some messages may be missing."
+            else "Recent history checked. Some messages may be missing."
     }
     private fun submitProtected(action: (NativeTransport, ULong)->MessageSubmission): Boolean {
         val active=radio ?: return false
@@ -551,6 +607,7 @@ class MeshModel(private val context: Context) {
                         submitProtected { core, token -> storage.sendSigned(core, bytes, token, now()) }
                         announceAt = now() + (radio?.currentPower()?.announceMs ?: 30000uL)
                     }
+                    requestReadyCatchup()
                     if (contributionOpen || selected != null || direct != null || links.isNotEmpty() || beaconRequested || autoBeacon) refresh()
                 } } finally {pulseQueued.set(false)}
             }

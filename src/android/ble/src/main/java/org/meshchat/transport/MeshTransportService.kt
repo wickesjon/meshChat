@@ -20,13 +20,13 @@ import uniffi.meshchat_core.TransportSend
  * The application starts it from a visible user action after permission grants.
  */
 class MeshTransportService : Service() {
-    private class Session(val core: NativeTransport, val event: (Long, TransportEvent) -> Unit, val ready: (AndroidGattRadio) -> Unit, val state: (RadioState) -> Unit, val egress: ((TransportSend, () -> Boolean) -> Boolean)?)
+    private class Session(val core: NativeTransport, val event: (Long, TransportEvent) -> Unit, val ready: (AndroidGattRadio) -> Unit, val state: (RadioState) -> Unit, val egress: ((TransportSend, () -> Boolean) -> Boolean)?, val coreGate: Any)
     companion object {
         private var session: Session? = null
         /** Borrows core from the application for this session; no automatic restart. */
-        @Synchronized fun start(context: Context, core: NativeTransport, event: (Long, TransportEvent) -> Unit, ready: (AndroidGattRadio) -> Unit, state: (RadioState) -> Unit = {}, egress: ((TransportSend, () -> Boolean) -> Boolean)? = null): Boolean {
+        @Synchronized fun start(context: Context, core: NativeTransport, event: (Long, TransportEvent) -> Unit, ready: (AndroidGattRadio) -> Unit, state: (RadioState) -> Unit = {}, egress: ((TransportSend, () -> Boolean) -> Boolean)? = null, coreGate: Any = Any()): Boolean {
             if (session != null || !MeshGatt.allowed(context)) return false
-            session = Session(core, event, ready, state, egress)
+            session = Session(core, event, ready, state, egress, coreGate)
             return try { context.startForegroundService(Intent(context, MeshTransportService::class.java)); true }
             catch (_: RuntimeException) { session = null; false }
         }
@@ -71,7 +71,7 @@ class MeshTransportService : Service() {
                     .setContentText(if (state == RadioState.ACTIVE) "Nearby connections are active." else "Discovery is limited. Open MeshChat to check permissions and connection status.")
                     .setOngoing(true).build())
             }
-        }) { stopSelf() }
+        }, gate = supplied.coreGate) { stopSelf() }
         radio = driver
         supplied.egress?.let { driver.protectedEgress(it) }
         driver.start()

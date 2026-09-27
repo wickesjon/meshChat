@@ -57,16 +57,17 @@ class GattDriverTest {
     @Test fun callbackHandshakeAndWholeFragmentedTrafficInBothDirections() = node(50) { a -> node(51) { b ->
         val al = a.central()
         val bl = b.peripheral()
-        fun exchange(sender: Node, receiver: Node, receiveId: Long) {
+        fun exchange(sender: Node, receiver: Node, receiveId: Long, capacity: Int = 182): Int {
             sender.driver.tick()
             val frames = sender.radio.sends.toList(); sender.radio.sends.clear()
             for ((id, _, value) in frames) {
-                assertTrue(value.size <= 146)
+                assertTrue(value.size <= capacity) // min(measured 512, measured 182), after HELLO
                 receiver.driver.value(receiveId, value)
                 sender.driver.completed(id, true)
             }
+            return frames.size
         }
-        exchange(a, b, bl); exchange(b, a, al)
+        exchange(a, b, bl, 146); exchange(b, a, al, 146)
         assertTrue(a.events.any { it.second is TransportEvent.Admitted })
         assertTrue(b.events.any { it.second is TransportEvent.Admitted })
         for ((sender, receiver, sendId, receiveId) in listOf(arrayOf(a, b, al, bl), arrayOf(b, a, bl, al))) {
@@ -76,10 +77,12 @@ class GattDriverTest {
                 val raw = chat(id, size)
                 val before = receiver.events.count { it.second is TransportEvent.Received }
                 sender.driver.enqueue(sendId, raw, TransportTraffic.OWN, id.toULong())
+                var frameCount = 0
                 repeat(if (size == 256) 3 else 1) {
-                    exchange(sender, receiver, receiveId)
+                    frameCount += exchange(sender, receiver, receiveId)
                     sender.time += 1000uL; receiver.time = sender.time
                 }
+                assertEquals(if (size == 256) 2 else 1, frameCount)
                 assertEquals(before + 1, receiver.events.count { it.second is TransportEvent.Received })
                 val received = receiver.events.last { it.second is TransportEvent.Received }.second as TransportEvent.Received
                 assertArrayEquals(raw, received.bytes)

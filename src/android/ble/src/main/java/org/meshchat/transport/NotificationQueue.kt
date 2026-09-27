@@ -25,6 +25,13 @@ class NotificationQueue(
         complete(id, success)
         drain()
     }
+    /** The owner has closed this token. A submitted notification still owns
+     * the shared characteristic until its callback or a fresh server epoch. */
+    fun retire(id: Long): Boolean {
+        if (active == id) return false
+        pending.removeAll { it.first == id }
+        return true
+    }
     private fun drain() {
         while (active == null && pending.isNotEmpty()) {
             val (id, bytes) = pending.removeFirst()

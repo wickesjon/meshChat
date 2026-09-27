@@ -37,6 +37,19 @@ pub enum SqlValue {
 pub struct SqlRow {
     pub cells: Vec<SqlValue>,
 }
+/// Convert a validated legacy SQLCipher v4 random binary passphrase to the
+/// identical AES key. Only native protected storage invokes this during upgrade.
+/// SQLCipher configuration and a raw-key reopen must be checked before commit.
+#[uniffi::export]
+pub fn legacy_storage_key(passphrase: Vec<u8>, salt: Vec<u8>) -> Result<Vec<u8>, StorageError> {
+    let passphrase = zeroize::Zeroizing::new(passphrase);
+    if passphrase.len() != 64 || salt.len() != 16 {
+        return Err(StorageError::InvalidInput);
+    }
+    let mut key = zeroize::Zeroizing::new([0u8; 32]);
+    pbkdf2::pbkdf2_hmac::<sha2_11::Sha512>(&passphrase, &salt, 256_000, key.as_mut());
+    Ok(key.to_vec())
+}
 /// Trusted native connection, scoped to one unlocked operation. Implementations
 /// bind every value, bound reads, require SQLCipher, and never log SQL arguments.
 #[uniffi::export(callback_interface)]

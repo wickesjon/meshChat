@@ -438,6 +438,7 @@ dependencies = [
  "getrandom 0.4.3",
  "hmac",
  "hpke",
+ "pbkdf2",
  "poly1305",
  "sha2 0.10.9",
  "sha2 0.11.0",
@@ -468,6 +469,16 @@ name = "once_cell"
 version = "1.21.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9f7c3e4beb33f85d45ae3e3a1792185706c8e16d043238c593331cc7cd313b50"
+
+[[package]]
+name = "pbkdf2"
+version = "0.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "112d82ceb8c5bf524d9af484d4e4970c9fd5a0cc15ba14ad93dccd28873b0629"
+dependencies = [
+ "digest 0.11.3",
+ "hmac",
+]
 
 [[package]]
 name = "pkcs8"

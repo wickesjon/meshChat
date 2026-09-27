@@ -2,13 +2,15 @@
 
 **Report date:** September 26, 2026. **Status:** exploratory phone/tablet testing; full Android acceptance remains open.
 
-The Galaxy S24 Ultra and Samsung tablet exchanged short and long messages, recovered from Bluetooth and lock transitions, and passed a bounded catch-up scenario. A focused optimization reduced repeated protected-store opens and refreshes. Untraced O01 delivered **14/14 directed messages**, including a background exchange; median app-observed round trips fell from **14.933 to 7.496 seconds for short messages** and **19.501 to 11.432 seconds for 280-byte messages**, compared with L01. Those are observed reductions of **49.8% and 41.4%** in three-sample groups. These results do not establish battery efficiency, one-way latency or large-mesh reliability.
+Latest ready-link candidate results: **120/120 round trips delivered**, with median full RTT **627/643 ms** (phone initiating, short/long) and **701.5/684 ms** (tablet initiating). See the [complete physical report](MC-025-ready-link-results-2026-09-26.md) for p95/max, exact builds, the initial Bluetooth-recovery timeout and remaining gates. Battery drain remains unmeasured.
+
+Earlier results: the Galaxy S24 Ultra and Samsung tablet exchanged short and long messages, recovered from Bluetooth and lock transitions, and passed a bounded catch-up scenario. A focused optimization reduced repeated protected-store opens and refreshes. Untraced O01 delivered **14/14 directed messages**, including a background exchange; median app-observed round trips fell from **14.933 to 7.496 seconds for short messages** and **19.501 to 11.432 seconds for 280-byte messages**, compared with L01. Those are observed reductions of **49.8% and 41.4%** in three-sample groups. These results do not establish battery efficiency, one-way latency or large-mesh reliability.
 
 ## Test setup
 
-### Sub-second candidate: implementation, awaiting paired tests
+### Sub-second candidate: implementation validation
 
-The next candidate implements [raw-key envelope migration and negotiated encoding](../decisions/MC-025-ready-link-latency.md). Debug APK SHA-256: `2bb9ab10c2fd9864e6c34ff622806fde38be10a39a249686a2578285e313953c`; Release unsigned APK: `1254f74fff7ef6ac0604e3479387772f5c9429f8491d7575060e89731b76df95`. These are locally built candidates, not the physically measured O01/O02 APK above. Neither phone nor tablet was installed or exercised during this implementation session.
+The next candidate implements [raw-key envelope migration and negotiated encoding](../decisions/MC-025-ready-link-latency.md). Debug APK SHA-256: `2bb9ab10c2fd9864e6c34ff622806fde38be10a39a249686a2578285e313953c`; Release unsigned APK: `1254f74fff7ef6ac0604e3479387772f5c9429f8491d7575060e89731b76df95`. These are locally built candidates, not the physically measured O01/O02 APK above. Neither device was exercised during the implementation session; the subsequent paired session is recorded in the [ready-link results](MC-025-ready-link-results-2026-09-26.md).
 
 | Check | Result and limit |
 |---|---|
@@ -19,9 +21,9 @@ The next candidate implements [raw-key envelope migration and negotiated encodin
 | Synthetic migration | Final isolated API-29 emulator run: **3 tests pass in 4.902 seconds**, covering legacy history, unchanged database bytes, pre/post envelope-commit failures, seal failure, lock-before-commit, wrong generation/key, key loss and fresh raw-key reopening. Actual Android wrapping-key deletion and guarded identity reset also pass; the fresh identity cannot access old history and stale identity handles are refused. This is emulator evidence. |
 | Existing storage lifecycle | Fresh security-probe Debug/Release/test builds and lint pass. Its guarded emulator runner passes all five phases: create, reopen, encryption/transaction/replay checks, wrapping-key loss and reset. This includes the encrypted rollback-journal check using the new raw-key argument. |
 | Dependency | Pinned RustCrypto PBKDF2 adds one package to each lockfile, reusing existing dependencies. Refreshed cargo-deny advisory/license/source/ban gates pass. |
-| Physical RTT | **Not measured for this candidate.** Earlier 7.496/11.432-second medians remain the latest untraced physical results. |
+| Physical RTT | Subsequent paired candidate runs pass the typical sub-second target in both orientations; see the [ready-link results](MC-025-ready-link-results-2026-09-26.md). Earlier 7.496/11.432-second medians belong to the prior APK. |
 | Power/battery | **Not measured.** Less repeated derivation is not proof of reduced battery drain. |
-| Remaining gates | Paired latency/recovery, real-device security and battery checks, Mac/Xcode native consumer validation and independent security assessment remain open. |
+| Remaining gates | Broader physical acceptance, intermittent phone Bluetooth recovery, real-device security and battery checks, Mac/Xcode native consumer validation and independent security assessment remain open. |
 
 Validation used Rust 1.85.1, cargo-deny 0.20.2, JDK 17.0.15+6, Gradle 8.13, AGP 8.11.1, Kotlin 2.2.0, pinned NDK 27.3.13750724 and the pinned aligned SQLCipher 4.17.0 Android AAR. Commands: workspace `cargo fmt`, strict all-target/all-feature `cargo clippy`, debug/release workspace tests and release build; `tests/integration/storage/run_policy.py`; app assemble Debug/Release/androidTest, lint and JVM tests; `check_apk.py` and `zipalign -c -P 16 4`. Logs remain in ignored `.work/mc025/subsecond-*.log`.
 

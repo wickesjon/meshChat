@@ -1,8 +1,8 @@
 # Prepared latency, idle-work and battery runs
 
-Status: harnesses prepared; **no device run or performance result is claimed**. These extend [PR #39](https://github.com/wickesjon/meshChat/pull/39). The [current report](MC-025-results-report-2026-09-26.md) keeps the measured earlier candidate separate. Production pacing, polling, encryption, key lifecycle and radio policy are unchanged by this preparation.
+Status: the 30-short/30-long latency workload has now passed on the phone/tablet in both initiator orientations; see the [physical results](MC-025-ready-link-results-2026-09-26.md). Resource/battery workloads remain prepared and unrun. These extend [PR #39](https://github.com/wickesjon/meshChat/pull/39). The [current report](MC-025-results-report-2026-09-26.md) keeps the measured earlier candidate separate. Production pacing, polling, encryption, key lifecycle and radio policy are unchanged by this preparation.
 
-Local preparation validation: Android test APK/lint pass, 26 app JVM tests pass, and 17 Python analyzer tests pass, including missing/truncated/mixed logs, failed requests and unavailable energy evidence. Test APK SHA-256: `5bd1de7f02a26d15c886ec673ceb1c78d9e92e23c4f267b54fa9d6eb4591f814`. This validates code/build behavior; it does not demonstrate that the new physical workloads run successfully on a device.
+Local preparation validation: Android test APK/lint pass, 26 app JVM tests pass, and 17 Python analyzer tests pass, including missing/truncated/mixed logs, failed requests and unavailable energy evidence. Test APK SHA-256: `5bd1de7f02a26d15c886ec673ceb1c78d9e92e23c4f267b54fa9d6eb4591f814`. Those local checks validate code/build behavior. Subsequent physical latency evidence is recorded separately; resource/battery workloads remain unverified on devices.
 
 ## Before testing
 

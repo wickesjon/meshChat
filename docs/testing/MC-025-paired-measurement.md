@@ -1,6 +1,6 @@
 # MC-025 paired app measurement
 
-The seven-pair smoke below remains the default. For 30 short/30 long acceptance pairs per initiator, partial-run accounting and idle/battery observations, use the [prepared device runs](MC-025-prepared-device-runs.md). Those new workloads are compiled/prepared, not physically tested.
+The seven-pair smoke below remains the default. For 30 short/30 long acceptance pairs per initiator, partial-run accounting and idle/battery observations, use the [prepared device runs](MC-025-prepared-device-runs.md). The extended latency workload now has [paired physical results](MC-025-ready-link-results-2026-09-26.md); resource/battery workloads remain prepared and unrun.
 
 This explicitly opted-in physical test uses the normal installed synthetic profile, protected storage, model send path, production Bluetooth service and admission limits. It does not grant permissions, reset identity/history/counters, replace radio ports or modify device power/security settings. The user must unlock both devices normally. It is exploratory phone/tablet evidence, not the formal two-phone or MC-007 lossless gate.
 

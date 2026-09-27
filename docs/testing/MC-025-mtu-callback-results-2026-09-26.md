@@ -28,6 +28,22 @@ Using repository-local JDK 17.0.15+6, Gradle 8.13, AGP 8.11.1, Kotlin 2.2.0 and 
 
 This delta changes Android callback routing and tests only: no Rust, FFI, cryptography, protected-storage implementation, wire format, dependency or iOS consumer change. Those components' prior applicable checks remain recorded in the ticket; they are not new passes for this delta. Independent security and other platform/hardware gates remain open.
 
+Build/check commands (after `. .work/mc025/android-env.ps1` for the Android toolchain):
+
+```text
+src/android/gradlew.bat -p src/android --offline --no-daemon --max-workers=2 :app:assembleDebug :app:assembleRelease :app:assembleDebugAndroidTest :app:lintDebug :app:testDebugUnitTest
+src/android/gradlew.bat -p src/android/ble --offline --no-daemon --max-workers=2 lintDebug
+src/android/gradlew.bat -p src/android --offline --no-daemon --max-workers=2 :app:assembleDebugAndroidTest :app:lintDebug
+python -B tests/integration/android-ui/check_apk.py src/android/app/build/outputs/apk/debug/app-debug.apk src/android/app/build/outputs/apk/release/app-release-unsigned.apk
+.work/android-sdk/build-tools/35.0.0/zipalign.exe -c -P 16 4 <each app APK above>
+python -B tests/ticketboard/validate.py
+python -B -m unittest discover -s tests/ticketboard -v
+python -B .work/mc025/check-mtu-links.py
+git diff --check
+```
+
+The ignored link checker validates relative file targets in the changed design, report and ticket; 52 references resolve. Tablet callback invocations use `am instrument -w -e class org.meshchat.ui.GattMtuObservationTest#<method> -e physicalConnect true org.meshchat.app.test/androidx.test.runner.AndroidJUnitRunner`, one invocation per row below. Existing retirement/refusal/restart classes use `physicalConnect=true` and `physicalBluetooth=true`.
+
 ## Tablet callback regressions
 
 The unchanged-app positive regression failed as recorded above. With the repaired app, the same installed test passes in 3.570 seconds. The final ten-case test package then passes **10/10**, one fresh instrumentation invocation per method, with the phone adapter disabled:
@@ -49,6 +65,10 @@ Raw logs are `callback-B-<method>.log` under the current evidence directory. The
 
 Existing tablet retirement (3 cases), refusal (1) and Bluetooth off/on recovery (1) regressions also pass **5/5**; logs are `existing-B-{retirement,refusal,bluetooth}.log`. Installed app and final test APK hashes were read back and matched to the candidate (`installed-tablet.json`).
 
+The same app and final test package were subsequently installed on the phone without resetting its profile. All four installed package hashes match (`final-installed.json`). Both Bluetooth adapters were restored enabled and normal app activities reopened. This is installation verification only; the locked phone has not run this candidate's callback or paired tests.
+
 ## Outstanding validation
 
-Phone callbacks and repeated paired startup/message/reconnect trials are pending the phone being unlocked. The paired candidate has not yet been measured; previous startup failures remain unresolved physical observations until retested. Do not transfer the earlier ready-link latency or recovery results to this APK. USB-powered tests provide no battery-drain result. MC-025 stays in progress and PR #39 remains unmerged pending its broader physical/platform/security gates and the independent review of this delta.
+Terra/medium independently reviewed published revision `d1814ea5e477522372db9e7a7bfaace912aca935` against `aba6a2e` with **no actionable correctness, security or test findings**. The reviewer checked one-shot target capture/consumption, exact live client identity, token/address/epoch guards, capacity and readiness invariants, and the raw tablet/build evidence. This review does not certify physical reliability or fulfill independent security assessments.
+
+Phone callbacks and repeated paired startup/message/reconnect trials are pending the phone being unlocked. The paired candidate has not yet been measured; previous startup failures remain unresolved physical observations until retested. Do not transfer the earlier ready-link latency or recovery results to this APK. USB-powered tests provide no battery-drain result. MC-025 stays in progress and PR #39 remains unmerged pending its broader physical/platform/security gates. Subsequent documentation records command details, installed package readback and the completed review; production and test sources are unchanged from the reviewed revision.

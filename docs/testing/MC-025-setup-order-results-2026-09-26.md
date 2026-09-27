@@ -42,7 +42,44 @@ Normal and security-feature Android native libraries rebuild for arm64-v8a and x
 | Unsigned Release app | `ec54503ec02967eb308e5f1106cad6d9f5e7f306945232926446d1baef4a8b26` |
 | Instrumentation APK | `19fa50400043d8e2254c1a8b72ce9bae55dbf0c1c76d9fdc2ec2b2dbb8a290c6` |
 
-Repaired setup capture E01 completes on tablet A / phone B in 43.332 / 41.844 seconds, zero dropped entries. Both devices create and admit generations 3 then 5 without receive exceptions. This first physical capture does not exercise reversed generation completion; the deterministic host regression does. Four paired message/stop-start plans K01–K04 (seven pairs each, both physical initiators and both command launch orders) were declared before execution in `paired-plan.json` and are in progress.
+Repaired setup capture E01 completes on tablet A / phone B in 43.332 / 41.844 seconds, zero dropped entries. Both devices create and admit generations 3 then 5 without receive exceptions. This physical capture does not exercise reversed generation completion; the deterministic host regression does.
+
+## Repaired-candidate paired trials
+
+Four paired message/stop-start plans K01–K04 were declared before execution in `paired-plan.json`: seven pairs each, both physical initiators and both command launch orders. All four trials and all eight endpoint runners pass. **28/28 scheduled request/reply pairs are observed (56 directed deliveries), zero failed or unattempted pairs.** Each pair requires the initiator's accepted outgoing request and received reply plus the responder's matching incoming request and completed native echo. Each run includes three short foreground pairs, an intentional five-second initiator radio stop/start, three 280-byte pairs and one short pair received with the responder activity stopped. Both endpoints retain their profiles; no native admission credits are reset or refunded within a run.
+
+| Run | Initiator / restarted device | First command launched | Startup A / B, seconds | Recovery, seconds | Runner A / B, seconds | Pairs |
+|---|---|---|---|---|---|---|
+| K01 | Phone | Phone | 2.553 / 2.722 | 64.229 | 107.269 / 107.355 | 7/7 |
+| K02 | Tablet | Tablet | 2.736 / 2.788 | 124.690 | 169.056 / 168.067 | 7/7 |
+| K03 | Phone | Tablet | 3.533 / 3.501 | 60.960 | 105.251 / 105.210 | 7/7 |
+| K04 | Tablet | Phone | 2.730 / 2.849 | 62.870 | 106.442 / 106.032 | 7/7 |
+
+A is always the message initiator, B the responder; command launch order does not establish the order of actual Bluetooth callbacks. Startup is each endpoint's own monotonic interval from its plan log to first observed peer. Recovery is the restarting endpoint's interval from invoking radio start to first observed peer, excluding the deliberate five-second outage and subsequent catch-up settling. These are UI-observed timings with 100 ms polling and scheduling overhead. Four successful repetitions do not establish a recovery guarantee or prove every historical early close had this cause. Recovery remains slow and needs separate investigation.
+
+Full app-observed RTTs in pair order (milliseconds):
+
+| Run | Short foreground, before restart | 280-byte foreground, after restart | Short, background responder |
+|---|---|---|---|
+| K01 | 636 / 1038 / 1060 | 5420 / 3029 / 1077 | 714 |
+| K02 | 734 / 1005 / 1098 | 5510 / 2966 / 1107 | 810 |
+| K03 | 510 / 1211 / 986 | 5427 / 3316 / 1057 | 726 |
+| K04 | 601 / 1133 / 1093 | 5329 / 3084 / 1065 | 758 |
+
+The initiating clock measures request submission through reply observation; these are not one-way latencies. The public-channel cooldown before request submission is outside that timer. Connection-state snapshots are enabled; detailed latency tracing is disabled. The longer post-restart samples remain included. This seven-pair mixed restart workload is not a repeat of the earlier ready-link 30-short/30-long median acceptance workload and transfers no sub-second claim to this candidate.
+
+Raw plans, both endpoint logs, failure-aware `paired-summary.json` and bounded address-redacted native Bluetooth logs are retained under `K01/`–`K04/` in the evidence root. Each test is a new instrumentation process, as in the earlier paired trials. This series covers one phone and one tablet on API 36, not the required mixed-OEM or larger mesh matrix.
+
+Final isolated checks pass **14/14** on the same candidate: three peripheral-retirement scenarios, one refused-server callback scenario and three real Bluetooth off/on repetitions on each device. The other endpoint is stopped with Bluetooth disabled during each device's checks. Retirement/refusal cases inject callbacks into the actual adapter and do not claim over-the-air fault coverage. Each Bluetooth repetition reports full `STATE_OFF` before enabling and verifies that protected data remains available. Runner times in seconds:
+
+| Device | Retirement (3 cases) | Refusal (1 case) | Bluetooth repetitions (1 case each) |
+|---|---|---|---|
+| Phone | 3.585 | 1.256 | 2.614 / 2.407 / 2.173 |
+| Tablet | 5.491 | 2.896 | 3.682 / 4.327 / 3.628 |
+
+Raw `candidate-retirement-*`, `candidate-refusal-*` and `candidate-bluetooth-*` logs contain the final runner summaries. After testing, both adapters are enabled, both normal app screens reopened, and debugger forwarding is empty. All four installed app/test hashes were read back again and match the candidate table (`final-installed.json`).
+
+## Reproduction and environment
 
 Commands and logs (all generated output remains inside the repository under `.work/mc025/2026-09-26-setup/`):
 
@@ -60,10 +97,19 @@ src/android/gradlew.bat -p src/android --offline --no-daemon --max-workers=2 :ap
 src/android/gradlew.bat -p src/android/ble --offline --no-daemon --max-workers=2 lintDebug
 src/android/gradlew.bat -p src/android --offline --no-daemon --max-workers=2 :app:assembleDebugAndroidTest :app:lintDebug :app:testDebugUnitTest --rerun-tasks
 src/android/gradlew.bat -p src/android/ble --offline --no-daemon --max-workers=2 testDebugUnitTest --rerun-tasks
+python -B .work/mc025/run-order-pair.py K01 --mode smoke --restart
+python -B .work/mc025/run-order-pair.py K02 --mode smoke --restart --swap-devices
+python -B .work/mc025/run-order-pair.py K03 --mode smoke --restart --responder-first
+python -B .work/mc025/run-order-pair.py K04 --mode smoke --restart --swap-devices --responder-first
+. .work/mc025/final-order-regressions.ps1
+python -B .work/mc025/aggregate-order.py
+python -B .work/mc025/verify-order-installed.py
 ```
 
 The process-local environment uses repository Rust/Gradle/cache/temp directories, JDK 17.0.15+6, Gradle 8.13, AGP 8.11.1, Kotlin 2.2.0, SDK 36/build tools 35.0.0 and installed read-only NDK 27.3.13750724. Initial tool invocations failed because cargo-deny/rustup were absent from that shell's PATH and the cargo-deny config flag was placed after its subcommand. Corrected invocations use the existing repository executables and proper flag order; initial failures remain in `cargo-deny.log`, `cargo-deny-pinned.log` and `android-native-build.log`. No tool/dependency upgrade or global settings change was made.
 
 ## Limits and review
 
-The shared core change has no FFI/wire change. Android native consumption is rebuilt; iOS host-mode tests are not Mac/Xcode compilation. Mac/native iOS checks are unavailable here and remain open alongside broader MC-025/027 physical, energy and independent security gates. USB-powered diagnostics establish no battery drain result. Source review and the declared paired message/reconnect trials are pending; PR #39 stays unmerged and MC-025 in progress.
+Terra/medium independently reviewed source checkpoint `28e2fdfe1453d5e378bcc5aedb9348b3645a9fa9` against `aef522c` with **no actionable correctness, security, test or evidence findings**. Review covered atomic generation-order reservation, registration/enqueue/setup rollback, bounded storage and stale guards, admission/use authority, deterministic regressions and the diagnostic observer's real-native delegation, privacy and cleanup. This is not independent security certification.
+
+The shared core change has no FFI/wire change. Android native consumption is rebuilt; iOS host-mode tests are not Mac/Xcode compilation. Mac/native iOS checks are unavailable here and remain open alongside broader MC-025/027 physical, energy and independent security gates. USB-powered diagnostics establish no battery drain result. All four declared paired trials pass, but the small sample and slow recovery do not complete general reconnect acceptance. PR #39 stays unmerged and MC-025 in progress.

@@ -8,6 +8,9 @@ use meshchat_core::{
 use std::sync::Arc;
 
 fn owner(seed: u8) -> (NativeTransport, Arc<IdentityKeySession>) {
+    owner_platform(seed, false)
+}
+fn owner_platform(seed: u8, ios: bool) -> (NativeTransport, Arc<IdentityKeySession>) {
     let identity = IdentityKeySession::import_unlocked(vec![seed; 64], vec![seed; 16]).unwrap();
     let store = EncryptedStore::open(
         Box::new(database::Database::new()),
@@ -17,7 +20,12 @@ fn owner(seed: u8) -> (NativeTransport, Arc<IdentityKeySession>) {
     )
     .unwrap();
     (
-        NativeTransport::new(store, identity.public_identity().unwrap(), seed.into(), 0).unwrap(),
+        if ios {
+            NativeTransport::new_ios(store, identity.public_identity().unwrap(), seed.into(), 0)
+        } else {
+            NativeTransport::new(store, identity.public_identity().unwrap(), seed.into(), 0)
+        }
+        .unwrap(),
         identity,
     )
 }
@@ -75,6 +83,85 @@ fn chat(id: u8, length: usize) -> Vec<u8> {
     )
     .unwrap();
     raw[..len].to_vec()
+}
+
+#[test]
+fn reverse_hello_completion_keeps_both_live_generations_admissible() {
+    for ios in [false, true] {
+        let (a, _) = owner_platform(81, ios);
+        let (b, _) = owner_platform(82, ios);
+        let a1 = ready(&a, TransportRole::Central, 512, 512, 0);
+        let a2 = ready(&a, TransportRole::Peripheral, 512, 512, 0);
+        let b1 = ready(&b, TransportRole::Peripheral, 512, 512, 0);
+        let b2 = ready(&b, TransportRole::Central, 512, 512, 0);
+        for (core, links) in [(&a, [&a1, &a2]), (&b, [&b1, &b2])] {
+            for link in links {
+                assert!(matches!(
+                    core.request_catchup(link.clone(), 0),
+                    Err(TransportError::Stale)
+                ));
+            }
+        }
+        let af = a.tick(0).unwrap().sends;
+        let bf = b.tick(0).unwrap().sends;
+        assert_eq!(af.len(), 2);
+        assert_eq!(bf.len(), 2);
+        for (core, frames) in [(&a, &af), (&b, &bf)] {
+            for frame in frames {
+                assert!(
+                    core.complete(frame.link.clone(), frame.token, true, 0)
+                        .unwrap()
+                        .events
+                        .is_empty()
+                );
+            }
+        }
+        // Actual Bluetooth callbacks may complete the newer link's HELLO first.
+        // Neither a valid old live token nor the registration stale guard is waived.
+        for (sender_frames, receiver, links) in [
+            (&af, &b, [(&a2, &b2), (&a1, &b1)]),
+            (&bf, &a, [(&b2, &a2), (&b1, &a1)]),
+        ] {
+            for (source, destination) in links {
+                let frame = sender_frames.iter().find(|f| &f.link == source).unwrap();
+                let effects = receiver
+                    .receive(
+                        destination.clone(),
+                        frame.bytes.len() as u64,
+                        frame.bytes.clone(),
+                        1,
+                    )
+                    .unwrap();
+                assert!(effects.events.iter().any(
+                    |e| matches!(e, TransportEvent::Admitted { link, .. } if link == destination)
+                ));
+                assert!(
+                    !effects
+                        .events
+                        .iter()
+                        .any(|e| matches!(e, TransportEvent::Closed { .. }))
+                );
+            }
+        }
+        assert_eq!(a.observations(1).unwrap().len(), 2);
+        assert_eq!(b.observations(1).unwrap().len(), 2);
+        // Early reservation becomes usable only after HELLO admission, including
+        // the older generation whose handshake finished last.
+        assert!(a.request_catchup(a1.clone(), 1).is_ok());
+        assert!(b.request_catchup(b1.clone(), 1).is_ok());
+        a.disconnect(a1.clone(), 2).unwrap();
+        assert!(matches!(
+            a.request_catchup(a1, 2),
+            Err(TransportError::Stale)
+        ));
+        a.disconnect(a2, 2).unwrap();
+        assert!(a.observations(2).unwrap().is_empty());
+        let fresh = ready(&a, TransportRole::Central, 512, 512, 20_000);
+        assert!(matches!(
+            a.request_catchup(fresh, 20_000),
+            Err(TransportError::Stale)
+        ));
+    }
 }
 
 #[test]

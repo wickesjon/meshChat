@@ -287,10 +287,6 @@ impl Runtime {
             self.relay
                 .admit_capacity(&link.handle, usize::from(tx))
                 .map_err(|_| TransportError::Unavailable)?;
-            self.beacon
-                .sessions
-                .register(&link.handle, self.now)
-                .map_err(|_| TransportError::Unavailable)?;
             link.admitted = true;
             out.events.push(TransportEvent::Admitted {
                 link: link.handle.clone(),
@@ -687,6 +683,13 @@ impl NativeTransport {
             peer_count: None,
         });
         let mut out = TransportEffects::default();
+        // Reserve SYNC state in generation creation order. HELLO completion
+        // may arrive out of order; registration there rejects an older live
+        // link after a newer one completes. Admission still gates all use.
+        if s.beacon.sessions.register(&link, now).is_err() {
+            s.close(&link, &mut out)?;
+            return Err(TransportError::Unavailable);
+        }
         if let Err(error) = s.enqueue(&link, &hello, relay::Traffic::Transport(2), 1, &mut out) {
             s.close(&link, &mut out)?;
             return Err(match error {

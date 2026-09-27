@@ -4,7 +4,10 @@ package org.meshchat.transport
 data class ConnectionInfo(val id: Long, val address: String, val born: ULong, val validAt: ULong?, val novelty: Int?, val peerCount: Int? = null)
 data class Selection(val close: List<Long>, val connect: String?)
 
-class ConnectionPolicy(private val clock: () -> ULong) {
+class ConnectionPolicy(
+    private val retryDelay: () -> ULong = { kotlin.random.Random.nextLong(40_000, 60_001).toULong() },
+    private val clock: () -> ULong,
+) {
     private class Seen(var at: ULong, var rssi: Int?) {
         var tried = false
         var retryAt = 0uL
@@ -45,8 +48,12 @@ class ConnectionPolicy(private val clock: () -> ULong) {
         if (rssi != null && peers.count { seen[it.address]?.rssi?.let { value -> Math.floorDiv(value, 10) == Math.floorDiv(rssi, 10) } == true } >= 3) return false
         return true
     }
-    fun attempted(address: String) { record(address)?.let { it.tried = true; it.retryAt = clock() + 5_000uL } }
-    fun disconnected(address: String) { seen[address]?.let { it.retryAt = maxOf(it.retryAt, clock() + 5_000uL) } }
+    // Both roles consume the same address admission bucket (one credit/20s).
+    // Leave time for two credits and stagger reciprocal dial attempts. Inbound
+    // acceptance and first discovery remain immediate; native budgets still gate.
+    private fun retryAt() = clock() + retryDelay().coerceIn(40_000uL, 60_000uL)
+    fun attempted(address: String) { record(address)?.let { it.tried = true; it.retryAt = maxOf(it.retryAt, retryAt()) } }
+    fun disconnected(address: String) { seen[address]?.let { it.retryAt = maxOf(it.retryAt, retryAt()) } }
     fun plan(peers: List<ConnectionInfo>, limit: Int, beacon: Boolean = false): Selection {
         val now = clock()
         val idle = peers.filter { (it.validAt == null || it.validAt > it.born + 20_000uL) && now - it.born >= 20_000uL }

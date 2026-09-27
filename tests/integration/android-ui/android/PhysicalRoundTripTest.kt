@@ -25,6 +25,9 @@ class PhysicalRoundTripTest {
     private lateinit var role: String
     private lateinit var plan: MeasurementPlan
     private var trace: PhysicalLatencyTrace? = null
+    private var connectionTrace: PhysicalConnectionTrace? = null
+    private var nextConnectionSnapshot=0L
+    private var restartAfterPair=false
 
     private fun main(action: () -> Unit) = instrumentation.runOnMainSync(action)
     private fun screen(): MeshScreenState {
@@ -44,6 +47,12 @@ class PhysicalRoundTripTest {
             assertFalse("Device locked during physical measurement",
                 activity.getSystemService(KeyguardManager::class.java).isDeviceLocked)
             val state = screen()
+            val diagnostic=connectionTrace
+            if(diagnostic!=null && SystemClock.elapsedRealtime()>=nextConnectionSnapshot) {
+                nextConnectionSnapshot=SystemClock.elapsedRealtime()+5000
+                val value=diagnostic.snapshot().put("run",run).put("role",role)
+                instrumentation.sendStatus(0,Bundle().apply {putString("stream","MC025C $value\n")})
+            }
             assertFalse("Protected profile became unavailable", state.locked)
             if (condition(state)) return true
             SystemClock.sleep(100)
@@ -76,10 +85,15 @@ class PhysicalRoundTripTest {
         role = args.getString("role") ?: error("Missing A/B role")
         check(run.matches(Regex("[A-Za-z0-9]{1,16}")) && role in listOf("A", "B"))
         plan=MeasurementPlan(args.getString("mode") ?: "smoke",args.getString("initiator") ?: "A")
+        restartAfterPair=args.getString("restartAfterPair")=="true"
+        check(!restartAfterPair || plan.mode=="smoke")
         log("plan","mode" to plan.mode,"initiator" to plan.initiator,"scheduled_pairs" to plan.pairs,
-            "poll_ms" to 100,"traced" to (args.getString("latencyTrace")=="true"))
+            "poll_ms" to 100,"traced" to (args.getString("latencyTrace")=="true"),
+            "connection_diagnostics" to (args.getString("connectionTrace")=="true"),
+            "restart_after_pair" to restartAfterPair)
         activity = ui.activity
         model = (activity.application as MeshApplication).model
+        if(args.getString("connectionTrace")=="true")connectionTrace=PhysicalConnectionTrace(model)
         assertFalse(activity.getSystemService(KeyguardManager::class.java).isDeviceLocked)
         main { activity.window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON); model.load() }
         try {
@@ -138,6 +152,20 @@ class PhysicalRoundTripTest {
                 "ready" to ready,"size" to (if(plan.long(index)) "long" else "short"),
                 "own_accepted" to screen().rows.any { it.message.own && it.message.text == request })
             if (ok) completed++
+            if (restartAfterPair && index==2) {
+                assertTrue("Require delivery before intentional interruption",ok)
+                log("restart_begin")
+                main {model.stop()}
+                assertTrue(await(30000){it.status=="Nearby connection is off"})
+                SystemClock.sleep(5000)
+                val reconnectStart=SystemClock.elapsedRealtime()
+                main {model.startRadio()}
+                assertTrue("No peer after intentional stop/start",await(360000){it.peers==1})
+                log("reconnected","elapsed_ms" to (SystemClock.elapsedRealtime()-reconnectStart))
+                assertTrue("Reconnect catch-up did not settle",await(180000) {
+                    it.catchup!=null && it.catchup!="Checking for recent messages…"
+                })
+            }
         }
         return completed
     }

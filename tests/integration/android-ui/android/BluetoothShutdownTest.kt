@@ -2,6 +2,8 @@ package org.meshchat.ui
 
 import android.app.KeyguardManager
 import android.bluetooth.BluetoothManager
+import android.bluetooth.BluetoothAdapter
+import android.os.Bundle
 import android.os.ParcelFileDescriptor
 import android.view.WindowManager
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -42,8 +44,13 @@ class BluetoothShutdownTest {
             bluetooth(false)
             ui.waitUntil(30000) {
                 assertFalse("Bluetooth loss must not report protected data locked", model.screen.locked)
-                !adapter.isEnabled && model.screen.status == "Turn on Bluetooth to connect"
+                // isEnabled is already false in TURNING_OFF; enabling there
+                // races the platform shutdown and may be ignored.
+                adapter.state == BluetoothAdapter.STATE_OFF && model.screen.status == "Turn on Bluetooth to connect"
             }
+            InstrumentationRegistry.getInstrumentation().sendStatus(0,Bundle().apply {
+                putString("stream","MC025 Bluetooth fully off before re-enable; state=${adapter.state}\n")
+            })
             assertEquals(before.nickname, model.screen.nickname)
             assertEquals(before.avatar, model.screen.avatar)
             assertEquals(before.channels.map { it.name }, model.screen.channels.map { it.name })

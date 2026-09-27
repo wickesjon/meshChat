@@ -56,7 +56,7 @@ class AndroidGattRadio(
     private val manager = context.getSystemService(BluetoothManager::class.java)
     private val adapter = manager.adapter
     private val clock = { SystemClock.elapsedRealtime().toULong() }
-    private val selection = ConnectionPolicy(clock)
+    private val selection = ConnectionPolicy(clock = clock)
     private val scanning = ScanPolicy(clock)
     private val driver = GattDriver(core, this, clock, event)
     private var setting: TransportPowerSetting? = TransportPowerSetting.AUTO
@@ -384,12 +384,25 @@ class AndroidGattRadio(
         val address = clients[id]?.gatt?.device?.address ?: peripherals[id]?.address
         address?.let { selection.disconnected(it) }
         clients.remove(id)?.gatt?.let { gatt -> cleanup { gatt.disconnect() }; cleanup { gatt.close() } }
-        if (peripherals.containsKey(id)) resetServer()
+        val device = peripherals[id] ?: return
+        // Android callbacks identify only the address. Retire it for this
+        // epoch so late callbacks cannot attach to a replacement token, while
+        // preserving other peers' services. An in-flight notification or full
+        // retirement set still requires the conservative epoch replacement.
+        if (refusedAddresses.size >= 6 || !notifications.retire(id)) {
+            resetServer()
+            return
+        }
+        peripherals.remove(id)
+        subscriptions.remove(id)
+        if (refusedAddresses.isEmpty()) refusedRetryAt = clock() + 60_000uL
+        refusedAddresses.add(device.address)
+        cleanup { server?.cancelConnection(device) }
     }
     private fun resetServer() {
         // Android server completions contain an address, no connection token.
-        // Replace the entire server on teardown so stale callbacks carry an old
-        // epoch, including when the same address reconnects immediately.
+        // When address retirement is insufficient, replace the entire server
+        // so stale callbacks carry an old epoch even on immediate reconnect.
         serverEpoch++
         advertiser?.let { listener -> cleanup { adapter?.bluetoothLeAdvertiser?.stopAdvertising(listener) } }; advertiser = null
         val previous = server

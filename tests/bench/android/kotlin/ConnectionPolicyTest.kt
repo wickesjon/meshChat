@@ -63,15 +63,45 @@ class ConnectionPolicyTest {
     }
     @Test fun failedConnectionsHaveBoundedRetryAndUnseenPeersWinBeforeRssi() {
         var now = 0uL
-        val p = ConnectionPolicy { now }
+        val p = ConnectionPolicy(retryDelay = {40_000uL}) { now }
         p.discovered(address(1), -20); p.attempted(address(1))
         p.discovered(address(2), -100)
         now = 5_000uL
         assertEquals(address(2), p.plan(emptyList(), 6).connect)
         p.attempted(address(2)); p.disconnected(address(2))
         assertFalse(p.allowed(address(2), emptyList(), 6))
-        now = 10_000uL
+        now = 44_999uL
+        assertFalse(p.allowed(address(2), emptyList(), 6))
+        now = 45_000uL
         assertTrue(p.allowed(address(2), emptyList(), 6))
+    }
+    @Test fun retryJitterPreservesInboundOpportunityAndCannotShortenWait() {
+        var now = 0uL
+        var delay = 60_000uL
+        val a = ConnectionPolicy(retryDelay = {40_000uL}) { now }
+        val b = ConnectionPolicy(retryDelay = {delay}) { now }
+        for (p in listOf(a,b)) {
+            p.discovered(address(1), -60)
+            assertEquals(address(1),p.plan(emptyList(),6).connect)
+            p.attempted(address(1))
+        }
+        now = 1_000uL; delay = 0uL
+        b.disconnected(address(1)) // clamped, but must not shorten original deadline
+        repeat(20) {b.discovered(address(1),-60)}
+        now = 40_000uL
+        assertEquals(address(1),a.plan(emptyList(),6).connect)
+        assertNull(b.plan(emptyList(),6).connect)
+        assertTrue(b.allowed(address(1),emptyList(),6,inbound=true))
+        now = 59_999uL
+        assertFalse(b.allowed(address(1),emptyList(),6))
+        now = 60_000uL
+        assertTrue(b.allowed(address(1),emptyList(),6))
+        delay = ULong.MAX_VALUE
+        b.attempted(address(1))
+        now = 119_999uL
+        assertFalse(b.allowed(address(1),emptyList(),6))
+        now = 120_000uL
+        assertTrue(b.allowed(address(1),emptyList(),6))
     }
     @Test fun isolationSaverForegroundAndScanFailureSchedulesAreBounded() {
         var now = 0uL

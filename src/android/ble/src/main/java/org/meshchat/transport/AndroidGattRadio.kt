@@ -48,9 +48,12 @@ class AndroidGattRadio(
     private val gate: Any = Any(),
     private val stopped: () -> Unit = {},
 ) : GattRadio {
+    private data class MtuTarget(val epoch: Long, val peripheral: Long)
     private class Client(val gatt: BluetoothGatt) {
         var tx: BluetoothGattCharacteristic? = null
         var rx: BluetoothGattCharacteristic? = null
+        var mtuRequested = false
+        var mtuTarget: MtuTarget? = null
     }
     private val handler = Handler(Looper.getMainLooper())
     private val manager = context.getSystemService(BluetoothManager::class.java)
@@ -233,7 +236,16 @@ class AndroidGattRadio(
                 rx.getDescriptor(MeshGatt.CCCD) != null && service.getCharacteristic(MeshGatt.INFO) != null
             driver.services(id, valid)
         }
-        override fun onMtuChanged(gatt: BluetoothGatt, mtu: Int, status: Int) = current(gatt) {
+        override fun onMtuChanged(gatt: BluetoothGatt, mtu: Int, status: Int) = current(gatt) { client ->
+            val target = client.mtuTarget
+            client.mtuTarget = null
+            // Android's ATT size is shared by the two GATT roles, but a locally
+            // initiated exchange need not emit the server MTU callback. Apply
+            // this observed value only to the exact peer bound at request time.
+            if (status == BluetoothGatt.GATT_SUCCESS && mtu in 23..517 && target != null &&
+                target.epoch == serverEpoch && peripherals[target.peripheral]?.address == gatt.device.address) {
+                driver.mtu(target.peripheral, mtu, true)
+            }
             driver.mtu(id, mtu, status == BluetoothGatt.GATT_SUCCESS)
         }
         override fun onDescriptorWrite(gatt: BluetoothGatt, descriptor: BluetoothGattDescriptor, status: Int) = current(gatt) {
@@ -255,7 +267,15 @@ class AndroidGattRadio(
         }
     }
     override fun discover(id: Long): Boolean = clients[id]?.gatt?.discoverServices() == true
-    override fun requestMtu(id: Long): Boolean = clients[id]?.gatt?.requestMtu(517) == true
+    override fun requestMtu(id: Long): Boolean {
+        val client = clients[id] ?: return false
+        // A second request could rebind an old response to a new server token.
+        if (client.mtuRequested) return false
+        client.mtuRequested = true
+        client.mtuTarget = peripherals.entries.firstOrNull { it.value.address == client.gatt.device.address }
+            ?.let { MtuTarget(serverEpoch, it.key) }
+        return client.gatt.requestMtu(517).also { if (!it) client.mtuTarget = null }
+    }
     @Suppress("DEPRECATION")
     override fun subscribe(id: Long): Boolean {
         val client = clients[id] ?: return false

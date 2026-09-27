@@ -600,6 +600,7 @@ MC-004 records online API contracts and compiled probes for this model. Actual t
 
 ### 8.3 Android driver
 
+- MTU observations: a successful current-client ATT MTU callback may also update an already admitted same-device peripheral captured when that client's single MTU request began, only while the exact peripheral token and server epoch remain live. Consume the association once; never replay a cached measurement to a replacement or late-arriving connection, rebind a pending response with another request, or substitute requested capacity for observed capacity. CCCD readiness, native capacity checks and peer authentication remain separate gates. This covers Android's asymmetric client/server callback paths on the shared LE ATT connection.
 - Foreground service (`connectedDevice` type) with persistent notification supports ongoing scan/advertise; process termination and OS restrictions can interrupt it. Indefinite survival is not guaranteed ([Android background guidance](https://developer.android.com/develop/connectivity/bluetooth/ble/background)).
 - Scanning: `SCAN_MODE_BALANCED` normally; `SCAN_MODE_LOW_LATENCY` for 10s bursts when peer count is 0 (fast first join), with the §11.3 backoff schedule when isolation persists
 - Advertising: `ADVERTISE_MODE_BALANCED`, **service UUID only** in the advertisement (all ANNOUNCE metadata travels over GATT per §2.5.1, for cross-platform parity)
